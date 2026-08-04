@@ -33,7 +33,11 @@ const stored = () => JSON.parse(storage.setItem.mock.calls[0][1]).templates;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  storage.getItem.mockResolvedValue({ data: { value: null } });
+  // Re-set BOTH implementations, not just calls: `clearAllMocks` keeps a mockReturnValue, so a
+  // never-settling promise from the timeout tests below would leak into the next test and make
+  // it hang for the full bound — a false slow-green of exactly the kind this suite guards against.
+  storage.getItem.mockImplementation(async () => ({ data: { value: null } }));
+  storage.setItem.mockImplementation(async () => ({}));
 });
 
 describe('round347 — the agenda, verbatim from the spec', () => {
@@ -127,6 +131,37 @@ describe('round347 — seeding only ever fills an EMPTY store', () => {
   it('reports a storage failure instead of failing the install', async () => {
     storage.getItem.mockRejectedValue(new Error('storage down'));
     expect(await seedDefaultTypeTemplate(CTX, ME)).toBe('failed');
+  });
+
+  /*
+   * round347 (review finding) — the storage calls are BOUNDED, like the rest of the storage
+   * layer. `monday.storage` is an iframe bridge: a call that never settles would leave the
+   * install awaiting this function forever, stuck on "מקים את המערכת עבורך…", which is
+   * precisely the case the fail-soft catch is supposed to cover.
+   */
+  it('gives up on a storage call that never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      storage.getItem.mockReturnValue(new Promise(() => {}));
+      const p = seedDefaultTypeTemplate(CTX, ME);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await p).toBe('failed');
+      expect(storage.setItem).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up on a WRITE that never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      storage.setItem.mockReturnValue(new Promise(() => {}));
+      const p = seedDefaultTypeTemplate(CTX, ME);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await p).toBe('failed');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('falls back to the boardId, then to default, for the key', async () => {

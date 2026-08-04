@@ -56,7 +56,7 @@ import { SetupWizard } from '../SetupWizard.jsx';
 const install = async () => {
   render(<SetupWizard onManual={() => {}} />);
   fireEvent.click(await waitFor(() => screen.getByText('צור לוחות אוטומטית')));
-  await waitFor(() => expect(seedDefaultTypeTemplate).toHaveBeenCalled());
+  await waitFor(() => expect(addDropdownLabel).toHaveBeenCalled());
 };
 
 beforeEach(() => {
@@ -82,11 +82,41 @@ describe('round347 — the install seeds the default type and its template', () 
     );
   });
 
-  // The ordering rule, and the reason it is a rule: addDropdownLabel reads the ACTIVE settings
-  // store, which updateSettings publishes. Seeding before the save fails on every install.
-  it('seeds AFTER the mapping is saved', async () => {
+  /*
+   * Two ordering rules, both found by review, both pinned here as ONE sequence:
+   *   · the TEMPLATE goes first — updateSettings publishes "configured" before its storage
+   *     write lands, so SettingsGate can unmount this wizard and mount TemplatesProvider,
+   *     which reads the type-template key exactly once. Write after that and the session
+   *     holds an empty type list until the app is reloaded.
+   *   · the LABEL goes last — addDropdownLabel resolves board+column from the ACTIVE settings
+   *     store, which is what updateSettings publishes.
+   */
+  it('writes the template BEFORE the mapping, and the label after', async () => {
     await install();
-    expect(calls).toEqual(['settings', 'label', 'template']);
+    expect(calls).toEqual(['template', 'settings', 'label']);
+  });
+
+  /*
+   * A populated top-up: the template seeding declines (the account has its own types), so the
+   * LABEL must be declined too. Otherwise an established installation gains a selectable
+   * "דיון כללי" with no agenda behind it — a change nobody asked for, in someone's live setup.
+   */
+  it('adds NO label when the template was skipped (populated top-up)', async () => {
+    seedDefaultTypeTemplate.mockResolvedValueOnce('skipped-existing');
+    render(<SetupWizard onManual={() => {}} />);
+    fireEvent.click(await waitFor(() => screen.getByText('צור לוחות אוטומטית')));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalled());
+    expect(addDropdownLabel).not.toHaveBeenCalled();
+    expect(calls).toEqual(['template', 'settings']);
+  });
+
+  // Same for a seed that FAILED: a type label with no agenda behind it is worse than neither.
+  it('adds NO label when the template seed failed', async () => {
+    seedDefaultTypeTemplate.mockResolvedValueOnce('failed');
+    render(<SetupWizard onManual={() => {}} />);
+    fireEvent.click(await waitFor(() => screen.getByText('צור לוחות אוטומטית')));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalled());
+    expect(addDropdownLabel).not.toHaveBeenCalled();
   });
 
   /*

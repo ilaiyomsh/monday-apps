@@ -196,11 +196,12 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
   }, [tasksMode, tasksBoardId]);
 
   /*
-   * round347 — seed the single default type + its template. Two stores must agree: the LABEL
-   * on the managed "סוג דיון" dropdown (what a discussion stores) and the TYPE TEMPLATE in
-   * monday.storage (the agenda + roles, keyed by that label's text).
+   * round347 — add the "דיון כללי" LABEL to the managed type column. Separate from the
+   * template seeding because the two run at DIFFERENT moments (see handleCreate): the template
+   * is storage-only and is written BEFORE the settings save, while the label needs the settings
+   * already published — `addDropdownLabel` resolves the board + column from the ACTIVE store.
    */
-  const seedDefaultDiscussionType = useCallback(async () => {
+  const addDefaultTypeLabel = useCallback(async () => {
     try {
       await addDropdownLabel({
         boardKey: 'discussions',
@@ -212,8 +213,7 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
       // is complete and the owner can add the type from תבניות.
       logger.error('SetupWizard', `יצירת סוג הדיון "${DEFAULT_DISCUSSION_TYPE}" נכשלה — ניתן להוסיף אותו בתבניות`, err);
     }
-    await seedDefaultTypeTemplate(context, currentUser);
-  }, [context, currentUser]);
+  }, []);
 
   const handleCreate = useCallback(async () => {
     setPhase('running');
@@ -238,19 +238,26 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
        * install's own configuration never said so. Merged per key, which is what
        * lets a TOP-UP run this too without overriding a choice the owner made.
        */
-      await updateSettings({ ...config, preferences: withSeededAccessRoles(settings?.preferences) });
       /*
        * round347 (owner spec) — an install ships WITH a usable starting point: one discussion
        * type, "דיון כללי", and its agenda template, with the installing user as both מנהל
        * and מרכז הדיון. Until now a new account landed on an empty type list and an empty
        * template list and had to invent both before the app did anything.
        *
-       * AFTER updateSettings on purpose: `addDropdownLabel` resolves the board + column from
-       * the ACTIVE settings store, which `updateSettings` is what publishes. Both steps are
-       * fail-soft and reported rather than thrown — the install itself succeeded, and the
-       * owner can build a type by hand in תבניות.
+       * The TEMPLATE is written BEFORE updateSettings (review finding): `updateSettings`
+       * publishes the configured state before its own storage write finishes, so SettingsGate
+       * can unmount this wizard and mount TemplatesProvider while we are still awaiting. That
+       * provider loads the type-template key exactly ONCE (loadedRef) — read a moment too
+       * early and the session holds `typeTemplates = []`, so picking "דיון כללי" creates a
+       * discussion with no agenda until the app is reloaded. Writing first removes the race.
+       *
+       * Its RESULT then decides the label: adding a selectable type whose agenda was skipped
+       * (a populated top-up) would leave an empty type behind on an established install.
        */
-      await seedDefaultDiscussionType();
+      const seedResult = await seedDefaultTypeTemplate(context, currentUser);
+      await updateSettings({ ...config, preferences: withSeededAccessRoles(settings?.preferences) });
+      // The label needs the settings PUBLISHED — it resolves board+column from the active store.
+      if (seedResult === 'seeded') await addDefaultTypeLabel();
       // TOP-UP: the caller closes the panel (settings already refreshed). FIRST-RUN:
       // isConfigured now true → SettingsGate re-renders children, unmounting us.
       if (onDone) onDone();
@@ -259,7 +266,7 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
       setErrorMsg(err?.message || 'אירעה שגיאה בהקמת הלוחות');
       setPhase('error');
     }
-  }, [context, settings, updateSettings, tasksMode, tasksBoardId, columnMap, existingConfig, onDone, seedDefaultDiscussionType]);
+  }, [context, settings, updateSettings, tasksMode, tasksBoardId, columnMap, existingConfig, onDone, currentUser, addDefaultTypeLabel]);
 
   return (
     <div dir="rtl" className={isTopUp ? styles.rootEmbedded : styles.root}>

@@ -26,6 +26,21 @@ const MODULE = 'defaultTypeTemplate';
 // Must match TemplatesContext's TYPE_STORAGE_KEY_BASE + key fallback order.
 const TYPE_STORAGE_KEY_BASE = 'discussions_type_templates';
 
+/*
+ * round347 (review finding) — the SAME 5s bound the rest of the storage layer uses.
+ * `monday.storage` is an iframe bridge: a call that never settles leaves this function
+ * awaited forever, and with it the install's "מקים את המערכת עבורך…" phase — so the
+ * fail-soft catch below could never actually run. A bound is what makes it fail-soft.
+ */
+const STORAGE_TIMEOUT_MS = 5000;
+
+function withTimeout(promise, ms = STORAGE_TIMEOUT_MS) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('storage timeout')), ms)),
+  ]);
+}
+
 export const DEFAULT_DISCUSSION_TYPE = 'דיון כללי';
 
 /*
@@ -92,7 +107,7 @@ export function buildDefaultTypeTemplate(installer, id = 'seed-default-type') {
 export async function seedDefaultTypeTemplate(context, installer) {
   const key = typeStorageKey(context);
   try {
-    const res = await monday.storage.getItem(key);
+    const res = await withTimeout(monday.storage.getItem(key));
     if (res?.data?.value) {
       const saved = JSON.parse(res.data.value);
       const list = Array.isArray(saved) ? saved : saved?.templates || [];
@@ -100,7 +115,7 @@ export async function seedDefaultTypeTemplate(context, installer) {
       if (list.length) return 'skipped-existing';
     }
     const template = buildDefaultTypeTemplate(installer);
-    await monday.storage.setItem(key, JSON.stringify({ templates: [template] }));
+    await withTimeout(monday.storage.setItem(key, JSON.stringify({ templates: [template] })));
     logger.info(MODULE, 'נזרעה תבנית סוג הדיון "דיון כללי"', {
       topics: template.topics.length,
       lead: template.lead.length,
