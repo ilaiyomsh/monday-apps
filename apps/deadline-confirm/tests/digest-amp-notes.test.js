@@ -2,12 +2,13 @@
 // document, and they are different claims:
 //
 //  1. The reader can type a note per row, and that text reaches the wire as
-//     note_<itemId> — ONE hidden field per item even when the task appears in
-//     two clusters, mirroring how the status selection already works.
-//  2. The submit button is disabled while a MARKED row has an empty note.
-//     `required` on the inputs (the obvious HTML answer) is wrong here: this is
-//     one bulk form, so it would block submission over rows the reader never
-//     marked. The gate has to be conditional, which means amp-bind.
+//     note_<itemId> — one named field inside that row's OWN form (since
+//     2026-08-04 every row is a form of its own).
+//  2. A row cannot be marked while its note is empty. This used to be a
+//     `[disabled]` gate on the bulk submit button; with the submit button gone
+//     the gate moved earlier, onto the row's status trigger, so the empty-note
+//     state is unreachable rather than merely un-submittable. `required` is
+//     still the wrong tool: it would block a row the reader never touched.
 
 import { describe, it, expect } from 'vitest';
 import { renderDigestAmp } from '../src/helpers/digest-amp.js';
@@ -93,21 +94,27 @@ describe('renderDigestAmp — per-task note column', () => {
     expect(html).not.toMatch(/<input type="hidden"[^>]*name="note_9001"/);
   });
 
-  it('still mirrors the typed value into state — the submit gate reads it', () => {
+  it('still mirrors the typed value into state — the trigger lock reads it', () => {
     const html = render([noteSection()]);
     expect(html).toContain('AMP.setState({dd:{n9001:event.value}})');
   });
 
-  it('disables submit while a MARKED row has an empty note', () => {
+  // The bulk submit — and with it the ORed "some row is marked but empty" gate
+  // — was removed on 2026-08-04 when each row became its own form. The gate now
+  // sits EARLIER: the row's status trigger cannot be opened at all until the
+  // field holds text, so "marked but empty" is no longer a reachable state.
+  it('has no bulk submit gate any more — the row trigger IS the gate', () => {
     const html = render([noteSection()]);
-    expect(html).toContain(`[disabled]="(dd.v9001 != '' && dd.n9001 == '')"`);
+    expect(html).not.toContain(`(dd.v9001 != '' && dd.n9001 == '')`);
+    expect(html).not.toContain('type="submit"');
+    expect(html).toContain(`[disabled]="dd.n9001 == ''"`);
   });
 
-  it('ORs the condition across every note-requiring task', () => {
+  it('locks each row on its OWN note — no message-wide ORed expression', () => {
     const html = render([noteSection({ tasks: [task('9001', 'א'), task('9003', 'ב')] })]);
-    expect(html).toContain(
-      `[disabled]="(dd.v9001 != '' && dd.n9001 == '') || (dd.v9003 != '' && dd.n9003 == '')"`
-    );
+    expect(html).toContain(`[disabled]="dd.n9001 == ''"`);
+    expect(html).toContain(`[disabled]="dd.n9003 == ''"`);
+    expect(html).not.toContain("dd.n9001 == '' ||");
   });
 
   it('seeds an empty note state key per note-requiring item', () => {
@@ -129,13 +136,16 @@ describe('renderDigestAmp — per-task note column', () => {
 
   it('gates ONLY the mapped cluster tasks when both kinds are present', () => {
     const html = render([noteSection(), plainSection()]);
-    expect(html).toContain(`[disabled]="(dd.v9001 != '' && dd.n9001 == '')"`);
+    expect(html).toContain(`[disabled]="dd.n9001 == ''"`);
     expect(html).not.toContain('dd.n9002');
   });
 
   // Hand-built duplicate: buildDigest stopped producing one (section-priority
-  // dedup, 2026-08-04); the renderer's note de-dup stays as defence-in-depth.
-  it('one hidden note field for a task that appears in TWO mapped clusters', () => {
+  // dedup, 2026-08-04). With one form per row the message-level de-dup is gone
+  // and is no longer needed — each form submits alone, so each needs its own
+  // named field. The two rows still SHARE the n<id> state key (one task, one
+  // note), so typing in either unlocks both triggers.
+  it('gives each form its own named note field when a task sits in two clusters', () => {
     const html = render([
       noteSection(),
       noteSection({
@@ -145,9 +155,8 @@ describe('renderDigestAmp — per-task note column', () => {
         noteColumnTitle: 'הערה נוספת',
       }),
     ]);
-    expect(countOf(html, 'name="note_9001"')).toBe(1);
-    // ...and the gate is not duplicated for the same item either.
-    expect(html).toContain(`[disabled]="(dd.v9001 != '' && dd.n9001 == '')"`);
+    expect(countOf(html, 'name="note_9001"')).toBe(2); // one per FORM
+    expect(countOf(html, `[disabled]="dd.n9001 == ''"`)).toBe(2);
   });
 
   it('escapes a note column title so a quote in the board cannot break the markup', () => {
