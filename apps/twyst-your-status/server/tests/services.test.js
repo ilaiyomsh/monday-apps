@@ -89,55 +89,23 @@ describe('unwrapStoredValue', () => {
 // ---------------------------------------------------------------------------
 
 describe('createTokenStore', () => {
+  // A non-rotating record (no refreshToken) — resolves straight to its .token.
   const record = { token: 'tok-abc', botUserId: '3' };
 
-  // -- getReaderToken --------------------------------------------------------
+  /** A secureStorage double backed by a key→value map (per-key reads + write capture). */
+  function makeKeyedStorage(initial = {}) {
+    const map = new Map(Object.entries(initial));
+    return {
+      get: vi.fn(async (key) => (map.has(key) ? map.get(key) : null)),
+      set: vi.fn(async (key, value) => { map.set(key, value); return true; }),
+      delete: vi.fn(async (key) => { map.delete(key); return true; }),
+      _map: map,
+    };
+  }
 
-  it('getReaderToken reads the exact key <accountId>:token:default and returns the unwrapped record', async () => {
-    const secureStorage = makeSecureStorage(record);
-    const store = createTokenStore({ secureStorage });
+  // -- getOwnerToken (non-rotating / absent) ---------------------------------
 
-    const result = await store.getReaderToken('999');
-
-    expect(secureStorage.get).toHaveBeenCalledWith('999:token:default');
-    expect(result).toEqual({ token: 'tok-abc', botUserId: '3' });
-  });
-
-  it('getReaderToken unwraps a backend-wrapped { value: record } to the record', async () => {
-    const secureStorage = makeSecureStorage({ value: record });
-    const store = createTokenStore({ secureStorage });
-
-    await expect(store.getReaderToken('999')).resolves.toEqual({
-      token: 'tok-abc',
-      botUserId: '3',
-    });
-  });
-
-  it('getReaderToken returns null when storage has nothing (null)', async () => {
-    const store = createTokenStore({ secureStorage: makeSecureStorage(null) });
-    await expect(store.getReaderToken('999')).resolves.toBeNull();
-  });
-
-  it('getReaderToken returns null when storage has nothing (undefined)', async () => {
-    const store = createTokenStore({ secureStorage: makeSecureStorage(undefined) });
-    await expect(store.getReaderToken('999')).resolves.toBeNull();
-  });
-
-  it('getReaderToken returns null for a record with no token field', async () => {
-    const store = createTokenStore({ secureStorage: makeSecureStorage({ botUserId: '3' }) });
-    await expect(store.getReaderToken('999')).resolves.toBeNull();
-  });
-
-  it('getReaderToken returns null for a record with an empty-string token', async () => {
-    const store = createTokenStore({
-      secureStorage: makeSecureStorage({ token: '', botUserId: '3' }),
-    });
-    await expect(store.getReaderToken('999')).resolves.toBeNull();
-  });
-
-  // -- getOwnerToken ---------------------------------------------------------
-
-  it('getOwnerToken reads the exact key <accountId>:token:<userId> and returns the bare token string', async () => {
+  it('getOwnerToken reads the exact key <accountId>:token:<userId> and returns the bare token of a non-rotating record', async () => {
     const secureStorage = makeSecureStorage(record);
     const store = createTokenStore({ secureStorage });
 
@@ -148,35 +116,149 @@ describe('createTokenStore', () => {
   });
 
   it('getOwnerToken unwraps a backend-wrapped { value: record } to the bare token string', async () => {
-    const secureStorage = makeSecureStorage({ value: record });
-    const store = createTokenStore({ secureStorage });
-
+    const store = createTokenStore({ secureStorage: makeSecureStorage({ value: record }) });
     await expect(store.getOwnerToken('999', '41')).resolves.toBe('tok-abc');
   });
 
-  it('getOwnerToken returns null (not the record) when storage has nothing (null)', async () => {
+  it('getOwnerToken returns null when storage has nothing (null)', async () => {
     const store = createTokenStore({ secureStorage: makeSecureStorage(null) });
     await expect(store.getOwnerToken('999', '41')).resolves.toBeNull();
   });
 
-  it('getOwnerToken returns null when storage has nothing (undefined)', async () => {
-    const store = createTokenStore({ secureStorage: makeSecureStorage(undefined) });
-    await expect(store.getOwnerToken('999', '41')).resolves.toBeNull();
-  });
-
-  it('getOwnerToken returns null for a record with no token field', async () => {
-    const store = createTokenStore({ secureStorage: makeSecureStorage({ botUserId: '3' }) });
-    await expect(store.getOwnerToken('999', '41')).resolves.toBeNull();
-  });
-
   it('getOwnerToken returns null for a record with an empty-string token', async () => {
+    const store = createTokenStore({ secureStorage: makeSecureStorage({ token: '', botUserId: '3' }) });
+    await expect(store.getOwnerToken('999', '41')).resolves.toBeNull();
+  });
+
+  it('getOwnerToken returns null for a record already flagged reauth_required', async () => {
     const store = createTokenStore({
-      secureStorage: makeSecureStorage({ token: '', botUserId: '3' }),
+      secureStorage: makeSecureStorage({ token: null, refreshToken: 'r', status: 'reauth_required' }),
     });
     await expect(store.getOwnerToken('999', '41')).resolves.toBeNull();
   });
 
-  // -- setOwnerToken ---------------------------------------------------------
+  // -- getOwnerToken (OAuth 2.1 refresh path) --------------------------------
+
+  it('getOwnerToken returns the access token as-is while it is still fresh (no refresh call)', async () => {
+    const now = () => 1_000_000;
+    const secureStorage = makeKeyedStorage({
+      '999:token:41': { token: 'fresh', refreshToken: 'r1', expiresAt: 1_000_000 + 10 * 60_000 },
+    });
+    const oauthClient = { refresh: vi.fn() };
+    const store = createTokenStore({ secureStorage, oauthClient, now });
+
+    await expect(store.getOwnerToken('999', '41')).resolves.toBe('fresh');
+    expect(oauthClient.refresh).not.toHaveBeenCalled();
+  });
+
+  it('getOwnerToken refreshes a STALE record, persists the ROTATED pair, and returns the new access token', async () => {
+    const now = () => 1_000_000;
+    const secureStorage = makeKeyedStorage({
+      '999:token:41': { token: 'old', refreshToken: 'r1', expiresAt: 1_000_000 + 60_000, userId: '41' },
+    });
+    const oauthClient = {
+      refresh: vi.fn().mockResolvedValue({ accessToken: 'new', refreshToken: 'r2', expiresAtMs: 5_000_000 }),
+    };
+    const store = createTokenStore({ secureStorage, oauthClient, now });
+
+    await expect(store.getOwnerToken('999', '41')).resolves.toBe('new');
+    expect(oauthClient.refresh).toHaveBeenCalledWith('r1');
+    // The rotated pair (new access + new refresh) is persisted for next time.
+    const persisted = secureStorage._map.get('999:token:41');
+    expect(persisted.token).toBe('new');
+    expect(persisted.refreshToken).toBe('r2');
+    expect(persisted.expiresAt).toBe(5_000_000);
+  });
+
+  it('getOwnerToken flags the record reauth_required and returns null on invalid_grant', async () => {
+    const now = () => 1_000_000;
+    const secureStorage = makeKeyedStorage({
+      '999:token:41': { token: 'old', refreshToken: 'dead', expiresAt: 1_000_000 + 60_000 },
+    });
+    const oauthClient = {
+      refresh: vi.fn().mockRejectedValue(Object.assign(new Error('x'), { code: 'refresh_token_invalid' })),
+    };
+    const store = createTokenStore({ secureStorage, oauthClient, now, logger: makeLogger() });
+
+    await expect(store.getOwnerToken('999', '41')).resolves.toBeNull();
+    expect(secureStorage._map.get('999:token:41').status).toBe('reauth_required');
+  });
+
+  it('getOwnerToken returns the still-valid token on a TRANSIENT refresh failure (does not flag reauth)', async () => {
+    const now = () => 1_000_000;
+    const secureStorage = makeKeyedStorage({
+      '999:token:41': { token: 'stale-but-valid', refreshToken: 'r1', expiresAt: 1_000_000 + 60_000 },
+    });
+    const oauthClient = {
+      refresh: vi.fn().mockRejectedValue(Object.assign(new Error('502'), { code: 'refresh_transient' })),
+    };
+    const store = createTokenStore({ secureStorage, oauthClient, now, logger: makeLogger() });
+
+    await expect(store.getOwnerToken('999', '41')).resolves.toBe('stale-but-valid');
+    expect(secureStorage._map.get('999:token:41').status).not.toBe('reauth_required');
+  });
+
+  it('getOwnerToken serializes concurrent stale reads through ONE refresh (single-use rotation safe)', async () => {
+    const now = () => 1_000_000;
+    const secureStorage = makeKeyedStorage({
+      '999:token:41': { token: 'old', refreshToken: 'r1', expiresAt: 1_000_000 + 60_000 },
+    });
+    let resolveRefresh;
+    const oauthClient = {
+      refresh: vi.fn(() => new Promise((res) => { resolveRefresh = res; })),
+    };
+    const store = createTokenStore({ secureStorage, oauthClient, now });
+
+    const p1 = store.getOwnerToken('999', '41');
+    const p2 = store.getOwnerToken('999', '41');
+    // The refresh call sits behind async reads — wait until it is actually invoked
+    // before releasing it, so both reads have already joined the single lane.
+    while (oauthClient.refresh.mock.calls.length === 0) {
+      await new Promise((r) => setImmediate(r));
+    }
+    resolveRefresh({ accessToken: 'new', refreshToken: 'r2', expiresAtMs: 5_000_000 });
+    const [a, b] = await Promise.all([p1, p2]);
+
+    expect(a).toBe('new');
+    expect(b).toBe('new');
+    expect(oauthClient.refresh).toHaveBeenCalledTimes(1); // NOT twice
+  });
+
+  // -- getReaderToken (pointer model) ----------------------------------------
+
+  it('getReaderToken resolves the reader POINTER to the pointed owner and returns { token, userId }', async () => {
+    const now = () => 1_000_000;
+    const secureStorage = makeKeyedStorage({
+      '999:token:default': { userId: '41' },
+      '999:token:41': { token: 'owner-fresh', refreshToken: 'r1', expiresAt: 1_000_000 + 10 * 60_000 },
+    });
+    const store = createTokenStore({ secureStorage, oauthClient: { refresh: vi.fn() }, now });
+
+    await expect(store.getReaderToken('999')).resolves.toEqual({ token: 'owner-fresh', userId: '41' });
+  });
+
+  it('getReaderToken returns null when no reader pointer is stored', async () => {
+    const store = createTokenStore({ secureStorage: makeKeyedStorage({}) });
+    await expect(store.getReaderToken('999')).resolves.toBeNull();
+  });
+
+  it('getReaderToken honors a LEGACY copy record (token, no pointer userId) directly', async () => {
+    const store = createTokenStore({
+      secureStorage: makeKeyedStorage({ '999:token:default': { token: 'legacy', botUserId: '3' } }),
+    });
+    await expect(store.getReaderToken('999')).resolves.toEqual({ token: 'legacy', userId: null });
+  });
+
+  it('getReaderToken returns null when the pointed owner needs re-authorization', async () => {
+    const secureStorage = makeKeyedStorage({
+      '999:token:default': { userId: '41' },
+      '999:token:41': { token: null, refreshToken: 'r', status: 'reauth_required' },
+    });
+    const store = createTokenStore({ secureStorage });
+    await expect(store.getReaderToken('999')).resolves.toBeNull();
+  });
+
+  // -- setOwnerToken (owner record + reader pointer) -------------------------
 
   it('setOwnerToken writes the owner record under the exact key <accountId>:token:<userId>', async () => {
     const secureStorage = makeSecureStorage(null);
@@ -187,19 +269,7 @@ describe('createTokenStore', () => {
     expect(secureStorage.set).toHaveBeenCalledWith('999:token:41', record);
   });
 
-  it('setOwnerToken also refreshes the reader key <accountId>:token:default with the record plus a stringified userId', async () => {
-    const secureStorage = makeSecureStorage(null);
-    const store = createTokenStore({ secureStorage });
-
-    await store.setOwnerToken('999', '41', record);
-
-    expect(secureStorage.set).toHaveBeenCalledWith(
-      '999:token:default',
-      expect.objectContaining({ token: 'tok-abc', botUserId: '3', userId: '41' })
-    );
-  });
-
-  it('setOwnerToken stringifies a numeric userId when refreshing the reader key', async () => {
+  it('setOwnerToken points the reader key at the owner (a { userId } POINTER, not a token copy)', async () => {
     const secureStorage = makeSecureStorage(null);
     const store = createTokenStore({ secureStorage });
 
@@ -207,7 +277,8 @@ describe('createTokenStore', () => {
 
     const readerCall = secureStorage.set.mock.calls.find(([key]) => key === '999:token:default');
     expect(readerCall).toBeDefined();
-    expect(readerCall[1]).toEqual(expect.objectContaining({ userId: '41' }));
+    expect(readerCall[1]).toEqual({ userId: '41' }); // stringified, and NO token material copied
+    expect(readerCall[1].token).toBeUndefined();
   });
 
   it('setOwnerToken performs BOTH writes — owner key and reader key', async () => {

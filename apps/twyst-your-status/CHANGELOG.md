@@ -1,5 +1,19 @@
 # Changelog
 
+## Guard 1.1.0 — הקשחת שרת (round323 review)
+
+עקב סקירת קוד (Codex P1) — שינויי שרת בלבד, ללא שינוי משטח לקוח (גרסת הלקוח נשארת 3.14.0):
+- **OAuth 2.1 (New OAuth Flow) לשומר**: מעבר מזרימת authorization-code קלאסית ל-PKCE
+  S256 מול נקודת הקצה `oauth_ms/oauth/token`. טוקני גישה פגים; refresh חד-פעמי
+  ומתחלף; רענון אוטומטי single-flight ששומר את ה-refresh המחודש; `invalid_grant`
+  מסמן `reauth_required`. הקורא (`:token:default`) הפך ל**מצביע** לבעלים במקום עותק,
+  כדי ששני עותקים של אותו grant לא ישרפו את ה-refresh המתחלף (P1-D).
+- **שילוח שגיאות ל-Axiom מהשומר** (error-kit): logger מודע-sink, עותקים מוטמעים של
+  `axiomServerSink` ו-`process-guards` (זהים לתבנית הבין-אפליקטיבית, ננעלים ע"י
+  `drift.test.ts`), מידלוור שגיאה טרמינלי 4-ארגומנטים, ורישום ב-SURFACES של
+  `error-wiring-audit`. גדור על `AXIOM_*` (fail-soft) ושולח WARN/ERROR בלבד (P1-E).
+- קריאות לוח משתמשות בטוקן הבעלים הראשי (P1-C, כבר נכלל).
+
 ## 3.14.0
 
 - **ניטור עקיפות במסך ההגדרות** (בקשת בעלים, round323): אזור לבעלי העמודה שמראה

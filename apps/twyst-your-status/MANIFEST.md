@@ -409,6 +409,15 @@ docs/BYPASS-PROOF-DECISION.md. Note the guard ENFORCES hiddenLabelIds too —
 supersedes the older "automation/API may still set them" contract for enrolled
 columns.
 
+The owner's authorization uses monday's **OAuth 2.1 (New OAuth Flow)** — PKCE S256,
+expiring access tokens, single-use rotating refresh tokens with automatic single-flight
+refresh; a dead grant flags `reauth_required` (server/src/services/monday-oauth-client.js
++ the refresh-aware token store in stores.js). The account reader (`:token:default`) is a
+POINTER to an owner, not a token copy, so rotation is never burned by a stale duplicate.
+The guard server also ships WARN/ERROR to Axiom via the vendored error-kit stack
+(helpers/axiomServerSink.js + process-guards.js, drift-locked), gated on the `AXIOM_*`
+secrets (fail-soft: no secrets → nothing ships, logs stay on `mapps code:logs`).
+
 The owner gate is still a client-side gate: it withholds the UI, it does not defend
 the storage key — anyone able to call monday's storage API with this app's context
 could still write the configuration. The guard server narrows the blast radius (its

@@ -1,6 +1,6 @@
 {
   "name": "twyst-your-status-guard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Guard service for twyst-your-status — validates every status change against the column rules and reverts illegal ones (monday code)",
   "private": true,
   "type": "module",
@@ -16,6 +16,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@axiomhq/js": "^1.3.1",
     "@mondaycom/apps-sdk": "^0.1.4",
     "express": "^4.18.0",
     "jsonwebtoken": "^9.0.0"

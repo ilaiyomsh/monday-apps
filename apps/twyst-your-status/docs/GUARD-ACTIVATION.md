@@ -30,6 +30,13 @@ monday רושמת כל כתיבה על שם **בעל הטוקן שביצע או�
 זהות-שירות. זה מה ש"אין צורך ב-OAuth של שומר" אומר בפועל: אין זהות נפרדת, רק
 הבעלים שמאשר את עצמו.
 
+**OAuth 2.1 (New OAuth Flow):** האישור מתבצע בזרימת ה-OAuth החדשה של monday —
+PKCE S256 חובה, טוקן הגישה **פג תוקף** וה-refresh token הוא **חד-פעמי ומתחלף** בכל
+רענון. השרת מרענן את הטוקן אוטומטית (single-flight, שומר את ה-refresh המחודש); grant
+שמת (רענון כפול, ביטול הרשאה, או תום 6 חודשים) מסמן את הרשומה `reauth_required` והבעלים
+נדרש לאשר מחדש. הקורא (`:token:default`) הוא **מצביע** לבעלים, לא עותק — כדי ששני
+עותקים של אותו grant לא ישרפו את ה-refresh המתחלף.
+
 **התנהגות כשהבעלים הראשי טרם אישר:** השומר קורא את הכללים ומזהה שינוי לא חוקי, אבל
 אם אין לו את הטוקן של הבעלים הראשי — הוא **לא מבצע החזרה** ורושם אזהרה בלוג ("primary
 owner has not authorized the guard"). זה fail-open מכוון: עדיף לא לבטל מאשר לבטל על
@@ -58,11 +65,18 @@ owner has not authorized the guard"). זה fail-open מכוון: עדיף לא �
    לא מנסה להירשם (רישום best-effort, לא מכשיל שמירה).
 3. **משתני סביבה לשרת** — אחרי הפריסה הראשונה (merge ל-develop מריץ
    `deploy-draft-twyst-guard`): `mapps code:env -i 11775054` —
-   `MONDAY_CLIENT_ID`, `MONDAY_CLIENT_SECRET` (משמש גם ל-sessionToken),
-   `MONDAY_SIGNING_SECRET` (אימות JWT של webhook), `BASE_URL`.
+   `MONDAY_CLIENT_ID`, `MONDAY_CLIENT_SECRET` (משמש גם ל-sessionToken ולהחלפת קוד
+   OAuth), `MONDAY_SIGNING_SECRET` (אימות JWT של webhook), `BASE_URL`. **לשילוח
+   שגיאות ל-Axiom** (אופציונלי, fail-soft — בלעדיו פשוט לא נשלח כלום): `AXIOM_TOKEN`,
+   `AXIOM_DATASET` (`app-errors`), `AXIOM_APP_NAME` (`twyst-your-status-guard`);
+   `LOG_SHIP_LEVEL` להרחבת המדיניות באירוע. **לבדיקת draft ב-OAuth:**
+   `MONDAY_APP_VERSION_ID` = מזהה גרסת ה-draft (כדי ש-`/oauth/start` יכוון לגרסה שבה
+   ה-New OAuth Flow דלוק).
 4. **כתובת השרת** — `mapps code:status -i 11775054` → ל-`BASE_URL` ול-`TWYST_GUARD_URL`.
-5. **OAuth Redirect** — Developer Center → App → OAuth → Redirect URLs:
-   `<BASE_URL>/oauth/callback`.
+5. **OAuth (New OAuth Flow + Redirect)** — Developer Center → App → גרסת draft →
+   OAuth & Permissions: **להדליק את "New OAuth Flow"** (זרימת PKCE — הקוד תומך רק בה),
+   ולהוסיף Redirect URL: `<BASE_URL>/oauth/callback`. לאחר אימות — לקדם (promote), ואז
+   לנקות את `MONDAY_APP_VERSION_ID`.
 6. **אישור הבעלים הראשי** — הבעלים הראשי פותח `<BASE_URL>/oauth/start?st=<sessionToken>`
    ומאשר. מרגע זה ביטולים נרשמים על שמו. (אם צפוי שיעבירו את תפקיד הראשי לבעלים אחר —
    כדאי שגם הוא יאשר, כדי שההחזרות ימשיכו לעבוד אחרי ההעברה.)
@@ -82,4 +96,5 @@ owner has not authorized the guard"). זה fail-open מכוון: עדיף לא �
 - תיקון, לא מניעה: הערך הפסול גלוי עד ההחזרה (שניות).
 - שרת מושבת = אין אכיפה (fail-open); הבורר ממשיך לעבוד כרגיל.
 - ערך שנקבע ביצירת פריט (טופס/שכפול/ייבוא) לא מייצר אירוע שינוי — מחוץ להיקף v1.
-- Axiom ל-guard: לא מחובר ב-v1; הלוגים ב-`mapps code:logs -i 11775054`.
+- Axiom ל-guard: **מחובר** (error-kit, גדור על `AXIOM_*`); בלי הסודות — לא נשלח כלום,
+  והלוגים נשארים ב-`mapps code:logs -i 11775054`. שולח רק WARN/ERROR כברירת מחדל.

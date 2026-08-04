@@ -165,6 +165,15 @@ const SURFACES = [
     middlewareFiles: ['apps/telemetry-dashboard/src/app.js'],
     sinkFile: 'apps/telemetry-dashboard/src/helpers/axiomServerSink.js',
   },
+  {
+    // twyst-your-status GUARD server (monday-code component of the SAME app). Vendors
+    // the cross-app server sink + process-guards; wired in server/src/index.js.
+    name: 'twyst-guard-server', kind: 'server',
+    entry: 'apps/twyst-your-status/server/src/index.js',
+    processGuardsFile: 'apps/twyst-your-status/server/src/helpers/process-guards.js',
+    middlewareFiles: ['apps/twyst-your-status/server/src/app.js'],
+    sinkFile: 'apps/twyst-your-status/server/src/helpers/axiomServerSink.js',
+  },
 ];
 
 // ============================================================================
@@ -401,6 +410,7 @@ for (const s of SURFACES) {
 const APP_SRC_DIRS = ['apps/axis/tracker/src', 'apps/axis/day-off/src', 'apps/axis/planner/src',
   'apps/axis/services/app-core/src', 'apps/axis/sync-calender/src', 'apps/discussions/src',
   'apps/team-people-column/src', 'apps/deadline-confirm/src', 'apps/telemetry-dashboard/src',
+  'apps/twyst-your-status/server/src',
   // docs-export is scanned here from day one. Its full SURFACES entry is deliberately
   // deferred until its deploy workflows exist — a surface declares `workflow`, and a
   // missing workflow file is a hard `fail`, so registering the surface before the

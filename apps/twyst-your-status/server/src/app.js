@@ -35,5 +35,17 @@ export function createApp(deps) {
   app.use(createGuardRouter(deps));
   app.use(createOauthRouter(deps));
 
+  // Terminal error middleware (error-guard server contract): the 4-arg signature
+  // is what makes express route synchronous throws + next(err) here instead of
+  // crashing the response. Log (ships via the sink) then answer a bare 500 — never
+  // leak an error body to the caller.
+  app.use((err, req, res, _next) => {
+    deps.logger?.error?.('unhandled request error', 'http', {
+      method: req.method, path: req.path, error: String(err?.message ?? err),
+    });
+    if (res.headersSent) return;
+    res.status(500).json({ error: 'internal_error' });
+  });
+
   return app;
 }
