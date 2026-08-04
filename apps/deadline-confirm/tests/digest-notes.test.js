@@ -147,4 +147,11 @@ describe('classifyNote', () => {
   it('refuses one character past the limit', () => {
     expect(classifyNote({ column, value: 'x'.repeat(MAX_NOTE_LENGTH + 1) })).toBe('note_too_long');
   });
+
+  it('the limit IS the spec value 500 — not merely self-consistent', () => {
+    // Guards the constant itself: the symbolic assertions above move with the
+    // constant, so without this pin a cap change slips through unnoticed.
+    expect(MAX_NOTE_LENGTH).toBe(500);
+    expect(classifyNote({ column, value: 'x'.repeat(501) })).toBe('note_too_long');
+  });
 });
