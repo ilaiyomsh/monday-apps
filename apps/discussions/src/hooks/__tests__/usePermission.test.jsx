@@ -145,20 +145,27 @@ describe('resolveCan — ready gate (read-only until people cols load)', () => {
 describe('resolveCan — feature on, additive role union', () => {
   const opts = { permissions: ENABLED_SEEDED, canManageSettings: false, isAdmin: false };
 
-  it('participant gets the seeded participant grants (createTask, checkPoint, editResponses, exportDocs, addTopicOrPoint)', () => {
+  it('participant gets the seeded participant grants (createTask, checkPoint, editResponses, addTopicOrPoint)', () => {
     const ctx = { discussion: disc({ participants: [person(ME)] }), currentUserId: ME };
     expect(resolveCan('createTask', ctx, opts)).toBe(true);
     expect(resolveCan('checkPoint', ctx, opts)).toBe(true);
     expect(resolveCan('editResponses', ctx, opts)).toBe(true);
-    expect(resolveCan('exportDocs', ctx, opts)).toBe(true);
     expect(resolveCan('addTopicOrPoint', ctx, opts)).toBe(true);
+    // round340 (owner spec) — and the BEFORE-discussed halves of topic/point edit.
+    expect(resolveCan('editTopicOrPoint', ctx, opts)).toBe(true);
+    expect(resolveCan('deleteTopicOrPoint', ctx, opts)).toBe(true);
   });
 
-  it('participant does NOT get the caps the seed leaves false (editSummary, deleteTopicOrPoint, editDiscussionFields)', () => {
+  it('participant does NOT get the caps the seed leaves false (editSummary, editDiscussionFields, exportDocs, *Discussed)', () => {
     const ctx = { discussion: disc({ participants: [person(ME)] }), currentUserId: ME };
     expect(resolveCan('editSummary', ctx, opts)).toBe(false);
-    expect(resolveCan('deleteTopicOrPoint', ctx, opts)).toBe(false);
     expect(resolveCan('editDiscussionFields', ctx, opts)).toBe(false);
+    // round340 (owner spec) — no export, and no touching a topic/point that was
+    // already discussed. Resolving the AFTER halves to false is what makes the
+    // per-row gate in TopicsTab mean anything.
+    expect(resolveCan('exportDocs', ctx, opts)).toBe(false);
+    expect(resolveCan('editTopicOrPointDiscussed', ctx, opts)).toBe(false);
+    expect(resolveCan('deleteTopicOrPointDiscussed', ctx, opts)).toBe(false);
   });
 
   it('explicit false on one role is NOT a revoke — another held role still grants (union)', () => {
@@ -793,12 +800,12 @@ describe('resolveCan — decision tier', () => {
     }
   });
 
-  it('feature on + seed: the decider gets every edit cap but NOT deleteDecision', () => {
+  // round340 (owner spec) — the decider now gets deleteDecision too.
+  it('feature on + seed: the decider gets EVERY decision cap, delete included', () => {
     const ctx = { item: decision({ decider: [person(ME)] }), currentUserId: ME };
-    for (const cap of DECISION_EDIT_CAPS) {
+    for (const cap of [...DECISION_EDIT_CAPS, 'deleteDecision']) {
       expect(resolveCan(cap, ctx, on)).toBe(true);
     }
-    expect(resolveCan('deleteDecision', ctx, on)).toBe(false);
   });
 
   it('feature on: the discussion creator/lead content override does NOT extend to decision caps (item tier excluded)', () => {
@@ -890,18 +897,28 @@ describe('resolveCan — task tier: discussion manager edits in-discussion tasks
 describe('resolveCan — decision "affected" (מושפעים) role', () => {
   const on = { permissions: ENABLED_SEEDED, canManageSettings: false };
 
-  it('feature on + seed: an affected user may edit STATUS only (not priority/date/affected/name/delete)', () => {
+  /*
+   * round340 (owner spec: "ולמושפעים אין שום הרשאה") — the affected role grants
+   * NOTHING now, status included. It used to grant editDecisionStatus, which let any
+   * stakeholder mark someone else's decision done.
+   */
+  it('feature on + seed: an affected user may edit NOTHING at all', () => {
     const ctx = { item: decision({ affected: [person(ME)] }), currentUserId: ME };
-    expect(resolveCan('editDecisionStatus', ctx, on)).toBe(true);
-    for (const cap of ['editDecisionPriority', 'editDecisionDate', 'editDecisionAffected', 'editDecisionName', 'deleteDecision']) {
+    for (const cap of ['editDecisionStatus', 'editDecisionTracking', 'editDecisionPriority', 'editDecisionDate', 'editDecisionAffected', 'editDecisionName', 'deleteDecision']) {
       expect(resolveCan(cap, ctx, on)).toBe(false);
     }
   });
 
-  it('an affected user is recognized as a role (grants status); a stranger to the decision is not', () => {
-    const affectedCtx = { item: decision({ affected: [person(ME)] }), currentUserId: ME };
+  /*
+   * The explicit `false`s are not the same as "no seed entry": they VETO the
+   * 'creatorLeadOwner' default bucket. Without them an affected user would reach
+   * isItemSelfRole, which scans every decisions role source — including affectedID —
+   * and would hand back exactly the grant the owner asked to remove.
+   */
+  it('affected-only stays denied even though affectedID is itself a scanned self-role', () => {
+    const ctx = { item: decision({ affected: [person(ME)] }), currentUserId: ME };
     const strangerCtx = { item: decision({ affected: [person(OTHER)] }), currentUserId: ME };
-    expect(resolveCan('editDecisionStatus', affectedCtx, on)).toBe(true);
+    expect(resolveCan('editDecisionStatus', ctx, on)).toBe(false);
     expect(resolveCan('editDecisionStatus', strangerCtx, on)).toBe(false);
   });
 

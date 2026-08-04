@@ -381,3 +381,40 @@ query ($ws: [ID]) { folders(workspace_ids: $ws, limit: 100) { id name children {
   re-run creates a duplicate folder with the same name (monday allows duplicates).
 - `delete_folder(folder_id:)` exists and deleting the folder does NOT delete boards implicitly in
   the same call — delete boards first if that is the intent (the probe deleted both explicitly).
+
+## `create_column` `defaults:` for a STATUS column — colours are NOT yours to set (verified live 2026-08-04, sandbox 16291824)
+
+Probed by creating four status columns on a scratch board and reading `settings_str` back.
+Two of the four keys you can pass in `defaults` are silently discarded:
+
+| key in `defaults` | honoured? |
+|---|---|
+| `labels` (`{ "<id>": "<text>" }`) | **yes** |
+| `labels_positions_v2` (`{ "<id>": <position> }`) | **yes** — this is the display order |
+| `labels_colors` | **NO — silently ignored** |
+| `done_colors` | **NO — always written back as `[1]`** |
+
+**A status label's colour is fixed by its label ID**, from monday's own palette. Passing a
+`labels_colors` block that disagrees changes nothing, and the response reports the palette
+colour, not yours. The palette (ids 0–11, read back from a 12-label probe):
+
+`0` orange `#fdab3d` · `1` green-shadow `#00c875` · `2` red-shadow `#df2f4a` ·
+`3` blue-links `#007eb5` · `4` purple `#9d50dd` · `5` grey `#c4c4c4` ·
+`6` grass-green `#037f4c` · `7` bright-blue `#579bfc` · `8` mustered `#cab641` ·
+`9` yellow `#ffcb00` · `10` soft-black `#333333` · `11` dark-red `#bb3354`
+
+Consequences to design around:
+
+- **To choose colours, choose label IDs.** Ids and positions are independent, so
+  `labels: {2:'דחופה', 0:'גבוהה', 9:'בינונית', 5:'נמוכה'}` with
+  `labels_positions_v2: {2:0, 0:1, 9:2, 5:3}` yields red/orange/yellow/grey in that display
+  order. (Used by `PRIORITY_DEFAULTS` in `apps/discussions/.../provisionBoards.js`.)
+- **A `labels_colors` block that happens to match the palette is a no-op that LOOKS like it
+  works.** `STATUS_DEFAULTS` in the same file is exactly that — its ids already line up with
+  the palette, so nobody noticed the key was inert. Don't cite it as proof the key works.
+- **`done_colors` cannot be suppressed.** It always comes back `[1]`, marking label id 1 as
+  the done label. If "done" is meaningless for the column (a priority, a category), SKIP id 1
+  when numbering the labels: the done marker then points at a nonexistent label and is inert.
+  Otherwise put the genuinely-done label on id 1 — which is green anyway.
+- Label ids need not be contiguous and need not start at 0; non-contiguous sets round-trip
+  fine (the response re-sorts the keys numerically, which is cosmetic).

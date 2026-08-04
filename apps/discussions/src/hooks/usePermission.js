@@ -59,7 +59,7 @@ function boardRoleEntries(boardKey) {
     key: `${boardKey}:${alias}`,
     readId: alias,
     columnId: cfg[alias]?.id,
-    // Multi-column people alias (`ids`, e.g. tasks.taskViewersID): every mapped
+    // Multi-column people alias (`ids`, e.g. tasks.taskEditorsID): every mapped
     // column belongs to this ONE role — mapItem merges their people under the
     // alias, and listing them here keeps them out of the raw-id extras below.
     columnIds: [cfg[alias]?.id, ...(Array.isArray(cfg[alias]?.ids) ? cfg[alias].ids : [])].filter(Boolean),
@@ -130,10 +130,11 @@ function itemReady(item, itemBoardKey) {
 // 'creatorLeadOwner' default bucket for item-tier caps.
 //
 // round305 — a capability listed in CAP_ITEM_SELF_ROLES narrows the scan to the
-// roles its owner spec names (e.g. editTaskPartners must NOT reach the read-only
-// taskViewersID role), and may additionally accept the parent DISCUSSION's
+// roles its owner spec names, and may additionally accept the parent DISCUSSION's
 // lead/coordinator/creator, which a personal-view row carries under
-// `__discussionRoles` (there is no discussion object in that ctx).
+// `__discussionRoles` (there is no discussion object in that ctx). Since round340
+// retired the read-only viewers role the narrowing is a no-op; the parent-discussion
+// half is what the entry is still there for.
 function isItemSelfRole(item, itemBoardKey, myId, capability = null) {
   const rule = capability ? CAP_ITEM_SELF_ROLES[capability]?.[itemBoardKey] : null;
   const aliases = rule?.selfRoles || PERMISSION_ROLE_SOURCES[itemBoardKey] || [];

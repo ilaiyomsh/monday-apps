@@ -99,7 +99,19 @@ export function resolveBoxLabels(preferences) {
 }
 
 export const DEFAULT_PREFERENCES = {
-  previousTasksMode: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION,
+  /*
+   * round340 (owner request, fresh-account install) — a NEW instance opens on
+   * AUTO, not the discussion-to-discussion link. AUTO is the strictly more
+   * forgiving of the two: a discussion that carries a type resolves by type, one
+   * without a type still falls back to the link path, so nothing that worked
+   * under LINKED_DISCUSSION stops working. Picking the link as the default meant
+   * every fresh install started in the mode that shows nothing until somebody
+   * manually links a previous discussion.
+   *
+   * Only the DEFAULT moved. An instance that already stored a mode keeps it —
+   * `preferences` is merged over these defaults, never replaced by them.
+   */
+  previousTasksMode: PREVIOUS_TASKS_MODES.AUTO,
   // round296 — default width split of the ניהול-דיון row: the AGENDA box's share
   // (0..1, clamped [0.25,0.75] by discussionLayout). 0.6 ⇒ agenda 60% / triple
   // box 40% (owner request). Owner-configurable in Settings → העדפות. A per-
@@ -139,19 +151,54 @@ export const DEFAULT_PREFERENCES = {
   // across ALL discussions, regardless of type. A per-type template can enable
   // the same behavior selectively (deciderIsLead on the type template). The
   // decider stays freely replaceable inline after creation.
-  defaultDeciderLead: false,
-  // Round 78 (2026-07-14): which DISCUSSION-board ROLE columns auto-fill each
-  // tasks-board ACCESS column when a task is created from a discussion. Keyed by
-  // the tasks access-column alias; each value is a list of discussion role
-  // aliases whose people are UNIONED into that column. Owner-configurable in
-  // Settings → מיפוי (under each access column). The default reproduces the
-  // prior hardcoded behavior: participants → יכולת צפייה, lead + coordinator +
-  // creator → יכולת עריכה. An unset/empty list means "don't auto-fill".
+  // round340 (owner request) — ON by default now. In practice the discussion's
+  // lead is the decider far more often than whoever happens to be typing the
+  // decision, and the field stays editable inline either way, so the cheaper
+  // default is the one that is usually already right.
+  defaultDeciderLead: true,
+  /*
+   * Round 78 (2026-07-14): which DISCUSSION-board ROLE columns auto-fill each
+   * tasks-board ACCESS column when a task is created from a discussion. Keyed by
+   * the tasks access-column alias; each value is a list of discussion role aliases
+   * whose people are UNIONED into that column. Owner-configurable in Settings →
+   * מיפוי (under each access column). An unset/empty list means "don't auto-fill".
+   *
+   * round340 (owner request) — "יכולת צפייה" (taskViewersID) is GONE, so only the
+   * editors column remains. It was a read-only people column filled with the
+   * discussion's participants, and it earned nothing: the app never gated a read on
+   * it (the tasks board's own monday permissions do that), so its only effect was
+   * writing every participant into a column on every task. See
+   * RETIRED_COLUMN_ALIASES for what happens to instances that already stored it.
+   */
   accessRoleSources: {
-    taskViewersID: ['participantsID'],
     taskEditorsID: ['discussionLeadID', 'discussionCoordinatorID', 'discussionCreatorID'],
   },
 };
+
+/**
+ * Read ONE preference, falling back to its shipped default.
+ *
+ * round340 — this exists because changing a value in DEFAULT_PREFERENCES turned out not
+ * to change anything. Every read site had spelled its own fallback inline
+ * (`settings?.preferences?.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION`,
+ * `settings?.preferences?.defaultDeciderLead === true`), so DEFAULT_PREFERENCES was
+ * documentation rather than behaviour: an instance with nothing stored got whatever each
+ * call site happened to hardcode, and the two disagreed after the owner asked for new
+ * defaults. Reading through here is what makes DEFAULT_PREFERENCES the single answer.
+ *
+ * "Unset" means undefined, null, or an empty string — a blank stored value is unusable
+ * for every preference we have, so it resolves to the default rather than through it.
+ * `false` and `0` are REAL values and are returned as-is, which is the whole reason this
+ * cannot be written as `stored || default`.
+ *
+ * @param {object|null|undefined} preferences settings.preferences
+ * @param {string} key a DEFAULT_PREFERENCES key
+ */
+export function resolvePreference(preferences, key) {
+  const stored = preferences?.[key];
+  if (stored === undefined || stored === null || stored === '') return DEFAULT_PREFERENCES[key];
+  return stored;
+}
 
 // The discussion-board roles selectable as auto-fill sources for the tasks
 // access columns (round 78). `alias` is the discussions COLUMN_SCHEMA alias;
@@ -436,8 +483,14 @@ export const CAPABILITY_DEFAULTS = {
   // already ungated) and inside a discussion. Mirrors createDiscussion: 'all'.
   createTask: 'all',
   addTopicOrPoint: 'creatorLeadOwner',
+  // round340 — editTopicOrPoint/deleteTopicOrPoint now mean "BEFORE it was
+  // discussed"; the *Discussed pair covers after. Both buckets stay
+  // 'creatorLeadOwner' so an instance with no stored grant for the new keys
+  // behaves exactly as it did before the split.
   editTopicOrPoint: 'creatorLeadOwner',
   deleteTopicOrPoint: 'creatorLeadOwner',
+  editTopicOrPointDiscussed: 'creatorLeadOwner',
+  deleteTopicOrPointDiscussed: 'creatorLeadOwner',
   checkPoint: 'creatorLeadOwner',
   editResponses: 'creatorLeadOwner',
   // ---- task tier ----
@@ -456,6 +509,9 @@ export const CAPABILITY_DEFAULTS = {
   // ---- decision tier ----
   createDecision: 'creatorLeadOwner',
   editDecisionStatus: 'creatorLeadOwner',
+  // round340 — same bucket as editDecisionStatus, which is what it used to BE, so
+  // an instance with no stored grant for the new key behaves exactly as before.
+  editDecisionTracking: 'creatorLeadOwner',
   editDecisionPriority: 'creatorLeadOwner',
   editDecisionDate: 'creatorLeadOwner',
   editDecisionAffected: 'creatorLeadOwner',
@@ -493,8 +549,20 @@ export const CAPABILITIES = [
   { id: 'editSummary', tier: 'disc', group: 'discussion', label: 'כתיבת סיכום' },
   { id: 'exportDocs', tier: 'disc', group: 'discussion', label: 'ייצוא' },
   { id: 'addTopicOrPoint', tier: 'disc', group: 'topics', label: 'הוספת נושא/נקודה' },
-  { id: 'editTopicOrPoint', tier: 'disc', group: 'topics', label: 'עריכת נושא/נקודה' },
-  { id: 'deleteTopicOrPoint', tier: 'disc', group: 'topics', label: 'מחיקת נושא/נקודה' },
+  /*
+   * round340 (owner request) — topic/point edit and delete each split in two by
+   * whether the thing has already been DISCUSSED. A point counts as discussed once
+   * its "האם נידונה" tick is on; a TOPIC counts as discussed once ANY of its points
+   * is, because a topic is the container and editing it after the meeting reached
+   * it rewrites history.
+   *
+   * The pre-split ids keep their meaning for the BEFORE case, so an instance that
+   * stored grants under them keeps them; the *Discussed keys are the new half.
+   */
+  { id: 'editTopicOrPoint', tier: 'disc', group: 'topics', label: 'עריכת נושא/נקודה לפני שנידונה' },
+  { id: 'deleteTopicOrPoint', tier: 'disc', group: 'topics', label: 'מחיקת נושא/נקודה לפני שנידונה' },
+  { id: 'editTopicOrPointDiscussed', tier: 'disc', group: 'topics', label: 'עריכת נושא/נקודה אחרי שנידונה' },
+  { id: 'deleteTopicOrPointDiscussed', tier: 'disc', group: 'topics', label: 'מחיקת נושא/נקודה אחרי שנידונה' },
   { id: 'checkPoint', tier: 'disc', group: 'topics', label: 'סימון נקודה כנידונה' },
   // round212 — relabeled "לנקודות" so it can't be confused with the references BOX write.
   { id: 'editResponses', tier: 'disc', group: 'topics', label: 'עריכת התייחסויות לנקודות' },
@@ -513,6 +581,17 @@ export const CAPABILITIES = [
   { id: 'deleteTask', tier: 'task', group: 'taskFields', label: 'מחיקת משימה' },
   // ---- decision tier (one "שדות החלטה" card; delete is a row) ----
   { id: 'editDecisionStatus', tier: 'decision', group: 'decisionFields', label: 'עריכת סטאטוס' },
+  /*
+   * round340 — "מעקב החלטה" gets its own capability. It used to ride on
+   * editDecisionStatus, so the matrix offered one checkbox labelled "עריכת סטאטוס"
+   * that silently governed two different columns. The owner's spec names the two
+   * together ("לשנות סטאטוס או מעקב החלטה"), which is only expressible honestly if
+   * each has a row.
+   *
+   * NOTE: a newly added capability id must also be listed in PermissionsTab's
+   * NEW_CAPS, or instances that already stored a roles map never receive its seed.
+   */
+  { id: 'editDecisionTracking', tier: 'decision', group: 'decisionFields', label: 'עריכת מעקב החלטה' },
   { id: 'editDecisionPriority', tier: 'decision', group: 'decisionFields', label: 'עריכת עדיפות' },
   { id: 'editDecisionDate', tier: 'decision', group: 'decisionFields', label: 'עריכת תאריך' },
   { id: 'editDecisionAffected', tier: 'decision', group: 'decisionFields', label: 'עריכת מושפעים' },
@@ -535,9 +614,10 @@ export const CAPABILITIES = [
  */
 export const PERMISSION_ROLE_SOURCES = {
   discussions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID', 'participantsID'],
-  // item 19: יכולת צפייה (viewers, read-only) + יכולת עריכה (editors, full
-  // edit) — auto-filled at task creation from the parent discussion's people.
-  tasks: ['taskCreatorID', 'responsibilityID', 'taskViewersID', 'taskEditorsID'],
+  // item 19: יכולת עריכה (taskEditorsID, full edit) — auto-filled at task creation
+  // from the parent discussion's lead/coordinator/creator. Its read-only sibling
+  // taskViewersID was retired in round340.
+  tasks: ['taskCreatorID', 'responsibilityID', 'taskEditorsID'],
   // decisions: creator + decider + "מושפעים" (affected). `affectedID` is a
   // first-class role source (not just data) so a user listed in the decision's
   // affected people column is recognized as the "מושפעים" role by the resolver.
@@ -545,23 +625,33 @@ export const PERMISSION_ROLE_SOURCES = {
 };
 
 /*
- * round305 — PER-CAPABILITY narrowing of the item-tier "self role" scan.
+ * round305 — PER-CAPABILITY narrowing of the item-tier "self role" scan, plus the
+ * parent-discussion escape hatch.
  *
  * An item-tier capability with no discussion in ctx (the personal My Tasks /
- * My Decisions surfaces) normally resolves against EVERY role source of that
- * board — which includes `taskViewersID`, the deliberately read-only role. For a
- * capability whose owner spec names the allowed roles, list them here and the
+ * My Decisions surfaces) normally resolves against EVERY role source of that board.
+ * For a capability whose owner spec names the allowed roles, list them here and the
  * resolver scans only those.
  *
  * `parentDiscussionEditors: true` additionally accepts the parent DISCUSSION's
  * lead/coordinator/creator, read from the roles the row carries under
  * `__discussionRoles` (stamped by useMyTasks for the "בדיונים שהובלתי" scope,
  * where there is no discussion object in ctx but the parent's roles are known).
+ * That half is the reason this entry still exists after round340 — see below.
  */
 export const CAP_ITEM_SELF_ROLES = {
-  // owners + discussion lead/creator/coordinator + task creator + task responsible.
-  // taskEditorsID counts because item 19 fills it FROM the discussion's
-  // lead/coordinator/creator; taskViewersID is excluded — a viewer never edits.
+  /*
+   * owners + discussion lead/creator/coordinator + task creator + task responsible.
+   * taskEditorsID counts because item 19 fills it FROM the discussion's
+   * lead/coordinator/creator.
+   *
+   * round340: this list was written to EXCLUDE the retired taskViewersID, so it now
+   * happens to equal PERMISSION_ROLE_SOURCES.tasks and the narrowing is a no-op.
+   * It is kept explicit rather than deleted for two reasons: `parentDiscussionEditors`
+   * lives on the same entry and is NOT redundant, and spelling the roles out means a
+   * people column added to the tasks board later does not silently widen who may
+   * edit שותפים.
+   */
   editTaskPartners: {
     tasks: {
       selfRoles: ['taskCreatorID', 'responsibilityID', 'taskEditorsID'],
@@ -604,6 +694,10 @@ export const DEFAULT_PERMISSION_SEED = {
       addTopicOrPoint: true,
       editTopicOrPoint: true,
       deleteTopicOrPoint: true,
+      // round340 — the three manager roles edit/delete a topic or point BEFORE and
+      // AFTER it was discussed; only participants are limited to "before".
+      editTopicOrPointDiscussed: true,
+      deleteTopicOrPointDiscussed: true,
       checkPoint: true,
       editResponses: true,
     },
@@ -624,6 +718,10 @@ export const DEFAULT_PERMISSION_SEED = {
       addTopicOrPoint: true,
       editTopicOrPoint: true,
       deleteTopicOrPoint: true,
+      // round340 — the three manager roles edit/delete a topic or point BEFORE and
+      // AFTER it was discussed; only participants are limited to "before".
+      editTopicOrPointDiscussed: true,
+      deleteTopicOrPointDiscussed: true,
       checkPoint: true,
       editResponses: true,
     },
@@ -644,13 +742,27 @@ export const DEFAULT_PERMISSION_SEED = {
       addTopicOrPoint: true,
       editTopicOrPoint: true,
       deleteTopicOrPoint: true,
+      // round340 — the three manager roles edit/delete a topic or point BEFORE and
+      // AFTER it was discussed; only participants are limited to "before".
+      editTopicOrPointDiscussed: true,
+      deleteTopicOrPointDiscussed: true,
       checkPoint: true,
       editResponses: true,
     },
   },
-  // participants → view + export + createTask + createDecision + addTopicOrPoint +
-  // checkPoint + editResponses ; NOT editDiscussionFields/editSummary/
-  // editTopicOrPoint/deleteTopicOrPoint (createDecision mirrors createTask per role)
+  /*
+   * participants → view + createTask + createDecision + addTopicOrPoint +
+   * checkPoint + editResponses ; NOT editDiscussionFields/editSummary/exportDocs.
+   *
+   * round340 (owner request), two changes:
+   *   - `exportDocs: false` — exporting the whole discussion to a document is a
+   *     publishing act, not a participation one; it stays with creator/lead/
+   *     coordinator/owners.
+   *   - topic/point edit+delete are now granted BEFORE the thing was discussed and
+   *     revoked after (the *Discussed pair). A participant may still fix or drop
+   *     their own agenda item while it is only a plan; once it has actually been
+   *     discussed the record freezes for them. Creator/lead/coordinator keep both.
+   */
   'discussions:participantsID': {
     capabilities: {
       viewDiscussion: true,
@@ -660,12 +772,14 @@ export const DEFAULT_PERMISSION_SEED = {
       writeBackground: false,
       writeReferences: false,
       editSummary: false,
-      exportDocs: true,
+      exportDocs: false,
       createTask: true,
       createDecision: true,
       addTopicOrPoint: true,
-      editTopicOrPoint: false,
-      deleteTopicOrPoint: false,
+      editTopicOrPoint: true,
+      deleteTopicOrPoint: true,
+      editTopicOrPointDiscussed: false,
+      deleteTopicOrPointDiscussed: false,
       checkPoint: true,
       editResponses: true,
     },
@@ -711,25 +825,11 @@ export const DEFAULT_PERMISSION_SEED = {
       deleteTask: true,
     },
   },
-  // item 19 — יכולת צפייה (viewers): STRICTLY read-only. The explicit `false`s
-  // matter: they also veto the item-tier default bucket, so a viewer-only user
-  // can never inherit edit through isItemSelfRole.
-  'tasks:taskViewersID': {
-    capabilities: {
-      editTaskStatus: false,
-      editTaskPriority: false,
-      editTaskDeadline: false,
-      editTaskAssignee: false,
-      // round305 — read-only means read-only, שותפים included.
-      editTaskPartners: false,
-      editTaskName: false,
-      deleteTask: false,
-    },
-  },
   // decision creator → ALL decision caps true (incl. deleteDecision)
   'decisions:decisionCreatorID': {
     capabilities: {
       editDecisionStatus: true,
+      editDecisionTracking: true,
       editDecisionPriority: true,
       editDecisionDate: true,
       editDecisionAffected: true,
@@ -737,27 +837,38 @@ export const DEFAULT_PERMISSION_SEED = {
       deleteDecision: true,
     },
   },
-  // decider (מחליט) → edit everything ; NOT delete
+  // decider (מחליט) → EVERYTHING, delete included (round340 owner spec: "the
+  // decision creator and the decider get all the permissions"). Before this the
+  // decider could rewrite a decision but not remove one they had authored the
+  // substance of, which the owner judged the wrong side of the line.
   'decisions:deciderID': {
     capabilities: {
       editDecisionStatus: true,
+      editDecisionTracking: true,
       editDecisionPriority: true,
       editDecisionDate: true,
       editDecisionAffected: true,
       editDecisionName: true,
-      deleteDecision: false,
+      deleteDecision: true,
     },
   },
-  // affected (מושפעים) → the LEAST-privileged decision role: a stakeholder who
-  // may acknowledge/track the decision STATUS but not change its substance
-  // (priority/date/affected list/name) or delete it. Mirrors the task tier's
-  // limited "responsible" role (explicit grant + explicit revokes). Per the
-  // resolver's deny-wins veto, an explicit false here is honored even for a user
-  // who also holds a higher decision role — same semantics as responsible on a
-  // task. The owner can broaden these in the "שדות החלטה" card.
+  /*
+   * affected (מושפעים) → NO decision permissions at all (round340 owner spec:
+   * "ולמושפעים אין שום הרשאה").
+   *
+   * Being listed as affected by a decision is being told about it, not being given
+   * a say in it — so the role reads and nothing more. Until now it could change the
+   * decision STATUS, which let any stakeholder mark someone else's decision done.
+   *
+   * The explicit `false`s are load-bearing, not decoration: they veto the
+   * 'creatorLeadOwner' default bucket, so an affected user cannot inherit a grant
+   * through the item-tier self-role scan either. The owner can re-grant any of
+   * these in the "שדות החלטה" card.
+   */
   'decisions:affectedID': {
     capabilities: {
-      editDecisionStatus: true,
+      editDecisionStatus: false,
+      editDecisionTracking: false,
       editDecisionPriority: false,
       editDecisionDate: false,
       editDecisionAffected: false,
@@ -766,6 +877,54 @@ export const DEFAULT_PERMISSION_SEED = {
     },
   },
 };
+
+/**
+ * Fill in capability keys a stored roles map has never heard of, from the seed.
+ *
+ * round340 (PR review, P1 — a real hole) — adding a capability to the catalog is not
+ * enough for an instance that already stored a `permissions.roles` map: that map has no
+ * entry for the new id, and an ABSENT value is not a denial. The resolver falls through
+ * to `CAPABILITY_DEFAULTS`, and for an ITEM-tier capability the 'creatorLeadOwner' bucket
+ * resolves via `isItemSelfRole`, which scans every role source of that board — including
+ * the very role the new seed entry denies.
+ *
+ * Concretely, that inverted `editDecisionTracking`: `decisions:affectedID` is seeded to
+ * `false`, but on an existing instance the key was missing, the default bucket saw the
+ * user in the decision's `affectedID` column, and an affected-only user could edit
+ * decision tracking — exactly what the owner asked to remove. The disc tier does not
+ * leak this way (its bucket asks `isCreatorOrLead(discussion)`, which a participant
+ * fails), but relying on that distinction per capability is not a design.
+ *
+ * Two rules make this safe to run on every load:
+ *   1. only keys that are `undefined` are added — a stored `true` OR `false` is the
+ *      owner's answer and is never touched;
+ *   2. only role keys the stored map ALREADY has are touched. Adding missing ROLES is a
+ *      separate concern (PermissionsTab does it), because a role the instance never had
+ *      should appear with its whole seed at once, not be half-created here.
+ *
+ * Pure, and returns the SAME object when there is nothing to add so callers can use
+ * identity to avoid pointless re-renders / re-writes.
+ *
+ * @param {object|null|undefined} roles settings.permissions.roles
+ */
+export function backfillSeedCapabilities(roles) {
+  if (!roles || typeof roles !== 'object') return roles;
+  let touched = false;
+  const out = {};
+  for (const [roleKey, role] of Object.entries(roles)) {
+    const seedCaps = DEFAULT_PERMISSION_SEED[roleKey]?.capabilities;
+    if (!seedCaps) { out[roleKey] = role; continue; }
+    const caps = { ...(role?.capabilities || {}) };
+    let roleTouched = false;
+    for (const [capId, seeded] of Object.entries(seedCaps)) {
+      if (caps[capId] === undefined) { caps[capId] = seeded; roleTouched = true; }
+    }
+    if (!roleTouched) { out[roleKey] = role; continue; }
+    out[roleKey] = { ...role, capabilities: caps };
+    touched = true;
+  }
+  return touched ? out : roles;
+}
 
 // Maps the SDK class name used in the exported code -> a board key above.
 export const BOARD_CLASS_TO_KEY = {
@@ -854,12 +1013,11 @@ export const COLUMN_SCHEMA = {
     // texts; the "Previous tasks by discussion type" view bridges by TEXT →
     // taskTypeID label id and filters server-side (any_of).
     taskTypeID: { type: 'dropdown', title: 'סוג דיון' },
-    // ---- access columns (item 19, 2026-07-14) ----
-    // Auto-filled at task creation from the parent discussion: participants →
-    // viewers (read-only role), the single-person discussion roles (lead/
-    // coordinator/creator) → editors (full-edit role). Mapped by the owner in
-    // Settings; also usable for monday board-level column permissions.
-    taskViewersID: { type: 'people', title: 'יכולת צפייה' },
+    // ---- access column (item 19, 2026-07-14; halved in round340) ----
+    // Auto-filled at task creation from the parent discussion's single-person roles
+    // (lead / coordinator / creator) → editors, a full-edit permission role. Mapped
+    // by the owner in Settings; also usable for monday board-level column
+    // permissions. Its read-only twin "יכולת צפייה" was retired in round340.
     taskEditorsID: { type: 'people', title: 'יכולת עריכה' },
     topicsLinkID: { type: 'board_relation', title: 'link to נושאים לדיון1' },
     // ---- read-only display field ----
@@ -1004,6 +1162,67 @@ export function migrateColumnAliases(columns = {}) {
     }
   }
   return { columns: out, changed };
+}
+
+/*
+ * round340 — aliases that USED to be in COLUMN_SCHEMA and were deliberately retired.
+ *
+ * Deleting a schema key is not enough to remove it from an instance. Stored settings
+ * are merged OVER the schema, never replaced by it (`reconcileColumns` starts from
+ * `{ ...saved }`), so a retired alias keeps its stored `{id, ids, colTitles}` — and
+ * with it a stale row in an exported settings JSON, a stale `permissions.roles`
+ * entry, and a stale `preferences.accessRoleSources` key that `withSeededAccessRoles`
+ * will faithfully preserve forever.
+ *
+ * Listing the alias here purges all three at load. What it deliberately does NOT do
+ * is touch the monday BOARD: the physical people column stays where it is, with its
+ * data, for the owner to keep or delete themselves. An app that silently deleted a
+ * customer's board column would be trading a cosmetic problem for an unrecoverable one.
+ */
+export const RETIRED_COLUMN_ALIASES = {
+  // "יכולת צפייה" — a read-only people column filled with the discussion's
+  // participants at task creation. Nothing ever gated a read on it, so it only ever
+  // wrote noise into the board (owner decision 2026-08-04).
+  tasks: ['taskViewersID'],
+};
+
+/**
+ * Strip every RETIRED_COLUMN_ALIASES trace out of a stored settings object.
+ *
+ * Pure: returns a new object and never mutates the input, and returns the SAME
+ * object when there is nothing to prune, so callers can use identity to decide
+ * whether a re-persist is worth an API call.
+ *
+ * @param {object|null|undefined} settings a settings blob as read from storage
+ * @returns {object|null|undefined} settings with retired aliases removed
+ */
+export function pruneRetiredSettings(settings) {
+  if (!settings || typeof settings !== 'object') return settings;
+  let touched = false;
+  const columns = { ...(settings.columns || {}) };
+  const roles = { ...(settings.permissions?.roles || {}) };
+  const accessRoleSources = { ...(settings.preferences?.accessRoleSources || {}) };
+
+  for (const [boardKey, aliases] of Object.entries(RETIRED_COLUMN_ALIASES)) {
+    for (const alias of aliases) {
+      if (columns[boardKey] && alias in columns[boardKey]) {
+        const board = { ...columns[boardKey] };
+        delete board[alias];
+        columns[boardKey] = board;
+        touched = true;
+      }
+      const roleKey = `${boardKey}:${alias}`;
+      if (roleKey in roles) { delete roles[roleKey]; touched = true; }
+      // accessRoleSources is keyed by the TARGET alias, with no board prefix.
+      if (alias in accessRoleSources) { delete accessRoleSources[alias]; touched = true; }
+    }
+  }
+  if (!touched) return settings;
+
+  const out = { ...settings, columns };
+  if (settings.permissions) out.permissions = { ...settings.permissions, roles };
+  if (settings.preferences) out.preferences = { ...settings.preferences, accessRoleSources };
+  return out;
 }
 
 /*

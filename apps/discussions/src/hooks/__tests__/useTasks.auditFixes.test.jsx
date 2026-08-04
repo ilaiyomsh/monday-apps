@@ -3,7 +3,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 
 // Round-75 audit fixes for useTasks:
 //   D2 — fetchTasksByDiscussion must FETCH the permission role-source people
-//        columns (taskCreatorID / taskViewersID / taskEditorsID), else resolveCan
+//        columns (taskCreatorID / taskEditorsID), else resolveCan
 //        scans falsely-empty arrays and the matrix denies edits inconsistently.
 //   R2 — a create whose relation-link write fails must NOT re-run create_item on
 //        retry (that duplicates the task on the board); it resumes from the link.
@@ -26,7 +26,6 @@ const COLUMNS = {
     priorityID: { id: 'priority_col', type: 'status' },
     discussionLinkID: { id: 'task_disc_link', type: 'board_relation' },
     taskCreatorID: { id: 'creator_col', type: 'people' },
-    taskViewersID: { id: 'viewers_col', type: 'people' },
     taskEditorsID: { id: 'editors_col', type: 'people' },
   },
 };
@@ -43,7 +42,7 @@ beforeEach(() => {
 });
 
 describe('useTasks — D2: permission role-source columns are fetched', () => {
-  it('the discussion tasks query requests creator + viewers + editors column ids', async () => {
+  it('the discussion tasks query requests creator + editors column ids', async () => {
     configure();
     let fetchVars = null;
     api.mockImplementation(async (query, vars) => {
@@ -55,7 +54,7 @@ describe('useTasks — D2: permission role-source columns are fetched', () => {
 
     // responsibilityID was always fetched; the fix ADDS the three role columns.
     expect(fetchVars.taskCols).toEqual(expect.arrayContaining([
-      'resp_col', 'creator_col', 'viewers_col', 'editors_col',
+      'resp_col', 'creator_col', 'editors_col',
     ]));
   });
 });

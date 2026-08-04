@@ -27,7 +27,6 @@ const task = (over = {}) => ({
   id: 'T1',
   taskCreatorID: [],
   responsibilityID: [],
-  taskViewersID: [],
   taskEditorsID: [],
   ...over,
 });
@@ -48,9 +47,6 @@ describe('editTaskPartners — the personal view (no discussion in ctx)', () => 
       });
       it('ALLOWS a task editor (יכולת עריכה — seeded from the discussion roles)', () => {
         expect(resolveCan(CAP, ctx(task({ taskEditorsID: [p(ME)] })), opts)).toBe(true);
-      });
-      it('DENIES a viewer-only user (יכולת צפייה stays read-only)', () => {
-        expect(resolveCan(CAP, ctx(task({ taskViewersID: [p(ME)] })), opts)).toBe(false);
       });
       it('DENIES a stranger', () => {
         expect(resolveCan(CAP, ctx(task({ taskCreatorID: [p(OTHER)] })), opts)).toBe(false);
@@ -91,7 +87,14 @@ describe('editTaskPartners — inside a discussion', () => {
 });
 
 describe('the narrowing itself', () => {
-  it('is declared for editTaskPartners and excludes taskViewersID', () => {
+  /*
+   * round340 — the retired taskViewersID is what selfRoles was written to exclude, so
+   * the list now happens to equal PERMISSION_ROLE_SOURCES.tasks and the narrowing is
+   * a no-op. It stays declared: `parentDiscussionEditors` lives on the same entry and
+   * is NOT redundant, and spelling the roles out means a people column added to the
+   * tasks board later cannot silently widen who may edit שותפים.
+   */
+  it('is declared for editTaskPartners with the three edit roles + the parent-discussion hatch', () => {
     const rule = CAP_ITEM_SELF_ROLES.editTaskPartners.tasks;
     expect(rule.selfRoles).toEqual(['taskCreatorID', 'responsibilityID', 'taskEditorsID']);
     expect(rule.selfRoles).not.toContain('taskViewersID');
@@ -99,10 +102,8 @@ describe('the narrowing itself', () => {
   });
 
   it('does NOT change any other item-tier capability (they keep the full role scan)', () => {
-    // editTaskStatus is unlisted, so a viewer still resolves exactly as before.
-    const viewer = ctx(task({ taskViewersID: [p(ME)] }));
-    expect(resolveCan('editTaskStatus', viewer, off)).toBe(true); // legacy fail-open behaviour
-    // …and a parent-discussion lead does NOT gain it through __discussionRoles.
+    // editTaskStatus is unlisted, so a parent-discussion lead does NOT gain it
+    // through __discussionRoles — only the listed capability reads that hatch.
     const led = ctx(task({ __discussionRoles: ledRoles({ discussionLeadID: [p(ME)] }) }));
     expect(resolveCan('editTaskStatus', led, off)).toBe(false);
   });

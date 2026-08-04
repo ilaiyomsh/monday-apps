@@ -221,7 +221,7 @@ export function MyDecisionsTable({
             showDate={showDate}
             showDiscussion={showDiscussion}
             onStatusChange={onStatusChange && canDecision('editDecisionStatus', decision) ? onStatusChange : undefined}
-            onTrackingChange={onTrackingChange && canDecision('editDecisionStatus', decision) ? onTrackingChange : undefined}
+            onTrackingChange={onTrackingChange && canDecision('editDecisionTracking', decision) ? onTrackingChange : undefined}
             onPriorityChange={onPriorityChange && canDecision('editDecisionPriority', decision) ? onPriorityChange : undefined}
             onDateChange={onDateChange && canDecision('editDecisionDate', decision) ? onDateChange : undefined}
             onDeciderChange={onDeciderChange && canDecision('editDecisionAffected', decision) ? onDeciderChange : undefined}

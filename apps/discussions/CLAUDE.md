@@ -71,7 +71,12 @@ per board (so `discussionLinkID` legitimately exists on both tasks and topics). 
 (`column1`, `tasksLink`, …); the OLD→NEW map is `ALIAS_MIGRATIONS` in the same file, and
 `SettingsContext.load` calls `migrateColumnAliases()` once to re-key any stored mapping so renames
 never lose an instance's config. **To rename an alias, edit BOTH `COLUMN_SCHEMA` and
-`ALIAS_MIGRATIONS`.**
+`ALIAS_MIGRATIONS`.** To **retire** one, deleting the schema entry is NOT enough — stored
+settings are merged OVER the schema, so add it to **`RETIRED_COLUMN_ALIASES`** and
+`pruneRetiredSettings` (called from `SettingsContext.load`, after the rename migration and
+before `reconcileColumns`) clears its three traces: the column mapping, the
+`permissions.roles['<board>:<alias>']` row, and the `preferences.accessRoleSources` key.
+It deliberately never touches the monday board column itself.
 Flow:
 - `boards.config.js` is the seed/default mapping. **To fix a wrong mapping, edit it HERE.**
 - `SettingsContext` loads a per-instance override from `monday.storage` (key
@@ -142,14 +147,18 @@ both views; the discussions-only modals (Settings/Templates/Create) stay inside 
 - Two TASKS columns exist for this tab **ONLY** — added to `COLUMN_SCHEMA.tasks` +
   `TASKS_SETTINGS_FIELDS`, but deliberately NOT rendered in the existing TasksTab/PreviousTasksTab
   tables: **`priorityID`** (a SECOND status column whose label DISPLAY order defines priority) and
-  **`taskNotesID`** (long_text, inline-editable notes). The owner maps them in Settings;
+  **`taskNotesID`** (long_text, inline-editable notes). **Both are provisioned + auto-mapped
+  since round340** (before that they were owner-mapped only, so on a fresh install neither
+  column existed and both cells silently hid); the owner can still remap them in Settings.
   `useStatusOptions('tasks', alias)` is parameterized to read either status column's labels/order.
+  `priorityID`'s provisioned label IDs are chosen for their COLOURS — `create_column` ignores
+  `labels_colors` and binds colour to the label id (see `PRIORITY_DEFAULTS`).
 
 ### "Previous tasks" tab — three resolution modes
 `PreviousTasksTab` resolves the tasks it shows in one of three modes, chosen by the owner in Settings
-and stored under **`settings.preferences.previousTasksMode`** (`'linkedDiscussion'` default |
-`'discussionType'` | `'auto'`; constants `PREVIOUS_TASKS_MODES` / `DEFAULT_PREFERENCES` in
-`boards.config.js`). A single derived `byType` flag drives every downstream effect/branch in the tab
+and stored under **`settings.preferences.previousTasksMode`** (`'linkedDiscussion'` |
+`'discussionType'` | `'auto'` — **`'auto'` is the default since round340**; constants
+`PREVIOUS_TASKS_MODES` / `DEFAULT_PREFERENCES` in `boards.config.js`). A single derived `byType` flag drives every downstream effect/branch in the tab
 (and `CreateDiscussionModal.hidePreviousDiscussion`).
 `settings.preferences` is a top-level settings key alongside `boards`/`columns` (merged by
 `updateSettings`), NOT a board mapping.

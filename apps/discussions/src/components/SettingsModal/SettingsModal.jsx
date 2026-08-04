@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, TabPanels, TabPanel, TextField } from '@vibe/core';
 import { Warning, MoveArrowRight } from '@vibe/icons';
@@ -21,10 +21,10 @@ function Diskette({ size = 16 }) {
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, COLUMN_SCHEMA, DEFAULT_PREFERENCES, resolvePreference, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField } from '../../utils/mondayApi/boards.config.js';
 
 // Round 78: the effective auto-fill role list for a tasks access column
-// (taskViewersID / taskEditorsID) — the stored preference, or the default when
+// (taskEditorsID) — the stored preference, or the default when
 // unset. Exported so the resolution is unit-testable.
 export function accessRolesFor(preferences, accessAlias) {
   const stored = preferences?.accessRoleSources?.[accessAlias];
@@ -636,7 +636,8 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     'taskNotesID', // הערות — inline-editable notes column, "My Tasks" tab only
     'priorityID', // עדיפות — status column whose label order defines priorityID, "My Tasks" tab only
     'taskTypeID', // סוג דיון — status column auto-filled with the parent discussion's type
-    'taskViewersID', // יכולת צפייה — people; auto-filled with the discussion's participants (item 19)
+    // round340 — 'taskViewersID' (יכולת צפייה) retired at the owner's request; only
+    // the editors access column remains. See RETIRED_COLUMN_ALIASES in boards.config.
     'taskEditorsID', // יכולת עריכה — people; auto-filled with the discussion's lead/coordinator/creator (item 19)
     // 'פרטים' (detailsID) and 'חיבור לנושאי דיון' (topicsLinkID) intentionally omitted —
     // not needed in the tasks mapping.
@@ -672,22 +673,38 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     'discussionLinkID', // 'דיון' — two-way pair of the discussions board's decisionsBoardLinkID
   ];
 
-  // Aliases whose real column lives on the board's SUBITEMS board, not the board itself.
-  const SUBITEM_FIELDS = new Set([
-    'pointCheckedID',
-    'pointNotForDiscussionID',
-    'pointCreatorID',
-    'pointDecisionsLinkID',
-    'pointTasksLinkID',
-  ]);
+  /*
+   * Aliases whose real column lives on the board's SUBITEMS board, not the board
+   * itself — DERIVED from the schema's own `subitems: true` flag rather than listed
+   * by hand.
+   *
+   * round340 (owner-reported): the hand-written list was missing `pointCreationDateID`.
+   * The consequence is subtle and was easy to misread as a provisioning failure: the
+   * column IS created on the subitems board and IS mapped by the wizard, but its
+   * mapping row then offered the PARENT topics board's columns, so the stored subitem
+   * column id matched no option and the row rendered as unmapped — and saving the
+   * screen would have written that emptiness back over a perfectly good mapping.
+   *
+   * Deriving it means a future subitem alias cannot reintroduce the same drift: a
+   * seventh `subitems: true` entry in COLUMN_SCHEMA is picked up here for free.
+   */
+  const SUBITEM_FIELDS = useMemo(() => {
+    const out = new Set();
+    for (const board of Object.values(COLUMN_SCHEMA)) {
+      for (const [alias, def] of Object.entries(board || {})) {
+        if (def?.subitems) out.add(alias);
+      }
+    }
+    return out;
+  }, []);
 
   // Aliases that may map SEVERAL people columns (owner requests 2026-07-14):
-  // both access columns — יכולת צפייה AND יכולת עריכה. Stored as
+  // the access column יכולת עריכה (round340 retired its יכולת צפייה twin). Stored as
   // { id: <primary>, ids: [...], colTitles: {id: title} }. The FIRST column is
   // the auto-fill target at task creation; permissions/reads union people
   // across all of them; colTitles keeps the chips human-readable even before
   // the live column list has loaded.
-  const MULTI_PEOPLE_ALIASES = new Set(['taskViewersID', 'taskEditorsID']);
+  const MULTI_PEOPLE_ALIASES = new Set(['taskEditorsID']);
 
   const loadBoardColumns = async (boardId) => {
     const id = String(boardId || '');
@@ -1122,7 +1139,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                             ? String(subitemsBoardByBoard[ownBoardId] || '')
                             : ownBoardId;
                           const typedOptions = getTypedColumnOptions(boardId, col.type);
-                          // Multi-column people mapping (יכולת צפייה): chips of
+                          // Multi-column people mapping (יכולת עריכה): chips of
                           // the picked columns (first = the auto-fill target) +
                           // a picker that ADDS another column on select.
                           if (MULTI_PEOPLE_ALIASES.has(alias)) {
@@ -1422,8 +1439,8 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                     <div className={styles.prefControl}>
                       <ButtonGroup
                         options={PREVIOUS_TASKS_MODE_OPTIONS}
-                        value={preferences.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION}
-                        onSelect={(value) => setPreferences((p) => ({ ...p, previousTasksMode: value || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION }))}
+                        value={resolvePreference(preferences, 'previousTasksMode')}
+                        onSelect={(value) => setPreferences((p) => ({ ...p, previousTasksMode: value || DEFAULT_PREFERENCES.previousTasksMode }))}
                         size="small"
                         kind="secondary"
                       />
@@ -1440,7 +1457,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                         <input
                           type="checkbox"
-                          checked={preferences.defaultDeciderLead === true}
+                          checked={resolvePreference(preferences, 'defaultDeciderLead') === true}
                           onChange={(e) => setPreferences((p) => ({ ...p, defaultDeciderLead: e.target.checked }))}
                         />
                         <Text type={"text2"}>בכל הדיונים, ללא תלות בסוג</Text>

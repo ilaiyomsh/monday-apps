@@ -17,7 +17,7 @@ import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
+import { PREVIOUS_TASKS_MODES, resolvePreference } from '@generated/utils/mondayApi/boards.config.js';
 import { createTopicsFromTemplate, linkTemplateTopics, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
 import { parseExternalParticipants, formatExternalParticipants } from '@generated/utils/externalParticipants.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
@@ -113,8 +113,9 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
   const canAddType = can('addDiscussionTypes');
   const { templates, participantTemplates, typeTemplates, typeColor, assignRandomTypeColor } = useTemplates();
   const { settings, updateSettings } = useSettings();
-  const previousTasksMode =
-    settings?.preferences?.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION;
+  // round340 — see resolvePreference: the fallback is DEFAULT_PREFERENCES, not a literal
+  // repeated per call site (which is how this drifted from the shipped default).
+  const previousTasksMode = resolvePreference(settings?.preferences, 'previousTasksMode');
   const [name, setName] = useState('');
   // round129 — while the edit/duplicate SOURCE record is being fetched, the
   // form is hidden behind a loading bar (the owner saw an "empty card filling
