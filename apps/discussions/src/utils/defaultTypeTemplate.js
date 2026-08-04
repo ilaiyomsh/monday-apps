@@ -98,11 +98,22 @@ export function buildDefaultTypeTemplate(installer, id = 'seed-default-type') {
   }, id);
 }
 
+/** Does this stored list already contain OUR default type? Matched by the label TEXT — that is
+ * the key a type template is stored under. */
+export function hasDefaultTypeTemplate(list) {
+  return (Array.isArray(list) ? list : [])
+    .some((t) => String(t?.discussionType || '').trim() === DEFAULT_DISCUSSION_TYPE);
+}
+
 /**
  * Write the seed template — ONLY into an empty store.
  *
- * @returns {Promise<'seeded'|'skipped-existing'|'failed'>} what happened, so the caller can
- *   report honestly instead of assuming (the folder saga is what taught us that lesson).
+ * @returns {Promise<'seeded'|'already-default'|'skipped-existing'|'failed'>} what happened.
+ *   The caller needs all four apart (round348 review finding): `already-default` means the
+ *   template is there but the LABEL may still be missing — if the label mutation failed once,
+ *   every later run used to read `skipped-existing` and never retry, leaving an orphaned agenda
+ *   with no selectable type. `skipped-existing` (the account's OWN types, ours absent) must
+ *   still leave an established installation alone.
  */
 export async function seedDefaultTypeTemplate(context, installer) {
   const key = typeStorageKey(context);
@@ -111,8 +122,9 @@ export async function seedDefaultTypeTemplate(context, installer) {
     if (res?.data?.value) {
       const saved = JSON.parse(res.data.value);
       const list = Array.isArray(saved) ? saved : saved?.templates || [];
-      // Any existing type template means this account already has its own — never clobber.
-      if (list.length) return 'skipped-existing';
+      // Any existing type template means this account already has types — never clobber. But
+      // OUR default being among them is a different answer: see the return contract above.
+      if (list.length) return hasDefaultTypeTemplate(list) ? 'already-default' : 'skipped-existing';
     }
     const template = buildDefaultTypeTemplate(installer);
     await withTimeout(monday.storage.setItem(key, JSON.stringify({ templates: [template] })));

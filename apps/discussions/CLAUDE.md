@@ -257,6 +257,17 @@ Two rules that are easy to break:
 Both steps are fail-soft and reported — the install has already succeeded by then, and a type
 can be added by hand in תבניות.
 
+**round348 — the wizard runs in TWO worlds, and it must know which.** First-run it is mounted by
+`SettingsGate` ABOVE `TemplatesProvider`; in TOP-UP it renders inside the Settings modal, i.e.
+INSIDE that provider, which has already loaded the type templates exactly once. So the wizard
+reads `TemplatesContext` directly (`useTemplates()` returns a no-op empty store when unprovided
+and therefore hides the distinction): provider mounted ⇒ seed via `upsertTypeTemplate` so the
+in-memory list updates; no provider ⇒ the direct storage write, which the provider will read when
+it mounts. Seeding a mounted provider through storage leaves the type selectable with no agenda
+until a reload. And `seedDefaultTypeTemplate` distinguishes **`already-default`** (ours is in the
+store ⇒ the LABEL is worth retrying, since a label that failed once would otherwise never be
+retried) from **`skipped-existing`** (the account's own types ⇒ leave it alone).
+
 ### Two `monday.storage`-only subsystems — no board backing
 monday's public API has no item-position mutation and no place to hang reusable presets, so two
 features live entirely in `monday.storage` (each mirrors `SettingsContext`'s pattern: JSON value,
