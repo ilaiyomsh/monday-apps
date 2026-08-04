@@ -57,11 +57,10 @@ vi.mock('../managedColumns.js', () => ({
   findManagedDropdownColumnByTitle: vi.fn(async () => null),
 }));
 
-import { resolveWorkspaceId, readBoardWorkspaceId, moveBoardsIntoProvisionFolder } from '../provisionBoards.js';
+import { resolveWorkspaceId, readBoardWorkspaceId, moveBoardsIntoFolder, ensureProvisionFolder } from '../provisionBoards.js';
 
-const BOARDS = {
-  discussions: { id: 'B1' }, topics: { id: 'B2' }, tasks: { id: 'B3' }, decisions: { id: 'B4' },
-};
+// Flat {role: boardId} — the shape provisioning hands the mover.
+const IDS = { discussions: 'B1', topics: 'B2', tasks: 'B3', decisions: 'B4' };
 
 beforeEach(() => {
   state.calls = [];
@@ -132,32 +131,33 @@ describe('readBoardWorkspaceId', () => {
   });
 });
 
-describe('moveBoardsIntoProvisionFolder', () => {
-  it('moves every mapped board into the folder', async () => {
-    const { folderId, moved, failed } = await moveBoardsIntoProvisionFolder(BOARDS, '999');
-    expect(folderId).toBe('F1');
+describe('moveBoardsIntoFolder', () => {
+  /*
+   * round345 — this used to ensure the folder itself and was called from a settings button.
+   * The button is gone: provisioning creates the folder FIRST and moves in whatever it could
+   * not create inside it, so the mover now takes a folder id it is given and does one job.
+   */
+  it('moves every board it is given into the folder', async () => {
+    const { moved, failed } = await moveBoardsIntoFolder(IDS, 'F1');
     expect(moved.sort()).toEqual(['decisions', 'discussions', 'tasks', 'topics']);
     expect(failed).toEqual([]);
     const moves = state.calls.filter((c) => c.q.includes('update_board_hierarchy'));
     expect(moves).toHaveLength(4);
     // the attributes shape is the probe-verified one
     expect(moves[0].vars.attrs).toEqual({ folder_id: 'F1' });
-  });
-
-  // The folder is resolved ONCE for the whole batch — four boards must not mint four folders.
-  it('creates the folder only once for the whole batch', async () => {
-    await moveBoardsIntoProvisionFolder(BOARDS, '999');
-    expect(state.calls.filter((c) => c.q.includes('create_folder'))).toHaveLength(1);
+    // and it does NOT create or look up a folder — that is the caller's job now
+    expect(state.calls.filter((c) => c.q.includes('create_folder'))).toHaveLength(0);
+    expect(state.calls.filter((c) => c.q.includes('folders('))).toHaveLength(0);
   });
 
   /*
-   * Per-board independence. One board refusing to move must not strand the other three,
-   * and the caller must learn which — reporting "done" for a half-filled folder sends the
-   * owner looking for a problem that is already known.
+   * Per-board independence. One board refusing to move must not strand the others, and the
+   * caller must learn which — a half-filled folder reported as "done" sends the owner
+   * looking for a problem that is already known.
    */
   it('keeps going past a board that refuses to move, and reports it', async () => {
     state.moveFails = new Set(['B3']);
-    const { moved, failed } = await moveBoardsIntoProvisionFolder(BOARDS, '999');
+    const { moved, failed } = await moveBoardsIntoFolder(IDS, 'F1');
     expect(failed).toEqual(['tasks']);
     expect(moved.sort()).toEqual(['decisions', 'discussions', 'topics']);
   });
@@ -168,24 +168,45 @@ describe('moveBoardsIntoProvisionFolder', () => {
   // reason, which is exactly the kind of false green this suite is supposed to prevent.
   it('reports a THROWN move as failed rather than aborting the batch', async () => {
     state.moveThrows = new Set(['B2']);
-    const { moved, failed } = await moveBoardsIntoProvisionFolder(BOARDS, '999');
+    const { moved, failed } = await moveBoardsIntoFolder(IDS, 'F1');
     expect(failed).toEqual(['topics']);
     expect(moved).toHaveLength(3);
   });
 
-  // A folder that cannot be created means nothing can move — report all four as failed
-  // rather than silently doing nothing and letting the UI claim success.
-  it('reports every board as failed when the folder cannot be created', async () => {
-    state.failFolder = true;
-    const { folderId, moved, failed } = await moveBoardsIntoProvisionFolder(BOARDS, '999');
-    expect(folderId).toBeNull();
+  // No folder ⇒ nothing moved, everything reported as failed. The caller (provisioning) is
+  // fail-soft around this: the boards stay at the workspace root with a warning.
+  it('moves nothing when there is no folder', async () => {
+    const { moved, failed } = await moveBoardsIntoFolder(IDS, null);
     expect(moved).toEqual([]);
-    expect(failed).toHaveLength(4);
+    expect(failed.sort()).toEqual(['decisions', 'discussions', 'tasks', 'topics']);
+    expect(state.calls).toHaveLength(0);
   });
 
   it('skips a role with no mapped board', async () => {
-    const { moved } = await moveBoardsIntoProvisionFolder({ discussions: { id: 'B1' } }, '999');
+    const { moved } = await moveBoardsIntoFolder({ discussions: 'B1' }, 'F1');
     expect(moved).toEqual(['discussions']);
     expect(state.calls.filter((c) => c.q.includes('update_board_hierarchy'))).toHaveLength(1);
+  });
+});
+
+/*
+ * round345 (owner-reported, second install: "עדיין הלוחות לא נכנסו לתיקייה") — a null
+ * workspace must NOT reach the folder API at all. Verified against the live API:
+ * `folders(workspace_ids: [null])` is not "the main workspace" — it answers with folders
+ * from an unrelated workspace, so the reuse lookup searched the wrong place and
+ * `create_folder` with a null workspace dropped "בסיס מידע" somewhere the install never
+ * looks. Boards at the workspace root are a cosmetic miss; a folder in a stranger's
+ * workspace is noise in someone's account.
+ */
+describe('ensureProvisionFolder without a workspace', () => {
+  it('returns null and touches no folder API when the workspace is unknown', async () => {
+    expect(await ensureProvisionFolder(null)).toBeNull();
+    expect(await ensureProvisionFolder('')).toBeNull();
+    expect(state.calls).toEqual([]);
+  });
+
+  it('still creates the folder when a workspace IS known', async () => {
+    expect(await ensureProvisionFolder('999')).toBe('F1');
+    expect(state.calls.filter((c) => c.q.includes('create_folder'))).toHaveLength(1);
   });
 });

@@ -361,13 +361,12 @@ const FOLDER_MAX_PAGES = 20; // 2,000 folders — a runaway guard, not a real li
  * back to whatever the caller passed (then to null = main) so a failure degrades to the
  * previous behaviour rather than aborting the install.
  *
- * round344 (review finding) — the raw read is now its own THROWING function. `null` from
- * `resolveWorkspaceId` conflates two very different facts: "this board legitimately has no
- * workspace" (⇒ main) and "the read failed". Swallowing that is right for PROVISIONING (a
- * board created in the main workspace is a cosmetic miss on an install that must not abort),
- * and wrong for RELOCATION, which moves boards that already exist: a transient error would
- * drag them into a main-workspace folder, out of the workspace they belong to, with no undo.
- * Callers that cannot tolerate the ambiguity use `readBoardWorkspaceId` and handle the throw.
+ * round344/round345 — the raw read is its own THROWING function, and `resolveWorkspaceId` is
+ * the fail-soft wrapper around it. The distinction still earns its keep after the relocation
+ * button was removed: a board that does not come back (deleted, or no permission — monday
+ * answers with an EMPTY LIST, not an error) must not read as "no workspace", because since
+ * round345 an unknown workspace means NO FOLDER IS CREATED AT ALL rather than one created in
+ * the wrong place. The throw is what makes those two outcomes distinguishable in the log.
  */
 export async function readBoardWorkspaceId(boardId) {
   const data = await api(
@@ -395,37 +394,35 @@ export async function resolveWorkspaceId(boardId, fallback = null) {
   try {
     return await readBoardWorkspaceId(boardId);
   } catch (err) {
-    logger.warn(MODULE, 'איתור מרחב העבודה של לוח הדיונים נכשל — התיקייה תיווצר במרחב הראשי', err);
+    logger.warn(MODULE, 'איתור מרחב העבודה של לוח הדיונים נכשל — לא תיווצר תיקייה, הלוחות ייווצרו בשורש', err);
     return null;
   }
 }
 
 /**
- * round342 (owner-reported: "הלוחות לא נוצרו בתוך תיקייה") — move boards that ALREADY
- * exist into "בסיס מידע".
+ * Move boards that ALREADY exist into a folder — the boards provisioning did NOT create
+ * inside it: a board-view host board, a reused mapping on a top-up, a connected tasks
+ * board, and (when the workspace was unknown up front) the discussions board that had to
+ * be created BEFORE the folder could be placed.
  *
- * round339 created the folder only for boards provisioning itself creates, and said so:
- * relocating a board the account already owns was "left as an owner decision". The owner
- * has now asked for it, and it is the only thing that helps an instance whose boards were
- * created by a version that predates the folder — which is every instance installed before
- * 2.9.0 reached live, since provisioning REUSES an already-mapped board and never
- * re-creates it.
+ * round345 (owner request: "הלוחות ייכנסו אוטומטית לתיקייה ברגע יצירתם") — this runs as
+ * part of provisioning now, not from a button. The button that used to call it was removed:
+ * an owner who installs the app should get the folder without having to find a setting, and
+ * the button could not even do it correctly for a board that had just been remapped.
  *
  * Per board fail-soft and independent: one board that refuses to move must not strand the
- * other three. Returns a summary so the caller can report honestly rather than claiming
- * success for all four.
+ * others. Returns a summary so the caller can log honestly rather than assuming all four.
  *
- * @param {object} config the stored settings' `boards` map ({ [role]: { id } })
- * @param {string|null} workspaceId resolved workspace (see resolveWorkspaceId)
- * @returns {Promise<{folderId: string|null, moved: string[], failed: string[]}>}
+ * @param {object} boardIds { [role]: boardId } — roles with no id are skipped
+ * @param {string} folderId the folder to move into (see ensureProvisionFolder)
+ * @returns {Promise<{moved: string[], failed: string[]}>}
  */
-export async function moveBoardsIntoProvisionFolder(config, workspaceId) {
-  const folderId = await ensureProvisionFolder(workspaceId);
+export async function moveBoardsIntoFolder(boardIds, folderId) {
   const moved = [];
   const failed = [];
-  if (!folderId) return { folderId: null, moved, failed: BOARD_ORDER.slice() };
+  if (!folderId) return { moved, failed: Object.keys(boardIds || {}) };
   for (const key of BOARD_ORDER) {
-    const boardId = config?.[key]?.id;
+    const boardId = boardIds?.[key];
     if (!boardId) continue;
     try {
       const res = await api(
@@ -443,10 +440,23 @@ export async function moveBoardsIntoProvisionFolder(config, workspaceId) {
       failed.push(key);
     }
   }
-  return { folderId, moved, failed };
+  return { moved, failed };
 }
 
 export async function ensureProvisionFolder(workspaceId) {
+  /*
+   * round345 — NO workspace, NO folder. Verified against the live API: `folders(
+   * workspace_ids: [null])` does NOT mean "the main workspace" — it answers with folders
+   * from an unrelated workspace entirely, so the reuse lookup was searching the wrong
+   * place, and `create_folder` with a null workspace_id then dropped "בסיס מידע"
+   * somewhere the install never looks at. Boards at the workspace root are a cosmetic
+   * miss; a folder in a stranger's workspace is confusing noise in someone's account.
+   * The caller resolves a real workspace first (see provisionAllBoards).
+   */
+  if (!workspaceId) {
+    logger.warn(MODULE, 'מרחב העבודה לא זוהה — לא נוצרת תיקייה, הלוחות ייווצרו בשורש');
+    return null;
+  }
   try {
     /*
      * PAGINATED (PR review on round339, correct): `folders` is a paged
@@ -785,30 +795,39 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // (mode 'connect'), in which case its columns are still ensured/reused below.
   const boardIds = {};
   /*
-   * round339 — resolved ONCE, before any create_board, so every board this run
-   * CREATES shares the same folder. Null (fail-soft) means "workspace root".
+   * round345 (owner request) — THE FOLDER COMES FIRST, and every board ends up inside it.
    *
-   * SCOPE, stated precisely (PR review on round339 was right to flag the gap):
-   * this folders the boards provisioning CREATES. In a BOARD-VIEW install the
-   * discussions board is the pre-existing HOST board — it never goes through
-   * createBoard, so it stays wherever the account already keeps it, and only
-   * topics/tasks/decisions land in the folder. All four land there in the
-   * CUSTOM-OBJECT install, where the discussions board is created too.
-   *
-   * Relocating a board the account already owns is still NOT done automatically here —
-   * silently moving a board someone placed on purpose is hard to undo. round342 added
-   * `moveBoardsIntoProvisionFolder` for that instead: the same operation, but EXPLICIT,
-   * so it happens because the owner asked rather than as a side effect of a top-up.
+   * A folder can only be created in a workspace we actually know (see
+   * ensureProvisionFolder: a null workspace is not "the main one", it is nowhere in
+   * particular). So the order is:
+   *   1. workspace from the caller, else read off the host board;
+   *   2. folder, if we already know the workspace — then the discussions board is CREATED
+   *      inside it, which is the custom-object install's normal path;
+   *   3. if we did NOT know the workspace, the discussions board is created first and its
+   *      workspace is read off it — that is the only reliable source when there is no host
+   *      board and the context carries no workspaceId;
+   *   4. the remaining boards are created WITH folder_id;
+   *   5. anything that could not be created inside the folder — a board-view host board, a
+   *      board reused from an existing mapping, a connected tasks board, or the discussions
+   *      board from step 3 — is MOVED in at the end (round345 replaced the settings button
+   *      that used to do this by hand).
+   * Every step is fail-soft: a folder that cannot be made leaves the boards at the
+   * workspace root with a warning, and never aborts an install.
    */
-  // round342 — resolve the workspace off the HOST BOARD first; a board-view context does
-  // not carry one, and without it the folder (and therefore every board created inside it)
-  // silently lands in the MAIN workspace. See resolveWorkspaceId.
-  const resolvedWorkspaceId = await resolveWorkspaceId(discussionsBoardId, workspaceId);
-  const folderId = await ensureProvisionFolder(resolvedWorkspaceId);
+  let resolvedWorkspaceId = await resolveWorkspaceId(discussionsBoardId, workspaceId);
+  let folderId = resolvedWorkspaceId ? await ensureProvisionFolder(resolvedWorkspaceId) : null;
+  // Roles whose board was CREATED inside the folder — the rest get moved in at the end.
+  const createdInFolder = new Set();
   if (createDiscussionsBoard && !(existingConfig && hasIdEarly(existingConfig.boards?.discussions))) {
     setPhase('מקים את לוח הדיונים…');
     boardIds.discussions = await createBoard(PROVISION_SPEC.discussions.name, resolvedWorkspaceId, folderId);
+    if (folderId) createdInFolder.add('discussions');
     tick('נוצר לוח: דיונים');
+    if (!resolvedWorkspaceId) {
+      // Step 3: the board we just created is now the authoritative source for the workspace.
+      resolvedWorkspaceId = await resolveWorkspaceId(boardIds.discussions, null);
+      folderId = resolvedWorkspaceId ? await ensureProvisionFolder(resolvedWorkspaceId) : null;
+    }
   } else {
     boardIds.discussions = String(
       (existingConfig && existingConfig.boards?.discussions?.id) || discussionsBoardId
@@ -847,7 +866,27 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
     }
     setPhase(`יוצר את לוח "${PROVISION_SPEC[key].name}"…`);
     boardIds[key] = await createBoard(PROVISION_SPEC[key].name, resolvedWorkspaceId, folderId);
+    if (folderId) createdInFolder.add(key);
     tick(`נוצר לוח: ${PROVISION_SPEC[key].name}`);
+  }
+
+  /*
+   * Step 5 — move in whatever was not created inside the folder. Deliberately AFTER every
+   * board exists, and deliberately unconditional for the leftovers: the owner asked for
+   * "כל הלוחות בתיקייה", and re-running the wizard on an instance whose boards predate the
+   * folder is the only way those boards ever get there (provisioning reuses a mapped board
+   * and never re-creates it).
+   */
+  if (folderId) {
+    const leftovers = {};
+    for (const key of BOARD_ORDER) {
+      if (boardIds[key] && !createdInFolder.has(key)) leftovers[key] = boardIds[key];
+    }
+    if (Object.keys(leftovers).length) {
+      setPhase('מרכז את הלוחות בתיקייה…');
+      const { moved, failed } = await moveBoardsIntoFolder(leftovers, folderId);
+      logger.info(MODULE, 'ריכוז לוחות קיימים בתיקיית בסיס המידע', { moved, failed });
+    }
   }
 
   // 2) simple columns (reusing any already present on each board). For an
