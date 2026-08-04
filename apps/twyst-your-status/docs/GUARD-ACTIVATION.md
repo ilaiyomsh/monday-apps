@@ -57,8 +57,9 @@ owner has not authorized the guard"). זה fail-open מכוון: עדיף לא �
 
 ## איחוד same-origin (round324) — למה אין יותר סוד ב-GitHub
 
-עד round324 היו לאפליקציה שני *פיצ'רים* בשני origins: ה-board view התארח על ה-CDN
-של monday וקרא לשרת ה-monday-code בכתובת מוחלטת, שהוזרקה כ-secret ל-GitHub
+עד round324 היו לאפליקציה משטחי לקוח (עמודת הסטטוס `AppFeatureStatusColumn`
+והגדרות העמודה — ה-URLs `/picker`, `/settings`, `/settings-full`) שהתארחו על ה-CDN
+של monday וקראו לשרת ה-monday-code בכתובת מוחלטת, שהוזרקה כ-secret ל-GitHub
 (`TWYST_GUARD_URL`) והצריכה גם CORS. מ-round324 **שרת ה-monday-code מגיש בעצמו את
 ה-SPA** (`server/public`, ראה `server/src/app.js`): אותו origin, קריאות יחסיות
 (`/api/guard/*`), בלי `TWYST_GUARD_URL` ובלי CORS. הפריסה היא **דחיפת שרת אחת**
@@ -80,13 +81,16 @@ owner has not authorized the guard"). זה fail-open מכוון: עדיף לא �
    `MONDAY_APP_VERSION_ID` = מזהה גרסת ה-draft (כדי ש-`/oauth/start` יכוון לגרסה שבה
    ה-New OAuth Flow דלוק).
 3. **כתובת השרת** — `mapps code:status -i 11775054` → הכתובת שנקבל היא ה-`BASE_URL`
-   וגם הכתובת שאליה מפנים את ה-board view (השלב הבא). כבר אין `TWYST_GUARD_URL`.
-4. **הפניית ה-board view לכתובת ה-monday-code** — Developer Center → App → גרסת draft →
-   Features → ה-board view: להגדיר את מקור הטעינה לכתובת ה-monday-code (`<BASE_URL>/`)
-   במקום ה-bundle המתארח ב-CDN. זה **הצעד הקריטי** של האיחוד — בלעדיו ה-SPA ממשיך
-   להיטען מה-CDN וקריאות ה-`/api/guard/*` היחסיות ייפלו. יש לבצע אותו יחד עם מיזוג ה-PR
-   של האיחוד (חיתוך מתואם: הקוד עבר לנתיבים יחסיים, אז ה-board view חייב לעבור ל-origin
-   של השרת).
+   וגם הכתובת שאליה מפנים את משטחי עמודת הסטטוס (השלב הבא). כבר אין `TWYST_GUARD_URL`.
+4. **הפניית משטחי עמודת הסטטוס לכתובת ה-monday-code** — Developer Center → App → גרסת
+   draft → Features: לעדכן את ה-URLs של **כל** המשטחים המוגדרים מ-`<CDN_ORIGIN>` ל-
+   `<BASE_URL>` — ה-on-click dialog (`<BASE_URL>/picker`), הגדרות העמודה
+   (`<BASE_URL>/settings`), ו-overlay ההגדרות המלא (`<BASE_URL>/settings-full`).
+   (`/required-fields` נפתח בזמן ריצה דרך `openAppFeatureModal` וללא רשומת Developer
+   Center — אין מה לעדכן בו; הוא יורש את ה-origin החדש.) זה **הצעד הקריטי** של האיחוד —
+   בלעדיו המשטחים ממשיכים להיטען מה-CDN וקריאות ה-`/api/guard/*` היחסיות ייפלו. יש לבצע
+   אותו יחד עם מיזוג ה-PR של האיחוד (חיתוך מתואם: הקוד עבר לנתיבים יחסיים, אז המשטחים
+   חייבים לעבור ל-origin של השרת).
 5. **OAuth (New OAuth Flow + Redirect)** — Developer Center → App → גרסת draft →
    OAuth & Permissions: **להדליק את "New OAuth Flow"** (זרימת PKCE — הקוד תומך רק בה),
    ולהוסיף Redirect URL: `<BASE_URL>/oauth/callback`. לאחר אימות — לקדם (promote), ואז

@@ -2,11 +2,12 @@
  * app — express factory, DI for tests (deadline-confirm's shape). All logic
  * lives in the injected collaborators; this file only mounts them.
  *
- * Same-origin unification (round324): this server ALSO serves the settings /
- * board-view SPA (built by vite, copied into server/public by CI). The SPA and
- * the /api/guard + /oauth routes share one origin, so the client calls the API
- * with relative paths — no configured guard URL, no CORS. The board-view
- * feature in the Developer Center loads THIS service's URL, not the CDN.
+ * Same-origin unification (round324): this server ALSO serves the app's SPA
+ * (the status-column surfaces — picker / settings / settings-full — built by
+ * vite, copied into server/public by CI). The SPA and the /api/guard + /oauth
+ * routes share one origin, so the client calls the API with relative paths —
+ * no configured guard URL, no CORS. The status-column feature URLs in the
+ * Developer Center load THIS service's URL, not the CDN.
  */
 
 import fs from 'node:fs';

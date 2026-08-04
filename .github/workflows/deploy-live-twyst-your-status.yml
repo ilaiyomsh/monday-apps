@@ -108,13 +108,25 @@ jobs:
       # Server-side push: no -c flag; --force refreshes the PINNED live version.
       # --verbose is LOAD-BEARING (mapps cli.md): a failed server push is
       # otherwise silent. The archive carries dist/index.js AND public/ (SPA).
+      # Retry once on the transient "communicating with the remote server"
+      # error (incident-verified; pipeline-model.md) — without the loop a
+      # single transient CLI failure marks a production deploy failed.
       - name: "🚨 FORCE push to LIVE version (pinned id) 🚨"
-        run: >
-          mapps code:push
-          -d apps/twyst-your-status/server
-          -i "${{ steps.live.outputs.live_id }}"
-          --force
-          --verbose
+        run: |
+          set -uo pipefail
+          for attempt in 1 2; do
+            if mapps code:push \
+                 -d apps/twyst-your-status/server \
+                 -i "${{ steps.live.outputs.live_id }}" \
+                 --force \
+                 --verbose; then
+              exit 0
+            fi
+            echo "push attempt $attempt failed; retrying once in 15s (transient remote error)…"
+            sleep 15
+          done
+          echo "::error::code:push to live version ${{ steps.live.outputs.live_id }} failed after retry"
+          exit 1
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
           APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}

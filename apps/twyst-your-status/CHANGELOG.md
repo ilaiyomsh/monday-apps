@@ -11,8 +11,9 @@
 - הפריסה אוחדה ל**דחיפת שרת אחת** (`deploy-{draft,live}-twyst-your-status`, ללא
   `-c`): ה-CI בונה את ה-SPA, מעתיק ל-`server/public`, מפשיט sourcemaps, ודוחף את
   השרת (שנושא את ה-bundle וגם את ה-SPA). ה-workflows הנפרדים של `twyst-guard` הוסרו.
-- שלב בעלים חדש בהפעלה: הפניית פיצ'ר ה-board view לכתובת ה-monday-code (ראה
-  `docs/GUARD-ACTIVATION.md`). חיתוך מתואם עם מיזוג ה-PR.
+- שלב בעלים חדש בהפעלה: הפניית משטחי עמודת הסטטוס (`/picker`, `/settings`,
+  `/settings-full`) לכתובת ה-monday-code (ראה `docs/GUARD-ACTIVATION.md`). חיתוך
+  מתואם עם מיזוג ה-PR.
 
 ## Guard 1.1.0 — הקשחת שרת (round323 review)
 
