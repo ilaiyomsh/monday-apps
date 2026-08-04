@@ -375,8 +375,17 @@ export async function readBoardWorkspaceId(boardId) {
     { ids: [String(boardId)] },
     'resolveWorkspaceId'
   );
-  const ws = data?.boards?.[0]?.workspace?.id;
-  // null here is a REAL answer: the board sits outside any workspace, i.e. the main one.
+  /*
+   * An ABSENT board row is a failure, not an answer (review finding): monday replies to
+   * `boards(ids: [...])` for a deleted or inaccessible board with an EMPTY LIST rather than
+   * an error — the same platform behaviour `apps/docs-export/src/services/boardMeta.js`
+   * documents and throws on. Mapping it to null would tell the relocation "main workspace"
+   * and move every other mapped board there.
+   */
+  const board = data?.boards?.[0];
+  if (!board) throw new Error(`הלוח ${boardId} לא נמצא או שאין אליו הרשאה`);
+  // null HERE is a real answer: the board exists and sits outside any workspace (the main one).
+  const ws = board.workspace?.id;
   return ws ? String(ws) : null;
 }
 
