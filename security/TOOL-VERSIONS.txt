@@ -1,0 +1,10 @@
+# Tool versions — security scan
+date: 2026-08-04T09:29:44Z
+commit: b35e233c248bffe693b2b163895450d3000295b8
+branch: claude/code-scan-security-wx0cgv
+
+semgrep: 1.170.0
+gitleaks: 8.30.1
+osv-scanner: osv-scanner version: 2.4.0 osv-scalibr version: 0.4.5 
+node: v20.20.2
+pnpm: 10.28.0
