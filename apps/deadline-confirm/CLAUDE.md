@@ -72,6 +72,7 @@ src/
 │   ├── monday-api.js         # THE GraphQL funnel; API-Version pinned; soft errors thrown
 │   ├── confirm-service.js    # performAction (v2 outcomes + D11 assignee check)
 │   ├── digest-service.js     # users-board matching + pending classification (single personId per recipient)
+│   ├── digest-notes.js       # required-note rules (pure): extractNotes / resolveNoteColumn / classifyNote, cap 500
 │   ├── manifest-signature.js # build/parse/sign/verify manifest + currentSlot (pure, no I/O)
 │   ├── storage.js            # SecureStorage wrapper + 60s read cache + nonce lifecycle
 │   ├── secret.js             # generate / constant-time compare / mask
@@ -83,7 +84,7 @@ src/
 ├── helpers/                  # pages (oauth only), rate-limit, digest-plain, digest-amp,
 │                             # digest-html-fallback (inert text/html part), mime-alternative,
 │                             # rfc822 (RFC822 assembly + header-injection refusal, optional Date header),
-│                             # digest-email (legacy send path until Gmail T9), amp-cors, logger, environment
+│                             # digest-email (legacy, unreferenced — superseded by the smtp-sender funnel), amp-cors, logger, environment
 ├── storage/                  # secure-storage-backend (prod) / memory-backend (dev+tests)
 └── client/admin/             # React 19 + Vite 7 + @vibe/core SPA → public/admin/
                               # amp-debug.ts — pure rules behind the AMP editor (size/guards)

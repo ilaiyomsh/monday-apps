@@ -4,6 +4,17 @@
 
 ## 0.12.0 — 2026-08-03 — a required text field per task, mapped to a board text column
 
+*(0.12.0 addendum, 2026-08-04 — the same version also shipped, in one round:
+the **SMTP XOAUTH2 send channel** replacing the Gmail API, which was measured
+stripping the AMP part on external delivery — `docs/amp-email-verified-findings.md`
+§2/§5, scope broadened to `https://mail.google.com/`, re-consent required;
+**strict amp4email CSS** — `data-css-strict` + every violation fixed + a
+non-blocking CI validator; **real status label colors** from the board's column
+settings; and **section priority** — a task matching several digest sections
+appears only in the first, with ↑/↓ reorder arrows in the admin. Hand-written
+here because this environment has no change-tracker DB; fold these into the DB
+on the next tracked change.)*
+
 A digest cluster can now map a **text column on the tasks board**. When it does,
 every row in that cluster's table gets a text field, **a task cannot be marked
 without filling it**, and what the reader types is written to that column

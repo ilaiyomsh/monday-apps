@@ -21,44 +21,49 @@ test doubles או מלפטופ** — הרשימה הזו סוגרת אותם מ�
 `16291824`, כל אובייקט זמני עם קידומת `WZ-`, מינימום קריאות (תקציב
 ה-complexity משותף עם אפליקציות פרודקשן), וניקוי בסוף.
 
+הארגומנט השלישי `'2026-07'` בכל קריאה אינו אופציונלי: האפליקציה מצמידה
+`API-Version: 2026-07` (`monday-api.js`), וברירת המחדל של `mapps-api.sh` היא
+2026-04 — probe בגרסה אחרת אינו מוכיח את מה שהקוד באמת שולח.
+
 ```bash
 # 1a. לוח זמני עם עמודת סטטוס + עמודת טקסט
 bash .claude/skills/mapps/mapps-api.sh \
-  'mutation { create_board(board_name: "WZ-mcv-probe", board_kind: private, workspace_id: 16291824) { id } }'
+  'mutation { create_board(board_name: "WZ-mcv-probe", board_kind: private, workspace_id: 16291824) { id } }' \
+  '{}' '2026-07'
 # → שומרים את ה-id שחזר בתור BOARD_ID
 
 bash .claude/skills/mapps/mapps-api.sh \
   'mutation($b: ID!) { s: create_column(board_id: $b, title: "WZ-status", column_type: status) { id }
                        t: create_column(board_id: $b, title: "WZ-note", column_type: text) { id } }' \
-  '{"b":"<BOARD_ID>"}'
+  '{"b":"<BOARD_ID>"}' '2026-07'
 # → שומרים STATUS_COL_ID ו-TEXT_COL_ID
 
 # 1b. אינדקסים חוקיים של הסטטוס (settings.labels[].id — כמו שהאפליקציה קוראת)
 bash .claude/skills/mapps/mapps-api.sh \
   'query($b: [ID!]) { boards(ids: $b) { columns { id type settings } } }' \
-  '{"b":["<BOARD_ID>"]}'
+  '{"b":["<BOARD_ID>"]}' '2026-07'
 # → בוחרים index קיים (למשל 1); label id 0 הוא ערך חוקי
 
 # 1c. אייטם + המוטציה הנבדקת — בדיוק כמו שהקוד שולח אותה
 bash .claude/skills/mapps/mapps-api.sh \
   'mutation($b: ID!) { create_item(board_id: $b, item_name: "WZ-item-1") { id } }' \
-  '{"b":"<BOARD_ID>"}'
+  '{"b":"<BOARD_ID>"}' '2026-07'
 # → שומרים ITEM_ID
 
 bash .claude/skills/mapps/mapps-api.sh \
   'mutation SetColumns($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id } }' \
-  '{"boardId":"<BOARD_ID>","itemId":"<ITEM_ID>","columnValues":"{\"<STATUS_COL_ID>\":{\"index\":1},\"<TEXT_COL_ID>\":\"WZ- הערת בדיקה\"}"}'
+  '{"boardId":"<BOARD_ID>","itemId":"<ITEM_ID>","columnValues":"{\"<STATUS_COL_ID>\":{\"index\":1},\"<TEXT_COL_ID>\":\"WZ- הערת בדיקה\"}"}' '2026-07'
 
 # 1d. קריאה חוזרת — שני הערכים באותו read
 bash .claude/skills/mapps/mapps-api.sh \
   'query($i: [ID!]) { items(ids: $i) { column_values(ids: ["<STATUS_COL_ID>","<TEXT_COL_ID>"]) { id text ... on StatusValue { index } } } }' \
-  '{"i":["<ITEM_ID>"]}'
+  '{"i":["<ITEM_ID>"]}' '2026-07'
 
 # 1e. דריסה: מריצים שוב את 1c עם טקסט אחר ("WZ- טקסט שני") וקוראים שוב
 
 # 1f. ניקוי — חובה
 bash .claude/skills/mapps/mapps-api.sh \
-  'mutation($b: ID!) { delete_board(board_id: $b) { id } }' '{"b":"<BOARD_ID>"}'
+  'mutation($b: ID!) { delete_board(board_id: $b) { id } }' '{"b":"<BOARD_ID>"}' '2026-07' '2026-07'
 ```
 
 **עובר אם:** (1) המוטציה מחזירה `id` בלי `errors`; (2) הקריאה ב-1d מראה את
@@ -113,7 +118,9 @@ headers של אימות ולכן **לעולם לא יירנדר** (ממצאים 
 1. בלוח המשתמשים של המייל המסכם: שתי שורות עם שתי כתובות שונות זו מזו
    ושונות מתיבת השולח (למשל `ilai@twyst.co.il` + `ido@twyst.co.il`),
    לכל אחת לפחות משימה ממתינה אחת — כולל משימה במקבץ שממופה לו עמודת
-   טקסט חובה (`noteColumnId`).
+   טקסט חובה (`noteColumnId`), **וגם משימה אחת שעונה על תנאי שני מקבצים
+   בו-זמנית** (אותה עמודת תאריך + סטטוס שנכלל בשניהם) לבדיקת עדיפות
+   המקבצים.
 2. לוודא שכתובת השולח נמצאת ב-`AMP_ALLOWED_SENDERS`
    (`mapps code:env -i 11704868`) — אחרת `/amp/confirm` ידחה את הטופס.
 3. במסך האדמין → "מייל מסכם" → **שליחה עכשיו** (עם אישור "שליחה אמיתית
@@ -135,6 +142,9 @@ headers של אימות ולכן **לעולם לא יירנדר** (ממצאים 
       כפתור השליחה חסום והשדה מסומן; מילוי הטקסט משחרר אותו.
 - [ ] אחרי שליחה מתוך המייל: הסטטוס בלוח התעדכן והטקסט שהוזן **דרס** את
       הערך הקודם בעמודה הממופה (לבדוק בלוח מול ערך שהיה שם קודם).
+- [ ] **עדיפות מקבצים:** המשימה שעונה על תנאי שני המקבצים מופיעה **פעם
+      אחת בלבד**, במקבץ הגבוה יותר בהגדרות. היפוך הסדר עם החיצים במסך
+      האדמין, שמירה ושליחה חוזרת — המשימה עוברת למקבץ השני.
 
 **נכשל אם:** `smtp_connect_failed` בתשובת השליחה — זה סעיף 5 למטה, לא באג
 בהודעה. אם ההודעה הגיעה אך לא רונדרה — לבדוק קודם את שלוש שורות ה-auth ואת
