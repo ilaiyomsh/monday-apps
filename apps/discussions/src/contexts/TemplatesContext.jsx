@@ -305,15 +305,31 @@ export function TemplatesProvider({ children }) {
     [persistParticipants]
   );
 
+  /*
+   * round351 (review finding) — a STRICT write that fails ROLLS BACK the optimistic in-memory
+   * update. The order here is deliberate (commit first, then persist) so a UI edit appears
+   * instantly, but it leaves a trap for a caller that ACTS on the result: the write rejects, the
+   * template stays in memory, and a retry in the SAME session sees it, concludes "already there",
+   * and adds the type's dropdown label — while durable storage never got the agenda. After a
+   * reload that is a selectable type with no template behind it.
+   *
+   * The rollback is strict-only, on purpose. A non-strict caller is a UI surface that shows its
+   * own toast and would rather keep the user's edit on screen than have it vanish; a strict caller
+   * has explicitly asked to be told the truth, so memory must not outrun the store.
+   */
   const persistTypes = useCallback(
     async (next, { strict = false } = {}) => {
+      const previous = typeTemplatesRef.current;
       commitTypes(next);
       try {
         await monday.storage.setItem(typeInstanceKey(context), JSON.stringify({ templates: next }));
       } catch (err) {
         if (context?.instanceId || context?.boardId) {
           logger.error('TemplatesContext', 'שמירת תבנית סוג הדיון נכשלה — ייתכן שהשינוי לא נשמר', err);
-          if (strict) throw err;
+          if (strict) {
+            commitTypes(previous);
+            throw err;
+          }
         } else {
           logger.warn('TemplatesContext', 'אחסון תבניות לא זמין (פיתוח מקומי) — נשמר בזיכרון בלבד', err);
         }
