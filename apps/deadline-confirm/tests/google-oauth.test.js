@@ -31,11 +31,18 @@ function jsonResponse(body, { ok = true, status = 200 } = {}) {
 }
 
 describe('GOOGLE_SCOPES', () => {
-  it('requests gmail.send and identity only — never a mail READ scope (D12)', () => {
-    expect(GOOGLE_SCOPES).toContain('https://www.googleapis.com/auth/gmail.send');
+  // Spec re-pinned: owner decision 2026-08-04, findings §5 — SMTP XOAUTH2
+  // rejects gmail.send and names https://mail.google.com/ in its 334
+  // challenge, so the testing-phase send path needs the broad scope.
+  // The old pin here asserted gmail.send / NOT mail.google.com (D12).
+  it('requests the full-mailbox scope SMTP XOAUTH2 demands, plus identity (owner decision 2026-08-04, findings §5)', () => {
+    expect(GOOGLE_SCOPES).toContain('https://mail.google.com/');
+    expect(GOOGLE_SCOPES).toContain('openid');
+    expect(GOOGLE_SCOPES).toContain('email');
+    // The broad scope subsumes send — requesting both would be redundant.
+    expect(GOOGLE_SCOPES).not.toContain('gmail.send');
     expect(GOOGLE_SCOPES).not.toContain('gmail.readonly');
     expect(GOOGLE_SCOPES).not.toContain('gmail.modify');
-    expect(GOOGLE_SCOPES).not.toContain('mail.google.com');
   });
 });
 
@@ -66,6 +73,7 @@ describe('exchangeGoogleCode', () => {
         access_token: 'at1',
         refresh_token: 'rt1',
         expires_in: 3600,
+        scope: 'https://mail.google.com/ openid email',
         id_token: idToken('digest@twyst.co.il'),
       });
     };
@@ -84,7 +92,17 @@ describe('exchangeGoogleCode', () => {
       refreshToken: 'rt1',
       accessTokenExpiresAt: 1_000_000 + 3600 * 1000,
       senderAddress: 'digest@twyst.co.il',
+      // The GRANTED scope, echoed by Google — what /api/state later judges
+      // sufficiency by (owner decision 2026-08-04, findings §5).
+      scope: 'https://mail.google.com/ openid email',
     });
+  });
+
+  it('returns scope as an empty string when Google echoes none', async () => {
+    const fetchImpl = async () =>
+      jsonResponse({ access_token: 'at1', refresh_token: 'rt1', expires_in: 3600, id_token: idToken('a@b.co') });
+    const result = await exchangeGoogleCode({ code: 'c', redirectUri: REDIRECT, ...CLIENT, fetchImpl });
+    expect(result.scope).toBe('');
   });
 
   it('throws when Google refuses the exchange', async () => {

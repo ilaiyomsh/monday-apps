@@ -31,12 +31,22 @@
 3. APIs & Services → **OAuth consent screen** → סוג **Internal**.
    - Internal אפשרי רק כשמקימים מחשבון Workspace ארגוני, וזו בדיוק הסיבה
      שכל ארגון מקים אצלו: **Internal פוטר מאימות Google.**
-   - External + `gmail.send` היה מחייב תהליך אימות של Google (מדיניות
-     פרטיות, סרטון הדגמה, שבועות המתנה). אנחנו נמנעים מזה לגמרי.
-4. Scopes → הוספת **`https://www.googleapis.com/auth/gmail.send`** בלבד,
-   ובנוסף `openid` ו-`email` (זיהוי כתובת השולח; אינם קוראים דואר).
-   **אין להוסיף שום scope קריאה** — `gmail.readonly`, `gmail.modify`
-   ו-`mail.google.com` אסורים.
+   - **אזהרת CASA:** ה-scope שבשימוש (שלב 4) הוא scope **מוגבל (restricted)**.
+     על מסך הסכמה **External** הוא מפעיל את הערכת האבטחה **CASA** של Google
+     (כולל חידוש שנתי). **מסך Internal פוטר מזה לחלוטין** — ולכן שלב
+     הבדיקות אפשרי רק על מסך Internal, וההקמה אינה מכלילה ל-External.
+4. Scopes → הוספת **`https://mail.google.com/`**, ובנוסף `openid` ו-`email`
+   (זיהוי כתובת השולח; אינם קוראים דואר).
+   - **החלטת בעלים 2026-08-04 (שלב הבדיקות):** מסלול השליחה עובר ל-SMTP
+     XOAUTH2, ו-`smtp.gmail.com` מקבל **רק** את ה-scope הרחב — נמדד
+     ב-`docs/amp-email-verified-findings.md` §5: טוקן `gmail.send` נדחה,
+     ואתגר ה-334 נוקב במפורש ב-`https://mail.google.com/`.
+   - ההנחיה הקודמת של מדריך זה ("`gmail.send` בלבד; `mail.google.com`
+     אסור") **הושעתה לשלב הבדיקות** — ראו את הערת ההשעיה על D12
+     ב-`docs/v6-amp-only-decisions.md`. חיבור שנעשה עם ה-scope הישן
+     יסומן במסך האדמין כ"דורש חיבור מחדש" (broken) עד הסכמה מחודשת.
+   - אין להוסיף scopes נוספים — `gmail.readonly` ו-`gmail.modify`
+     מיותרים לחלוטין ונשארים אסורים.
 5. Credentials → Create credentials → **OAuth client ID** → סוג
    **Web application**.
    - **Authorized redirect URI:** `<BASE_URL>/oauth/google/callback`

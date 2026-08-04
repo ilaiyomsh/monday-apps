@@ -147,6 +147,12 @@ export interface GoogleSenderState {
   status: OauthStatus;
   /** The visible From address. Never a token. */
   senderAddress: string | null;
+  /**
+   * Why the sender is broken, when known (e.g. 'google_invalid_grant').
+   * Also 'broken' without a lastError = the grant's scope predates the
+   * 2026-08-04 change (findings §5) and needs re-consent.
+   */
+  lastError: string | null;
   /** null until connected. false = clicks in the sent mail will 403. */
   senderAllowedForAmp: boolean | null;
 }

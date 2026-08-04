@@ -38,6 +38,14 @@ import { runDigestForAccount, todayInJerusalem as todayInJerusalemFromRun } from
 import { MondayApiError } from '../services/monday-api.js';
 import { logError, logInfo } from '../helpers/logger.js';
 
+/**
+ * The scope the SMTP XOAUTH2 send path demands (owner decision 2026-08-04;
+ * measured in docs/amp-email-verified-findings.md §5 — smtp.gmail.com names it
+ * in its 334 challenge and rejects gmail.send). A google_sender record whose
+ * granted scope does not include it needs re-consent.
+ */
+const REQUIRED_GOOGLE_SCOPE = 'https://mail.google.com/';
+
 const BUTTON_ID_RE = /^b_[A-Za-z0-9_-]{4,16}$/;
 const SECTION_ID_RE = /^s_[A-Za-z0-9_-]{4,16}$/;
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
@@ -522,10 +530,27 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
       // `configured` reports whether the SERVER holds an OAuth client at all,
       // so the UI can tell "nobody connected yet" apart from "credentials are
       // missing on the platform" — two problems with different fixes.
+      //
+      // Scope sufficiency (owner decision 2026-08-04, findings §5): the SMTP
+      // XOAUTH2 send path only works with https://mail.google.com/. A grant
+      // without it — every pre-change grant has no scope field at all — is
+      // reported 'broken', the same state the admin's reconnect button already
+      // handles, so re-consent is signaled without a new UI state.
+      const scopeSufficient =
+        typeof googleSender?.scope === 'string' &&
+        googleSender.scope.includes(REQUIRED_GOOGLE_SCOPE);
       const google = {
         configured: Boolean(env.googleOauthClientId && env.googleOauthClientSecret),
-        status: !googleSender ? 'disconnected' : googleSender.disconnectedAt ? 'broken' : 'connected',
+        status: !googleSender
+          ? 'disconnected'
+          : googleSender.disconnectedAt || !scopeSufficient
+            ? 'broken'
+            : 'connected',
         senderAddress: googleSender?.senderAddress ?? null,
+        // Why the sender broke, when known (e.g. 'google_invalid_grant' from
+        // the refresh path). String-coerced — never an object that could leak
+        // record internals.
+        lastError: googleSender?.lastError != null ? String(googleSender.lastError) : null,
         // The AMP endpoint default-denies senders that are not on the
         // allowlist, so a connected mailbox that is not listed sends mail whose
         // buttons all fail with 403. Surface it rather than let it be debugged
