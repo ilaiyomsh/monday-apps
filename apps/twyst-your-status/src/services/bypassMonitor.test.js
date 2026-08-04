@@ -24,11 +24,19 @@ const makeDeps = (overrides = {}) => ({
 });
 
 describe('fetchBypasses', () => {
-  it("returns 'disabled' without fetching when no guard URL is configured", async () => {
-    const deps = makeDeps({ guardUrl: '' });
+  it("returns 'disabled' without fetching when the base resolves to null (dev-harness mock)", async () => {
+    const deps = makeDeps({ guardUrl: null });
     expect(await fetchBypasses(Q, deps)).toEqual({ status: 'disabled' });
     expect(deps.fetchImpl).not.toHaveBeenCalled();
     expect(deps.sessionTokenProvider).not.toHaveBeenCalled();
+  });
+
+  it("GETs the RELATIVE bypasses endpoint (same-origin) when the base is '' — a real build's default", async () => {
+    const deps = makeDeps({ guardUrl: '' });
+    await fetchBypasses(Q, deps);
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(1);
+    expect(deps.fetchImpl.mock.calls[0][0])
+      .toBe('/api/guard/bypasses?boardId=5098&columnId=status_col&from=1000&to=2000');
   });
 
   it('GETs the bypasses endpoint with the sessionToken and the window as query params', async () => {

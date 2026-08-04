@@ -55,16 +55,23 @@ owner has not authorized the guard"). זה fail-open מכוון: עדיף לא �
 המקור ישר: מה-webhook אפשר להבחין רק בין "עורך נייטיבי" ל"API/אינטגרציה" (שדה `app`),
 לא בין נייד לחלון הטעינה. נתונים מגיעים מ-`GET /api/guard/bypasses` (הרשאת בעל-עמודה).
 
+## איחוד same-origin (round324) — למה אין יותר סוד ב-GitHub
+
+עד round324 היו לאפליקציה שני *פיצ'רים* בשני origins: ה-board view התארח על ה-CDN
+של monday וקרא לשרת ה-monday-code בכתובת מוחלטת, שהוזרקה כ-secret ל-GitHub
+(`TWYST_GUARD_URL`) והצריכה גם CORS. מ-round324 **שרת ה-monday-code מגיש בעצמו את
+ה-SPA** (`server/public`, ראה `server/src/app.js`): אותו origin, קריאות יחסיות
+(`/api/guard/*`), בלי `TWYST_GUARD_URL` ובלי CORS. הפריסה היא **דחיפת שרת אחת**
+(`deploy-{draft,live}-twyst-your-status`, ללא `-c`). ההפעלה עצמה כבר per-account
+ובתוך monday: הבעלים מאשר פעם אחת (OAuth), ושמירת עמודה רושמת webhook ללוח שלו.
+
 ## צעדי הפעלה (בסדר הזה)
 
 1. **סקופים** — Developer Center → App → גרסת draft → Permissions: להוסיף
    `webhooks:write`, `notifications:write`, `account:read` (הקיימים:
    boards:read/write, users:read, teams:read). לאשר מחדש התקנות קיימות.
-2. **סוד ל-GitHub (חד-פעמי)** — `TWYST_GUARD_URL` (כתובת השרת):
-   `gh secret set TWYST_GUARD_URL --repo ilaiyomsh/monday-apps`. בהיעדרו ה-client
-   לא מנסה להירשם (רישום best-effort, לא מכשיל שמירה).
-3. **משתני סביבה לשרת** — אחרי הפריסה הראשונה (merge ל-develop מריץ
-   `deploy-draft-twyst-guard`): `mapps code:env -i 11775054` —
+2. **משתני סביבה לשרת** — אחרי הפריסה הראשונה (merge ל-develop מריץ
+   `deploy-draft-twyst-your-status`, דחיפת השרת המאוחדת): `mapps code:env -i 11775054` —
    `MONDAY_CLIENT_ID`, `MONDAY_CLIENT_SECRET` (משמש גם ל-sessionToken ולהחלפת קוד
    OAuth), `MONDAY_SIGNING_SECRET` (אימות JWT של webhook), `BASE_URL`. **לשילוח
    שגיאות ל-Axiom** (אופציונלי, fail-soft — בלעדיו פשוט לא נשלח כלום): `AXIOM_TOKEN`,
@@ -72,7 +79,14 @@ owner has not authorized the guard"). זה fail-open מכוון: עדיף לא �
    `LOG_SHIP_LEVEL` להרחבת המדיניות באירוע. **לבדיקת draft ב-OAuth:**
    `MONDAY_APP_VERSION_ID` = מזהה גרסת ה-draft (כדי ש-`/oauth/start` יכוון לגרסה שבה
    ה-New OAuth Flow דלוק).
-4. **כתובת השרת** — `mapps code:status -i 11775054` → ל-`BASE_URL` ול-`TWYST_GUARD_URL`.
+3. **כתובת השרת** — `mapps code:status -i 11775054` → הכתובת שנקבל היא ה-`BASE_URL`
+   וגם הכתובת שאליה מפנים את ה-board view (השלב הבא). כבר אין `TWYST_GUARD_URL`.
+4. **הפניית ה-board view לכתובת ה-monday-code** — Developer Center → App → גרסת draft →
+   Features → ה-board view: להגדיר את מקור הטעינה לכתובת ה-monday-code (`<BASE_URL>/`)
+   במקום ה-bundle המתארח ב-CDN. זה **הצעד הקריטי** של האיחוד — בלעדיו ה-SPA ממשיך
+   להיטען מה-CDN וקריאות ה-`/api/guard/*` היחסיות ייפלו. יש לבצע אותו יחד עם מיזוג ה-PR
+   של האיחוד (חיתוך מתואם: הקוד עבר לנתיבים יחסיים, אז ה-board view חייב לעבור ל-origin
+   של השרת).
 5. **OAuth (New OAuth Flow + Redirect)** — Developer Center → App → גרסת draft →
    OAuth & Permissions: **להדליק את "New OAuth Flow"** (זרימת PKCE — הקוד תומך רק בה),
    ולהוסיף Redirect URL: `<BASE_URL>/oauth/callback`. לאחר אימות — לקדם (promote), ואז
@@ -82,6 +96,8 @@ owner has not authorized the guard"). זה fail-open מכוון: עדיף לא �
    כדאי שגם הוא יאשר, כדי שההחזרות ימשיכו לעבוד אחרי ההעברה.)
 7. **רישום עמודות** — כל שמירת הגדרות רושמת את העמודה אוטומטית (idempotent).
    לעמודות קיימות: להיכנס להגדרות, לוודא בעלים, ולשמור פעם אחת.
+8. **ניקוי** — למחוק את הסוד הישן `TWYST_GUARD_URL` מ-GitHub (כבר לא נקרא):
+   `gh secret delete TWYST_GUARD_URL --repo ilaiyomsh/monday-apps`.
 
 ## אימותים בסנדבוקס לפני פרודקשן (WZ-, workspace 16291824)
 

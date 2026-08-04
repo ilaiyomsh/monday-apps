@@ -5,8 +5,9 @@
  *
  * Every outcome is a returned STATUS, never a throw — the monitor shows a
  * friendly state, never a stack:
- *   'disabled'      — no guard URL configured for this build → the monitor is
- *                     not shown at all (nothing was fetched).
+ *   'disabled'      — the dev-harness mock (VITE_MONDAY_MOCK): no backend →
+ *                     the monitor is not shown. In a real build the guard is
+ *                     same-origin, so this status does not occur.
  *   'not_activated' — the guard is not connected for this account (409).
  *   'forbidden'     — the actor is not a column owner (403). Should not happen
  *                     behind the owner gate, but handled rather than thrown.
@@ -19,17 +20,18 @@
  */
 
 import logger from '../utils/logger.js';
+import { resolveGuardBase } from './guardBase.js';
 
 export async function fetchBypasses({ boardId, columnId, fromMs, toMs }, deps = {}) {
-  const guardUrl = (deps.guardUrl ?? import.meta.env.VITE_TWYST_GUARD_URL ?? '').replace(/\/$/, '');
-  if (guardUrl === '') return { status: 'disabled' };
+  const base = resolveGuardBase(deps.guardUrl);
+  if (base === null) return { status: 'disabled' };
 
   const doFetch = deps.fetchImpl ?? globalThis.fetch;
   const getSessionToken = deps.sessionTokenProvider ?? defaultSessionTokenProvider;
 
   try {
     const sessionToken = await getSessionToken();
-    const url = `${guardUrl}/api/guard/bypasses?boardId=${encodeURIComponent(boardId)}`
+    const url = `${base}/api/guard/bypasses?boardId=${encodeURIComponent(boardId)}`
       + `&columnId=${encodeURIComponent(columnId)}&from=${fromMs}&to=${toMs}`;
     const response = await doFetch(url, { headers: { Authorization: sessionToken } });
     if (response.ok) {

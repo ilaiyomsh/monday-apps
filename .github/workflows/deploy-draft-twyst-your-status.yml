@@ -1,8 +1,11 @@
 name: Deploy Draft - twyst-your-status
 
-# Spec section 7.1: merges into develop auto-deploy to the app's LATEST
-# DRAFT version. No version IDs are stored anywhere — only the App ID
-# secret; the CLI resolves the latest draft itself.
+# round324 same-origin unification: twyst-your-status is now ONE app deployed
+# as a SINGLE monday-code push. The server (apps/twyst-your-status/server)
+# SERVES the built SPA from public/, so there is no separate CDN (-c) push and
+# no guard URL — the board-view feature loads THIS service's monday-code URL.
+# Spec section 7.1: merges into develop auto-deploy to the app's LATEST DRAFT;
+# the CLI resolves the version itself (only the App ID secret is stored).
 
 on:
   workflow_dispatch: {}
@@ -39,34 +42,40 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build twyst-your-status
+      - name: Build the SPA (client bundle)
         env:
           VITE_BUILD_SHA: ${{ github.sha }}
           VITE_AXIOM_DATASET: app-errors
           VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
           VITE_AXIOM_APP: twyst-your-status
-          # round322: the guard server's public URL — enables best-effort webhook
-          # enrollment on settings save. Secret absent → empty → the client skips
-          # enrollment entirely (fail-soft by contract in guardEnroll.js).
-          VITE_TWYST_GUARD_URL: ${{ secrets.TWYST_GUARD_URL }}
         run: pnpm --filter "./apps/twyst-your-status" build
 
-      - name: Archive sourcemaps as build artifact (for stack symbolication)
+      - name: Bundle the guard server (inlines the client domain modules)
+        run: pnpm --filter "./apps/twyst-your-status/server" build
+
+      - name: Stage the SPA into the server's public/ (same-origin serving)
+        run: |
+          set -euo pipefail
+          rm -rf apps/twyst-your-status/server/public
+          mkdir -p apps/twyst-your-status/server/public
+          cp -R apps/twyst-your-status/dist/. apps/twyst-your-status/server/public/
+
+      - name: Archive SPA sourcemaps as build artifact (for stack symbolication)
         uses: actions/upload-artifact@v4
         with:
           name: sourcemaps-twyst-your-status-${{ github.sha }}
-          path: apps/twyst-your-status/dist/**/*.map
+          path: apps/twyst-your-status/server/public/**/*.map
           retention-days: 90
           if-no-files-found: warn
 
-      - name: Strip sourcemaps before deploy (never ship .map to the CDN)
+      - name: Strip SPA sourcemaps before deploy (never serve .map to browsers)
         run: |
           set -euo pipefail
-          find apps/twyst-your-status/dist -name '*.map' -type f -delete
-          remaining="$(find apps/twyst-your-status/dist -name '*.map' -type f | wc -l | tr -d ' ')"
-          echo "remaining .map files in deploy dir: $remaining"
+          find apps/twyst-your-status/server/public -name '*.map' -type f -delete
+          remaining="$(find apps/twyst-your-status/server/public -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining .map files in server/public: $remaining"
           if [ "$remaining" != "0" ]; then
-            echo "::error::sourcemaps still present in deploy dir — refusing to push (would leak source to the CDN)"
+            echo "::error::sourcemaps still present in server/public — refusing to push (would serve source to browsers)"
             exit 1
           fi
 
@@ -78,15 +87,18 @@ jobs:
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
 
-      # Retry once on the transient "Unexpected error ... communicating with
-      # the remote server" (same guard as ship.sh / live deploy).
+      # Server-side push (no -c): the archive carries the bundled dist/index.js
+      # AND public/ (the SPA). --verbose is LOAD-BEARING (mapps cli.md): without
+      # it a failed server push exits 1 with the reason swallowed. Retry once on
+      # the transient "communicating with the remote server" error.
       - name: Push to latest DRAFT version
         run: |
           set -uo pipefail
           for attempt in 1 2; do
-            if mapps code:push -c \
-                 -d apps/twyst-your-status/dist \
-                 -a "$APP_ID"; then
+            if mapps code:push \
+                 -d apps/twyst-your-status/server \
+                 -a "$APP_ID" \
+                 --verbose; then
               exit 0
             fi
             echo "push attempt $attempt failed; retrying once in 15s (transient remote error)…"
