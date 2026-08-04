@@ -547,6 +547,11 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
             ? 'broken'
             : 'connected',
         senderAddress: googleSender?.senderAddress ?? null,
+        // The scope string Google echoed at consent, verbatim. Without it a
+        // scope mismatch is invisible to the operator — the admin can only see
+        // 'broken' and guess (incident 2026-08-04). Scopes are capability
+        // names, never credentials, so this is safe to show.
+        grantedScope: typeof googleSender?.scope === 'string' ? googleSender.scope : null,
         // Why the sender broke, when known (e.g. 'google_invalid_grant' from
         // the refresh path). String-coerced — never an object that could leak
         // record internals.

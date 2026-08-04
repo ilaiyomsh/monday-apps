@@ -56,6 +56,15 @@ export function GoogleSenderSection({ google, onRefresh, refreshing }: Props) {
         <>
           <div className="dc-error">
             ההרשאה של תיבת השליחה בוטלה או פגה. השליחה מושבתת עד חיבור מחדש.
+            {google.grantedScope !== null && (
+              <>
+                <br />
+                ההרשאה שגוגל העניקה בפועל:{' '}
+                <code dir="ltr">{google.grantedScope || '(ריק)'}</code> — שליחת SMTP דורשת
+                גם <code dir="ltr">https://mail.google.com/</code>. אם היא חסרה כאן, ה-scope
+                לא נשמר במסך ההסכמה ב-Google Cloud Console (Data Access → Save) לפני החיבור.
+              </>
+            )}
           </div>
           <div className="dc-row">
             <Button onClick={openGoogleOauthTab}>חבר מחדש</Button>

@@ -100,24 +100,38 @@ describe('createSmtpSender — connection state and scope pre-flight', () => {
     expect(transports.sends).toHaveLength(0);
   });
 
-  it('refuses a record with NO scope field — a pre-change grant needs re-consent', async () => {
+  // The scope pre-flight is ADVISORY, not a gate (2026-08-04 incident): it
+  // compares Google's echoed `scope` string, which we cannot observe from the
+  // outside, and a mismatch there blocked a send that smtp.gmail.com had never
+  // been asked to judge. SMTP AUTH is the authority.
+  it('a record with NO scope field still attempts the send — the server decides', async () => {
     const storage = fakeStorage({ 111: connected({ scope: undefined }) });
     const transports = fakeTransports();
-    await expect(sender({ storage, transports }).send(SEND)).rejects.toMatchObject({
-      code: 'google_scope_insufficient',
-    });
-    expect(transports.sends).toHaveLength(0);
+    await expect(sender({ storage, transports }).send(SEND)).resolves.toBeTruthy();
+    expect(transports.sends).toHaveLength(1);
   });
 
-  it('refuses a gmail.send-only grant — smtp.gmail.com demands the broad scope (findings §5)', async () => {
+  it('a gmail.send-only grant still attempts the send rather than pre-judging it', async () => {
     const storage = fakeStorage({
       111: connected({ scope: 'https://www.googleapis.com/auth/gmail.send openid email' }),
     });
     const transports = fakeTransports();
-    await expect(sender({ storage, transports }).send(SEND)).rejects.toMatchObject({
-      code: 'google_scope_insufficient',
+    await expect(sender({ storage, transports }).send(SEND)).resolves.toBeTruthy();
+    expect(transports.sends).toHaveLength(1);
+  });
+
+  it('when SMTP then refuses the token, the error names the granted scope — the missing diagnostic', async () => {
+    const storage = fakeStorage({
+      111: connected({ scope: 'https://www.googleapis.com/auth/gmail.send openid email' }),
     });
-    expect(transports.sends).toHaveLength(0);
+    const { impl } = refreshEndpoint();
+    const transports = fakeTransports(() => {
+      throw smtpError('EAUTH', 535, '535-5.7.9 Application-specific password required');
+    });
+    await expect(sender({ storage, transports, fetchImpl: impl }).send(SEND)).rejects.toMatchObject({
+      code: 'smtp_auth_failed',
+      message: expect.stringContaining('https://www.googleapis.com/auth/gmail.send'),
+    });
   });
 });
 
