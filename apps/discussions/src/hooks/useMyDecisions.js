@@ -4,6 +4,7 @@ import { api } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
 import { ensureSubscribers } from '../utils/mondayApi/subscribers.js';
 import { makeViewCacheKey, readViewCache, writeViewCache, reconcileSeeded } from '../utils/viewCache.js';
+import { mapDecisionDiscussionRoles } from '../utils/ledDiscussions.js';
 import logger from '../utils/logger.js';
 
 /*
@@ -88,6 +89,79 @@ export function isMyDecisionsConfigured(subTab) {
 
 // The My-Decisions first-page query, factored out so the hook AND the background
 // prefetch build byte-identical queries (same columns / page size).
+/*
+ * round341 — read the parent discussions' three MANAGER role columns and stamp them onto
+ * the decision rows as `__discussionRoles`.
+ *
+ * TIER_EXTRA_ROLE_SOURCES grants every decision capability to יוצר / מוביל / מרכז דיון,
+ * and the resolver finds those people either on `ctx.discussion` (the in-discussion tab)
+ * or on this stamp (here, where there is no discussion object). Skipping it would make
+ * the personal list quietly stricter than the tab for the very people the owner named.
+ *
+ * Deliberately one extra query for the WHOLE page rather than per row, and deliberately
+ * FAIL-SOFT: on any failure the rows simply keep no stamp, which degrades to the
+ * pre-round341 behaviour (the decision's own roles still resolve) instead of blocking the
+ * list. Returns the SAME array when there is nothing to stamp.
+ */
+async function stampDiscussionRoles(list) {
+  const discBoardId = getBoardId('discussions');
+  const cols = getColumns('discussions') || {};
+  const roleColIds = ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID']
+    .map((alias) => cols[alias]?.id)
+    .filter(Boolean);
+  const linkColId = getColumns('decisions')?.discussionLinkID?.id;
+  const discIds = [...new Set(
+    (list || []).flatMap((d) => (d?.discussionLinkID?.ids || []).map(String))
+  )];
+  // Nothing to resolve, or the mapping this needs is incomplete → leave the rows alone.
+  if (!discBoardId || !linkColId || !roleColIds.length || !discIds.length) return list;
+  try {
+    const data = await api(
+      `query ($ids: [ID!], $cols: [String!]) {
+        items(ids: $ids) {
+          id
+          column_values(ids: $cols) { id ... on PeopleValue { persons_and_teams { id } } }
+        }
+      }`,
+      { ids: discIds, cols: roleColIds },
+      'myDecisionsDiscussionRoles'
+    );
+    const byAlias = Object.fromEntries(
+      ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID']
+        .filter((a) => cols[a]?.id)
+        .map((a) => [String(cols[a].id), a])
+    );
+    // Re-shape the raw column_values into the alias shape mapDecisionDiscussionRoles
+    // expects, plus the decision ids each discussion links to (taken from the rows we
+    // already have, so no second relation read is needed).
+    const decisionIdsByDisc = new Map();
+    (list || []).forEach((d) => {
+      (d?.discussionLinkID?.ids || []).forEach((did) => {
+        const k = String(did);
+        if (!decisionIdsByDisc.has(k)) decisionIdsByDisc.set(k, []);
+        decisionIdsByDisc.get(k).push(String(d.id));
+      });
+    });
+    const shaped = (data?.items || []).map((it) => {
+      const row = { id: String(it.id), decisionsBoardLinkID: { ids: decisionIdsByDisc.get(String(it.id)) || [] } };
+      (it.column_values || []).forEach((cv) => {
+        const alias = byAlias[String(cv.id)];
+        if (alias) row[alias] = (cv.persons_and_teams || []).map((p) => ({ id: String(p.id) }));
+      });
+      return row;
+    });
+    const rolesByDecision = mapDecisionDiscussionRoles(shaped);
+    if (!rolesByDecision.size) return list;
+    return (list || []).map((d) => {
+      const roles = rolesByDecision.get(String(d.id));
+      return roles ? { ...d, __discussionRoles: roles } : d;
+    });
+  } catch (err) {
+    logger.warn('useMyDecisions', 'קריאת תפקידי דיון האב נכשלה — הרשאות מנהלי הדיון לא יחולו בתצוגה האישית', err);
+    return list;
+  }
+}
+
 function decisionsItemsQuery(where) {
   return new החלטות1Board()
     .items()
@@ -214,6 +288,10 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
           logger.warn('useMyDecisions', 'creator-fallback fetch failed', creatorErr);
         }
       }
+      // round341 — stamp the parent discussions' manager roles before the rows reach
+      // state, so the permission resolver sees them on the very first render.
+      list = await stampDiscussionRoles(list);
+      if (reqId !== reqIdRef.current) return;
       // Phase 2 merge: on a staged load, AUGMENT what phase 1 rendered (add the
       // rows it didn't return, preserving current order + any optimistic edits);
       // a silent cache seed reconciles on id (fresh authoritative, local edits

@@ -28,8 +28,8 @@ export function mapItem(boardKey, it) {
   for (const alias in cfg) {
     const c = cfg[alias];
     if (!c?.id) continue;
-    // Multi-column people alias (`ids`, e.g. tasks.taskViewersID — יכולת
-    // צפייה): the alias value is the UNION of people across all mapped
+    // Multi-column people alias (`ids`, e.g. tasks.taskEditorsID — יכולת
+    // עריכה): the alias value is the UNION of people across all mapped
     // columns, deduped by user id, primary column first. A user in ANY of
     // them holds the alias role.
     const extraIds = Array.isArray(c.ids) ? c.ids.filter((x) => x && x !== c.id) : [];

@@ -4,8 +4,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /*
  * round317 (owner request) — the install itself must SAVE the access-column
- * auto-fill roles (יוצר + מוביל/מנהל + מרכז דיון on יכולת עריכה, משתתפים on
- * יכולת צפייה). They used to be a fallback only: the stored settings never said so.
+ * auto-fill roles (יוצר + מוביל/מנהל + מרכז דיון on יכולת עריכה). They used to be a
+ * fallback only: the stored settings never said so.
+ *
+ * round340 — "יכולת צפייה" was retired, so the install must seed exactly one key.
  */
 
 const PROVISIONED = {
@@ -45,12 +47,16 @@ beforeEach(() => {
 });
 
 describe('a fresh install', () => {
-  it('SAVES the three edit roles and the viewers role, alongside the mapping', async () => {
+  /*
+   * round340 — a deep equality, not a per-key check, on purpose: the failure this
+   * pins is a RETIRED key being seeded back into fresh settings, which only a
+   * whole-object comparison can catch.
+   */
+  it('SAVES the three edit roles and nothing else, alongside the mapping', async () => {
     const saved = await install();
     expect(saved.boards).toEqual(PROVISIONED.boards);
     expect(saved.preferences.accessRoleSources).toEqual({
       taskEditorsID: ['discussionLeadID', 'discussionCoordinatorID', 'discussionCreatorID'],
-      taskViewersID: ['participantsID'],
     });
   });
 });
@@ -60,8 +66,8 @@ describe('a top-up of an existing instance', () => {
     settings = { preferences: { accessRoleSources: { taskEditorsID: ['discussionCreatorID'] } } };
     const saved = await install();
     expect(saved.preferences.accessRoleSources.taskEditorsID).toEqual(['discussionCreatorID']);
-    // …and still fills the key that was never set.
-    expect(saved.preferences.accessRoleSources.taskViewersID).toEqual(['participantsID']);
+    // …and does not resurrect the retired viewers key while it is at it.
+    expect(saved.preferences.accessRoleSources).not.toHaveProperty('taskViewersID');
   });
 
   it('keeps the owner\'s other preferences', async () => {

@@ -35,6 +35,7 @@ import {
   CAPABILITIES,
   PERMISSION_ROLE_SOURCES,
   CAP_ITEM_SELF_ROLES,
+  TIER_EXTRA_ROLE_SOURCES,
   DEFAULT_PERMISSIONS,
   SYSTEM_ROLE_KEY,
 } from '@api/boards.config.js';
@@ -59,7 +60,7 @@ function boardRoleEntries(boardKey) {
     key: `${boardKey}:${alias}`,
     readId: alias,
     columnId: cfg[alias]?.id,
-    // Multi-column people alias (`ids`, e.g. tasks.taskViewersID): every mapped
+    // Multi-column people alias (`ids`, e.g. tasks.taskEditorsID): every mapped
     // column belongs to this ONE role — mapItem merges their people under the
     // alias, and listing them here keeps them out of the raw-id extras below.
     columnIds: [cfg[alias]?.id, ...(Array.isArray(cfg[alias]?.ids) ? cfg[alias].ids : [])].filter(Boolean),
@@ -130,10 +131,11 @@ function itemReady(item, itemBoardKey) {
 // 'creatorLeadOwner' default bucket for item-tier caps.
 //
 // round305 — a capability listed in CAP_ITEM_SELF_ROLES narrows the scan to the
-// roles its owner spec names (e.g. editTaskPartners must NOT reach the read-only
-// taskViewersID role), and may additionally accept the parent DISCUSSION's
+// roles its owner spec names, and may additionally accept the parent DISCUSSION's
 // lead/coordinator/creator, which a personal-view row carries under
-// `__discussionRoles` (there is no discussion object in that ctx).
+// `__discussionRoles` (there is no discussion object in that ctx). Since round340
+// retired the read-only viewers role the narrowing is a no-op; the parent-discussion
+// half is what the entry is still there for.
 function isItemSelfRole(item, itemBoardKey, myId, capability = null) {
   const rule = capability ? CAP_ITEM_SELF_ROLES[capability]?.[itemBoardKey] : null;
   const aliases = rule?.selfRoles || PERMISSION_ROLE_SOURCES[itemBoardKey] || [];
@@ -366,6 +368,38 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
     }
   }
 
+  /*
+   * round341 — the SAME union, for roles that live on the parent DISCUSSION.
+   *
+   * A decision's entitled managers (יוצר / מוביל / מרכז דיון) hold people columns on the
+   * discussions board, so the loop above — which iterates the DECISION's own columns —
+   * can never see them. TIER_EXTRA_ROLE_SOURCES declares the exception per item board.
+   *
+   * `discussion` is present in the in-discussion tab; the personal views have none, and
+   * carry the parent's role people on the row as `__discussionRoles` instead. Reading
+   * both means one rule covers both surfaces, which is what keeps ההחלטות שלי from
+   * silently disagreeing with the החלטות tab.
+   *
+   * Deliberately part of the UNION rather than an early `return true`: that is what makes
+   * the matrix honest in both directions — unchecking a box writes an explicit `false`,
+   * and here that actually revokes instead of being overridden.
+   */
+  const parentRoleAliases = (itemBoardKey && TIER_EXTRA_ROLE_SOURCES[itemBoardKey]) || [];
+  if (parentRoleAliases.length) {
+    const parent = discussion || item?.__discussionRoles || null;
+    for (const alias of parentRoleAliases) {
+      if (!inPeople(parent?.[alias], myId)) continue;
+      const role = roles[`discussions:${alias}`];
+      if (role?.hidden) continue;
+      const explicit = role?.capabilities?.[capability];
+      if (explicit === false) denied = true;
+      else if (explicit === true) explicitGranted = true;
+      else if (resolveDefaultBucket(capability, { discussion, myId, itemBoardKey, item })) {
+        defaultGranted = true;
+      }
+    }
+  }
+
   // 5. Creator/Lead override — discussion-scoped content caps only (excludes
   //    system AND item-tier caps). Default: creator/lead are immune → ALLOW.
   //    Strict mode drops the override and resolves them through the same role
@@ -374,17 +408,16 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
   const contentOverride = !itemBoardKey && isCreatorOrLead(discussion, myId);
   if (contentOverride && !strictCreatorLead) return true;
 
-  // Item 21 (2026-07-14): the discussion's single-person manager roles (מנהל
-  // דיון / מרכז דיון) may EDIT any decision of their discussion — delete stays
-  // with the roles the matrix grants it to. Applies only when the decision is
-  // resolved WITH its parent discussion in ctx (the in-discussion tab).
-  if (
-    itemBoardKey === 'decisions' &&
-    capability !== 'deleteDecision' &&
-    (inPeople(discussion?.discussionLeadID, myId) || inPeople(discussion?.discussionCoordinatorID, myId))
-  ) {
-    return true;
-  }
+  /*
+   * round341 — the item-21 hardcoded decision override is GONE, replaced by the
+   * TIER_EXTRA_ROLE_SOURCES union above. It granted מוביל/מרכז דיון every decision
+   * capability except delete, unconditionally, which meant the matrix's decision cells
+   * were partly decorative: no checkbox could take that away. The seed now grants the
+   * same roles (plus יוצר הדיון, and including delete, per the owner's round341 spec)
+   * through the ordinary role scan, so the grant is visible in the matrix AND revocable
+   * there. Two behaviour changes come with that, both intended: יוצר דיון gains decision
+   * rights it did not have, and deleteDecision is now granted to all three.
+   */
 
   // round249 (owner approval 2026-07-23) — the discussion's creator / lead
   // (מנהל דיון) / coordinator (מרכז דיון) may EDIT any TASK of their discussion,

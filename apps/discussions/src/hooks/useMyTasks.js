@@ -48,9 +48,10 @@ const LAST_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 // taskCreatorID is fetched for the PERMISSION resolution only (the task-tier
 // "creator" role in resolveCan) — it isn't rendered as a column here.
 // round305 — partnersID (שותפים) rides along so the personal table can render +
-// edit it; taskViewersID/taskEditorsID come too because the permission resolver
-// scans the task's own role columns in this (discussion-less) surface.
-const RENDERED_COLUMNS = ['responsibilityID', 'partnersID', 'taskCreatorID', 'deadlineID', 'statusID', 'discussionLinkID', 'taskNotesID', 'priorityID', 'taskViewersID', 'taskEditorsID'];
+// edit it; taskEditorsID comes too because the permission resolver scans the task's
+// own role columns in this (discussion-less) surface. round340 dropped the retired
+// taskViewersID from the fetch (see VIEW_CACHE_VERSION — the row shape changed).
+const RENDERED_COLUMNS = ['responsibilityID', 'partnersID', 'taskCreatorID', 'deadlineID', 'statusID', 'discussionLinkID', 'taskNotesID', 'priorityID', 'taskEditorsID'];
 
 // round272 — is the current user among a task's responsibility people? Drives
 // the "משימות של אחרים" scope, which is the led-discussion tasks MINUS the ones

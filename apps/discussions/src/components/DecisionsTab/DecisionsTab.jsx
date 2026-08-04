@@ -45,7 +45,10 @@ import styles from './DecisionsTab.module.css';
 // decision). `name` (החלטה) is the pinned/frozen leading column; the rest
 // resize AND reorder (owner drag) under the 'decisions' tableId (Round 7). A
 // leading 'sel' checkbox column is prepended at the call site when selectable.
-const DECISION_COLUMN_KEYS = ['name', 'decider', 'affected', 'status', 'tracking', 'date'];
+// round341 (owner request, from the screenshot of the החלטות tab) — תאריך now sits
+// BEFORE מעקב החלטה, so a row reads: who decided → who it affects → its status → when
+// → how its follow-up is going. Starting order only; a dragged order is kept.
+const DECISION_COLUMN_KEYS = ['name', 'decider', 'affected', 'status', 'date', 'tracking'];
 
 
 // Group-by options for decisions — סטאטוס + מחליט (person). Mirrors the Tasks /
@@ -363,7 +366,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     for (const t of resolveDecisionTargets(id, 'editDecisionStatus')) await updateDecisionStatus(t, status);
   };
   const applyDecisionTracking = async (id, tracking) => {
-    for (const t of resolveDecisionTargets(id, 'editDecisionStatus')) await updateDecisionTracking(t, tracking);
+    for (const t of resolveDecisionTargets(id, 'editDecisionTracking')) await updateDecisionTracking(t, tracking);
   };
   const applyDecisionDate = async (id, date) => {
     for (const t of resolveDecisionTargets(id, 'editDecisionDate')) await updateDecisionDate(t, date);

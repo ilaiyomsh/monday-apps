@@ -32,7 +32,11 @@ import logger from './logger.js';
 //       taskEditorsID for the permission scan). A v1 entry would seed rows with
 //       NO partners, so the שותפים cell would open empty and an edit made from
 //       that state would replace the real partner list.
-export const VIEW_CACHE_VERSION = 2;
+//   3 — round340: taskViewersID was retired, so it left RENDERED_COLUMNS. A v2 entry
+//       carries a field the code no longer knows about; harmless to read, but the
+//       convention here is that any change to the fetched column set bumps this, and
+//       honouring it keeps "does the cache match the code" a single comparison.
+export const VIEW_CACHE_VERSION = 3;
 
 // Key namespace. Full key: `disc.viewcache.<view>[.<subTab>].<userId>.<boardId>`.
 const PREFIX = 'disc.viewcache';
