@@ -26,6 +26,7 @@ import {
   buildDefaultTypeTemplate,
   seedDefaultTypeTemplate,
   hasDefaultTypeTemplate,
+  readStoredTypeTemplates,
 } from '../defaultTypeTemplate.js';
 
 const ME = { id: '7', name: 'עידו' };
@@ -218,5 +219,41 @@ describe('round348 — "our default is already there" is not "this account has i
     expect(hasDefaultTypeTemplate([{ discussionType: 'דיון' }])).toBe(false);
     expect(hasDefaultTypeTemplate(null)).toBe(false);
     expect(hasDefaultTypeTemplate([{}, null])).toBe(false);
+  });
+});
+
+/*
+ * round349 (review finding) — "the list is empty" and "we could not read the list" must never be
+ * the same answer. This is the shared primitive that keeps them apart, so neither seeding path can
+ * mistake a timeout for an empty store and overwrite an account's real types.
+ */
+describe('round349 — readStoredTypeTemplates reports whether the READ succeeded', () => {
+  it('ok with the stored list', async () => {
+    storage.getItem.mockImplementation(async () => ({
+      data: { value: JSON.stringify({ templates: [{ id: 'x', discussionType: 'הנהלה' }] }) },
+    }));
+    expect(await readStoredTypeTemplates(CTX)).toEqual({ ok: true, list: [{ id: 'x', discussionType: 'הנהלה' }] });
+  });
+
+  it('ok with an EMPTY list when there is genuinely nothing stored', async () => {
+    expect(await readStoredTypeTemplates(CTX)).toEqual({ ok: true, list: [] });
+  });
+
+  // The distinction that matters: a failure is ok:false, never an empty ok:true.
+  it('NOT ok when the read throws', async () => {
+    storage.getItem.mockRejectedValue(new Error('storage down'));
+    expect(await readStoredTypeTemplates(CTX)).toEqual({ ok: false, list: [] });
+  });
+
+  it('NOT ok on malformed stored JSON', async () => {
+    storage.getItem.mockImplementation(async () => ({ data: { value: '{not json' } }));
+    expect((await readStoredTypeTemplates(CTX)).ok).toBe(false);
+  });
+
+  // And the seed refuses to write on an unprovable read.
+  it('seedDefaultTypeTemplate writes nothing when the read is unprovable', async () => {
+    storage.getItem.mockRejectedValue(new Error('storage down'));
+    expect(await seedDefaultTypeTemplate(CTX, ME)).toBe('failed');
+    expect(storage.setItem).not.toHaveBeenCalled();
   });
 });
