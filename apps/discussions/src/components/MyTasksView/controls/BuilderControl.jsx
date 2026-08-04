@@ -15,7 +15,7 @@ import styles from './builder.module.css';
  * stays generic (pill + chrome + open/close + segment coordination).
  */
 export function BuilderControl({
-  icon: Icon, label, badge = null, applied = false,
+  icon: Icon, label, badge: _badge = null, applied = false,
   title, onClear, onSave, width = 360, mobile = false, renderBody,
 }) {
   const [open, setOpen] = useState(false);

@@ -246,7 +246,7 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     } finally {
       if (reqId === reqIdRef.current) setLoading(false);
     }
-  }, [subTab, userId, search, configured, cacheKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [subTab, userId, search, configured, cacheKey]);  
 
   useEffect(() => {
     fetchPage();

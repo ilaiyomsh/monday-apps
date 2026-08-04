@@ -85,7 +85,7 @@ export const useUiErrorSink = ({ showToast }) => {
             // בליעה שקטה מכוונת וייחודית: זהו ה-sink עצמו — רישום מתוכו היה יוצר
             // רקורסיה דרך emit (בדיוק מה שה-guard מונע). ה-try/catch ב-dispatchToSinks
             // מדווח כשלי-sink ל-console הגולמי.
-            // eslint-disable-next-line no-restricted-syntax
+             
             } catch {
                 // ראו הערה מעל ה-catch
             } finally {
@@ -111,7 +111,7 @@ export const useUiErrorSink = ({ showToast }) => {
 
         return unsubscribe;
         // ריצה פעם אחת ב-mount — ה-handler קורא דרך refs טריים
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, []);
 };
 

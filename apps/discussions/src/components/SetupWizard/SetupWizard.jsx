@@ -52,7 +52,7 @@ function optionsForField(field, boardColumns) {
 /*
  * First-run setup wizard. Shown by SettingsGate when settings are empty
  * (isConfigured === false). Offers two paths:
- *   - "צור לוחות אוטומטית" → provisionAllBoards() builds the 3 boards + columns
+ *   - "צור לוחות אוטומטית" → provisionAllBoards() builds the 4 boards + columns
  *     and persists the resulting mapping via updateSettings(). When that lands,
  *     isConfigured flips true and the gate unmounts the wizard automatically.
  *   - "מיפוי ידני" → onManual(), which hands off to the existing SettingsModal.

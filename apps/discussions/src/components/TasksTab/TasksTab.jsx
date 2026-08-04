@@ -113,7 +113,6 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     addFilterRow, removeFilterRow, retargetFilterRow, clearFilter,
   } = useFilterBuilder({ columns: TASKS_FILTER_COLUMNS, defaultRows: ['status'], savedView });
   const [selectedIds, setSelectedIds] = useState(() => new Set());
-  const [deleting, setDeleting] = useState(false);
   const { colorById, labelById, orderById, doneId, options: statusOptions } = useStatusOptions();
   const { isMobile } = useViewport();
 
@@ -312,7 +311,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     [selectedIds, allow]
   );
   const deleteSelectedTasks = () => {
-    if (deletableSelectedIds.length === 0 || deleting) return;
+    if (deletableSelectedIds.length === 0) return;
     const ids = deletableSelectedIds;
     setSelectedIds(new Set());
     // Deferred delete: rows vanish now, the real delete fires after the undo
@@ -501,7 +500,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
       </div>
 
       <SelectionActionBar count={selectedIds.size} onClear={clearSelection} ariaLabel="פעולות על משימות נבחרות">
-        <Button kind={"secondary"} size={"small"} loading={deleting} disabled={deleting || deletableSelectedIds.length === 0} onClick={deleteSelectedTasks}>
+        <Button kind={"secondary"} size={"small"} disabled={deletableSelectedIds.length === 0} onClick={deleteSelectedTasks}>
           מחיקה
         </Button>
       </SelectionActionBar>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 
 // Round-75 audit fix E1: useDiscussions fetch/loadMore failures must route to
 // the logger funnel (toast + dedup), NEVER to console.error (invisible to the

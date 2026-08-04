@@ -1004,14 +1004,17 @@
   top: 50%;
   transform: translateY(-50%);
   width: 4px;
-  height: 20px;
+  /* round336 — the rail tracks the row: 20→22 at rest and 26→28 selected, so it
+     keeps the same share of a 40px row that it had of the old ~37px one instead of
+     shrinking visually as the row grew. */
+  height: 22px;
   border-radius: 3px;
   flex-shrink: 0;
   pointer-events: none;
   transition: height var(--motion-productive-short, 0.15s) ease;
 }
 .itemSelected .rail {
-  height: 26px;
+  height: 28px;
 }
 
 .itemName {
@@ -1022,6 +1025,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
+  /*
+   * round336 (owner request, option A of the density mockup) — the line box is
+   * PINNED to 20px. Until now `line-height` was simply unset here, so the row's
+   * height came from whatever the loaded font's own metrics happened to give
+   * (~17-19px) — 10-15% tighter than the design system says, and NOT stable:
+   * Figtree and Noto Sans Hebrew have different metrics, so a Hebrew name and a
+   * Latin one sat in line boxes of different heights.
+   *
+   * 20px is not a free choice. Vibe pairs every body size with one fixed line
+   * height — `--font-text2-normal` is `400 14px/20px` — and 14px is already the
+   * size a monday board cell uses. So this closes the gap to the design system
+   * without touching the size the owner is happy with, and takes the row from
+   * ~37px to a deterministic 40px (10 + 20 + 10).
+   *
+   * `.itemDate` carries the same 20px, so the two never sit on different baselines.
+   */
+  line-height: 20px;
   /* round134 — regular weight at rest; the SELECTED row's name is what gets
      the emphasis (see below), so the list reads calmer. */
   font-weight: 400;
@@ -1049,6 +1069,9 @@
    * little earlier; nothing overflows.
    */
   font-size: 14px;
+  /* round336 — same pinned 20px line box as `.itemName`, so name and timestamp
+     share one baseline and neither one alone decides the row's height. */
+  line-height: 20px;
   color: var(--placeholder-color, #9699a6);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
