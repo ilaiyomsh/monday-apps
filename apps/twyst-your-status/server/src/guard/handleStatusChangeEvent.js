@@ -125,6 +125,18 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, bypassL
       return;
     }
 
+    // Board reads (labels, item values, the cell re-read) and the revert are
+    // BOARD-scoped, and OAuth board visibility is per user. The account reader is
+    // whichever owner authorized last — it may not see this column's board. The
+    // PRIMARY OWNER configured this column, so their token can read its board;
+    // use it for every board-scoped call, falling back to the reader only when
+    // the primary owner has not authorized. (getRules above is APP storage —
+    // account-scoped — so the reader is always fine there.)
+    const primaryToken = primaryOwnerId !== null
+      ? await tokenStore.getOwnerToken(accountId, primaryOwnerId)
+      : null;
+    const boardReadToken = primaryToken ?? readToken;
+
     const targetRule = rules.labels?.[newLabelId ?? '5'] ?? {};
     const peopleColumnIds = Array.isArray(targetRule.requiredPeopleColumnIds)
       ? targetRule.requiredPeopleColumnIds
@@ -133,15 +145,15 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, bypassL
       ? targetRule.requiredColumnIds
       : [];
 
-    const labels = await api.getColumnLabels(readToken, boardId, columnId);
+    const labels = await api.getColumnLabels(boardReadToken, boardId, columnId);
     const teamIds = rulesNameTeams(rules)
-      ? await api.getUserTeamIds(readToken, actingUserId)
+      ? await api.getUserTeamIds(boardReadToken, actingUserId)
       : [];
 
     let peopleByColumnId = {};
     let requiredFieldValues = requiredColumnIds.length > 0 ? [] : null;
     if (peopleColumnIds.length > 0 || requiredColumnIds.length > 0) {
-      const itemContext = await api.getItemGuardContext(readToken, itemId, {
+      const itemContext = await api.getItemGuardContext(boardReadToken, itemId, {
         peopleColumnIds,
         requiredColumnIds,
       });
@@ -175,13 +187,14 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, bypassL
     const autoRevert = rules.autoRevert === true;
     let reverted = false;
     if (autoRevert && primaryOwnerId !== null) {
-      const primaryToken = await tokenStore.getOwnerToken(accountId, primaryOwnerId);
+      // primaryToken was resolved above (board-read identity). No token → the
+      // primary owner has not authorized: cannot attribute a revert to them.
       if (!primaryToken) {
         logger.warn('auto-revert on, but primary owner has not authorized the guard', TAG, {
           accountId, boardId, itemId, columnId, primaryOwnerId,
         });
       } else {
-        const currentLabelId = await api.getCurrentStatusLabelId(readToken, itemId, columnId);
+        const currentLabelId = await api.getCurrentStatusLabelId(boardReadToken, itemId, columnId);
         if (currentLabelId === newLabelId) {
           // Mark the echo BEFORE writing: monday fires the change event for our
           // own revert, authored by the primary owner, carrying previousLabelId.

@@ -215,7 +215,9 @@ describe('createStatusChangeHandler', () => {
 
     expect(deps.evaluate).toHaveBeenCalledTimes(1);
     expect(deps.bypassLog.append).not.toHaveBeenCalled();
-    expect(deps.tokenStore.getOwnerToken).not.toHaveBeenCalled();
+    // The primary owner's token is fetched to READ the board (board-read identity),
+    // but an allowed change is never re-read or reverted.
+    expect(deps.tokenStore.getOwnerToken).toHaveBeenCalledWith(ACCOUNT, PRIMARY_OWNER_ID);
     expect(deps.api.getCurrentStatusLabelId).not.toHaveBeenCalled();
     expectNoIntervention(deps);
   });
@@ -228,7 +230,6 @@ describe('createStatusChangeHandler', () => {
     await handle(makeEvent());
 
     expect(deps.bypassLog.append).not.toHaveBeenCalled();
-    expect(deps.tokenStore.getOwnerToken).not.toHaveBeenCalled();
     expectNoIntervention(deps);
     expect(deps.logger.warn).toHaveBeenCalled();
   });
@@ -262,8 +263,9 @@ describe('createStatusChangeHandler', () => {
       reverted: false,
     });
 
-    // Monitoring means: no owner identity, no write, no ping.
-    expect(deps.tokenStore.getOwnerToken).not.toHaveBeenCalled();
+    // Monitoring records but never writes: the owner token is fetched to READ
+    // the board, but there is no revert and no notification.
+    expect(deps.tokenStore.getOwnerToken).toHaveBeenCalledWith(ACCOUNT, PRIMARY_OWNER_ID);
     expectNoIntervention(deps);
   });
 
@@ -280,10 +282,10 @@ describe('createStatusChangeHandler', () => {
     expect(deps.tokenStore.getOwnerToken).toHaveBeenCalledTimes(1);
     expect(deps.tokenStore.getOwnerToken.mock.calls[0]).toEqual([ACCOUNT, PRIMARY_OWNER_ID]);
 
-    // The current-cell re-read uses the READER token.
+    // The current-cell re-read is board-scoped → the primary owner's token.
     expect(deps.api.getCurrentStatusLabelId).toHaveBeenCalledTimes(1);
     const [readToken, readItemId, readColumnId] = deps.api.getCurrentStatusLabelId.mock.calls[0];
-    expect(readToken).toBe(READER_TOKEN);
+    expect(readToken).toBe(OWNER_TOKEN);
     expect(String(readItemId)).toBe('777');
     expect(readColumnId).toBe('status_col');
 
@@ -370,7 +372,7 @@ describe('createStatusChangeHandler', () => {
 
     expect(deps.tokenStore.getOwnerToken).toHaveBeenCalledTimes(1);
     expect(deps.api.getCurrentStatusLabelId).toHaveBeenCalledTimes(1);
-    expect(deps.api.getCurrentStatusLabelId.mock.calls[0][0]).toBe(READER_TOKEN);
+    expect(deps.api.getCurrentStatusLabelId.mock.calls[0][0]).toBe(OWNER_TOKEN);
     expectNoIntervention(deps);
     expect(deps.bypassLog.append).toHaveBeenCalledTimes(1);
     expect(appendedRecord(deps)).toMatchObject({ reverted: false });
@@ -522,21 +524,21 @@ describe('createStatusChangeHandler', () => {
 
     await handle(makeEvent());
 
-    // Item context: READER token + the demanded selector.
+    // Item context: board-scoped → the primary owner's token + the demanded selector.
     expect(deps.api.getItemGuardContext).toHaveBeenCalledTimes(1);
     const [ctxToken, ctxItemId, ctxSelector] = deps.api.getItemGuardContext.mock.calls[0];
-    expect(ctxToken).toBe(READER_TOKEN);
+    expect(ctxToken).toBe(OWNER_TOKEN);
     expect(String(ctxItemId)).toBe('777');
     expect(ctxSelector).toEqual({ peopleColumnIds: ['p'], requiredColumnIds: ['d'] });
 
-    // Actor teams: READER token + the actor's user id.
+    // Actor teams: board-scoped → the primary owner's token + the actor's user id.
     expect(deps.api.getUserTeamIds).toHaveBeenCalledTimes(1);
     const [teamToken, teamUserId] = deps.api.getUserTeamIds.mock.calls[0];
-    expect(teamToken).toBe(READER_TOKEN);
+    expect(teamToken).toBe(OWNER_TOKEN);
     expect(String(teamUserId)).toBe('41');
 
-    // Column labels: READER token.
-    expect(deps.api.getColumnLabels.mock.calls[0][0]).toBe(READER_TOKEN);
+    // Column labels: board-scoped → the primary owner's token.
+    expect(deps.api.getColumnLabels.mock.calls[0][0]).toBe(OWNER_TOKEN);
 
     // Everything threaded into ONE evaluate input.
     expect(deps.evaluate).toHaveBeenCalledTimes(1);
