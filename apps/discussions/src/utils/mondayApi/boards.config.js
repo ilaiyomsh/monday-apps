@@ -878,6 +878,54 @@ export const DEFAULT_PERMISSION_SEED = {
   },
 };
 
+/**
+ * Fill in capability keys a stored roles map has never heard of, from the seed.
+ *
+ * round340 (PR review, P1 — a real hole) — adding a capability to the catalog is not
+ * enough for an instance that already stored a `permissions.roles` map: that map has no
+ * entry for the new id, and an ABSENT value is not a denial. The resolver falls through
+ * to `CAPABILITY_DEFAULTS`, and for an ITEM-tier capability the 'creatorLeadOwner' bucket
+ * resolves via `isItemSelfRole`, which scans every role source of that board — including
+ * the very role the new seed entry denies.
+ *
+ * Concretely, that inverted `editDecisionTracking`: `decisions:affectedID` is seeded to
+ * `false`, but on an existing instance the key was missing, the default bucket saw the
+ * user in the decision's `affectedID` column, and an affected-only user could edit
+ * decision tracking — exactly what the owner asked to remove. The disc tier does not
+ * leak this way (its bucket asks `isCreatorOrLead(discussion)`, which a participant
+ * fails), but relying on that distinction per capability is not a design.
+ *
+ * Two rules make this safe to run on every load:
+ *   1. only keys that are `undefined` are added — a stored `true` OR `false` is the
+ *      owner's answer and is never touched;
+ *   2. only role keys the stored map ALREADY has are touched. Adding missing ROLES is a
+ *      separate concern (PermissionsTab does it), because a role the instance never had
+ *      should appear with its whole seed at once, not be half-created here.
+ *
+ * Pure, and returns the SAME object when there is nothing to add so callers can use
+ * identity to avoid pointless re-renders / re-writes.
+ *
+ * @param {object|null|undefined} roles settings.permissions.roles
+ */
+export function backfillSeedCapabilities(roles) {
+  if (!roles || typeof roles !== 'object') return roles;
+  let touched = false;
+  const out = {};
+  for (const [roleKey, role] of Object.entries(roles)) {
+    const seedCaps = DEFAULT_PERMISSION_SEED[roleKey]?.capabilities;
+    if (!seedCaps) { out[roleKey] = role; continue; }
+    const caps = { ...(role?.capabilities || {}) };
+    let roleTouched = false;
+    for (const [capId, seeded] of Object.entries(seedCaps)) {
+      if (caps[capId] === undefined) { caps[capId] = seeded; roleTouched = true; }
+    }
+    if (!roleTouched) { out[roleKey] = role; continue; }
+    out[roleKey] = { ...role, capabilities: caps };
+    touched = true;
+  }
+  return touched ? out : roles;
+}
+
 // Maps the SDK class name used in the exported code -> a board key above.
 export const BOARD_CLASS_TO_KEY = {
   'דיונים1Board': 'discussions',

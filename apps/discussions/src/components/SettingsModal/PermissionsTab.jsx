@@ -11,6 +11,7 @@ import {
   DEFAULT_PERMISSION_SEED,
   DEFAULT_PERMISSIONS,
   PERMISSION_ROLE_SOURCES,
+  backfillSeedCapabilities,
 } from '../../utils/mondayApi/boards.config.js';
 import {
   getPeopleColumns,
@@ -146,39 +147,30 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
       const missingSeedKeys = needsSeed
         ? []
         : Object.keys(DEFAULT_PERMISSION_SEED).filter((k) => !prev.roles[k]);
-      // Per-CAPABILITY backfill (round209/round212): capability ids added to the
-      // catalog AFTER an instance stored its roles are seeded into the EXISTING
-      // role rows so the cells reflect the live default. Only wholly-ABSENT keys
-      // are added — an owner's explicit true/false is never touched.
-      const NEW_CAPS = [
-        'viewReferencesBox', 'viewSummaryBox', 'writeBackground', 'writeReferences',
-        // round340 — the after-discussed halves of topic/point edit+delete, and
-        // מעקב החלטה, which was split off editDecisionStatus. Without these three
-        // listed here an instance that already stored a roles map would show the new
-        // rows permanently blank and silently fall back to CAPABILITY_DEFAULTS.
-        'editTopicOrPointDiscussed', 'deleteTopicOrPointDiscussed', 'editDecisionTracking',
-      ];
-      const capBackfill = needsSeed
-        ? []
-        : Object.keys(DEFAULT_PERMISSION_SEED).filter((k) => {
-          if (!prev.roles[k]) return false;
-          const seedCaps = DEFAULT_PERMISSION_SEED[k]?.capabilities || {};
-          return NEW_CAPS.some((c) => c in seedCaps && prev.roles[k]?.capabilities?.[c] === undefined);
-        });
-      if (prev?.enabled === true && !needsSeed && !missingSeedKeys.length && !capBackfill.length) return prev;
+      /*
+       * Per-CAPABILITY backfill (round209/round212): capability ids added to the catalog
+       * AFTER an instance stored its roles are seeded into the EXISTING role rows so the
+       * cells reflect the live default. Only wholly-ABSENT keys are added — an owner's
+       * explicit true/false is never touched.
+       *
+       * round340 (PR review, P1) — this used to be a HAND-MAINTAINED `NEW_CAPS` list, and
+       * that list was the bug: forgetting to add a new id left the matrix row blank and,
+       * worse, left the resolver falling through to CAPABILITY_DEFAULTS at runtime. It is
+       * now the shared `backfillSeedCapabilities`, the same rule SettingsContext applies
+       * on load, so there is ONE definition of "a capability the stored map predates" and
+       * no list to keep in sync. What stays local here is adding missing ROLE keys, which
+       * only the owner UI should do.
+       */
+      const backfilled = needsSeed ? prev.roles : backfillSeedCapabilities(prev.roles);
+      const capBackfillNeeded = !needsSeed && backfilled !== prev.roles;
+      if (prev?.enabled === true && !needsSeed && !missingSeedKeys.length && !capBackfillNeeded) return prev;
       const next = { ...DEFAULT_PERMISSIONS, ...prev, enabled: true };
       if (needsSeed) {
         next.roles = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED));
-      } else if (missingSeedKeys.length || capBackfill.length) {
-        next.roles = { ...prev.roles };
+      } else if (missingSeedKeys.length || capBackfillNeeded) {
+        next.roles = { ...backfilled };
         for (const k of missingSeedKeys) {
           next.roles[k] = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED[k]));
-        }
-        for (const k of capBackfill) {
-          const seedCaps = DEFAULT_PERMISSION_SEED[k]?.capabilities || {};
-          const caps = { ...(next.roles[k]?.capabilities || {}) };
-          NEW_CAPS.forEach((c) => { if (c in seedCaps && caps[c] === undefined) caps[c] = seedCaps[c]; });
-          next.roles[k] = { ...next.roles[k], capabilities: caps };
         }
       }
       return next;

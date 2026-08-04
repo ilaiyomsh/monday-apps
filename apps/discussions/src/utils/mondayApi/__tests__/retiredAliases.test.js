@@ -5,9 +5,12 @@ import {
   COLUMN_SCHEMA,
   PERMISSION_ROLE_SOURCES,
   DEFAULT_PREFERENCES,
+  DEFAULT_PERMISSION_SEED,
   PREVIOUS_TASKS_MODES,
   resolvePreference,
+  backfillSeedCapabilities,
 } from '../boards.config.js';
+import { resolveCan } from '../../../hooks/usePermission.js';
 
 /*
  * round340 (owner request, fresh-account install) — retiring a column alias, and the
@@ -185,5 +188,105 @@ describe('resolvePreference — the defaults are actually REACHABLE', () => {
   it('treats null and an empty string as unset', () => {
     expect(resolvePreference({ previousTasksMode: null }, 'previousTasksMode')).toBe(PREVIOUS_TASKS_MODES.AUTO);
     expect(resolvePreference({ previousTasksMode: '' }, 'previousTasksMode')).toBe(PREVIOUS_TASKS_MODES.AUTO);
+  });
+});
+
+
+/*
+ * round340 (PR review, P1) — backfilling capability keys a stored roles map predates.
+ *
+ * The review was right and the hole was real. Adding a capability to the catalog does not
+ * reach an instance that already stored `permissions.roles`: the key is simply ABSENT
+ * there, and absent is NOT a denial. `resolveCan` falls through to CAPABILITY_DEFAULTS,
+ * and for an ITEM-tier capability the 'creatorLeadOwner' bucket resolves through
+ * `isItemSelfRole`, which scans EVERY role source of that board — including the role the
+ * new seed entry denies. So `editDecisionTracking: false` on `decisions:affectedID`
+ * resolved to ALLOW for an affected-only user: the exact opposite of the request.
+ *
+ * The resolver-level proof is the last test here; the rest pin the merge rules that make
+ * running this on every load safe.
+ */
+describe('backfillSeedCapabilities', () => {
+  // A roles map stored BEFORE round340: the affected role has the old capability set and
+  // has never heard of editDecisionTracking or the *Discussed pair.
+  const legacyRoles = () => ({
+    'decisions:affectedID': {
+      capabilities: {
+        editDecisionStatus: true,
+        editDecisionPriority: false,
+        editDecisionDate: false,
+        editDecisionAffected: false,
+        editDecisionName: false,
+        deleteDecision: false,
+      },
+    },
+    'discussions:participantsID': { capabilities: { viewDiscussion: true, editTopicOrPoint: false } },
+  });
+
+  it('fills a capability the stored map has never seen, from the seed', () => {
+    const out = backfillSeedCapabilities(legacyRoles());
+    expect(out['decisions:affectedID'].capabilities.editDecisionTracking).toBe(false);
+    expect(out['discussions:participantsID'].capabilities.editTopicOrPointDiscussed).toBe(false);
+  });
+
+  /*
+   * The line that keeps this safe to run unconditionally: a stored value is the owner's
+   * answer. `false` is the dangerous case — a `stored || seed` style merge would read it
+   * as unset and silently re-grant something the owner turned off.
+   */
+  it('never overwrites a stored value, true or FALSE', () => {
+    const roles = legacyRoles();
+    roles['decisions:affectedID'].capabilities.editDecisionTracking = true; // owner re-granted it
+    roles['discussions:participantsID'].capabilities.viewDiscussion = false; // owner revoked it
+    const out = backfillSeedCapabilities(roles);
+    expect(out['decisions:affectedID'].capabilities.editDecisionTracking).toBe(true);
+    expect(out['discussions:participantsID'].capabilities.viewDiscussion).toBe(false);
+  });
+
+  // Adding a missing ROLE is a different concern (only the owner UI does it) — a role the
+  // instance never had should arrive with its whole seed at once, not be half-created here.
+  it('does not invent role keys the stored map lacks', () => {
+    const out = backfillSeedCapabilities({ 'decisions:affectedID': { capabilities: {} } });
+    expect(Object.keys(out)).toEqual(['decisions:affectedID']);
+  });
+
+  // A role with no seed entry at all (e.g. an extra people column keyed by raw column id)
+  // passes through untouched rather than throwing.
+  it('passes an unseeded role through untouched', () => {
+    const extra = { 'decisions:some_raw_col': { capabilities: { editDecisionName: true } } };
+    const out = backfillSeedCapabilities(extra);
+    expect(out['decisions:some_raw_col']).toBe(extra['decisions:some_raw_col']);
+  });
+
+  it('returns the SAME object when nothing needs filling, and does not mutate its input', () => {
+    const full = { 'decisions:affectedID': JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED['decisions:affectedID'])) };
+    expect(backfillSeedCapabilities(full)).toBe(full);
+    const input = legacyRoles();
+    const snapshot = JSON.stringify(input);
+    backfillSeedCapabilities(input);
+    expect(JSON.stringify(input)).toBe(snapshot);
+  });
+
+  it('tolerates null / a role with no capabilities object', () => {
+    expect(backfillSeedCapabilities(null)).toBeNull();
+    const out = backfillSeedCapabilities({ 'decisions:affectedID': {} });
+    expect(out['decisions:affectedID'].capabilities.editDecisionTracking).toBe(false);
+  });
+
+  /*
+   * The regression itself, through the REAL resolver rather than the merge helper: an
+   * affected-only user on a pre-round340 roles map. Without the backfill this returns
+   * true, which is the bug the review caught.
+   */
+  it('closes the leak: an affected-only user cannot edit decision tracking on a legacy map', () => {
+    const ME = '7';
+    const decision = { id: 'DC1', decisionCreatorID: [], deciderID: [], affectedID: [{ id: ME }] };
+    const ctx = { item: decision, currentUserId: ME };
+
+    const raw = { enabled: true, version: 1, roles: legacyRoles() };
+    expect(resolveCan('editDecisionTracking', ctx, { permissions: raw, canManageSettings: false })).toBe(true);
+
+    const healed = { ...raw, roles: backfillSeedCapabilities(raw.roles) };
+    expect(resolveCan('editDecisionTracking', ctx, { permissions: healed, canManageSettings: false })).toBe(false);
   });
 });
