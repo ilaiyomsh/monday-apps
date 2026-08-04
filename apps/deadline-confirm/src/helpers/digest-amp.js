@@ -254,21 +254,34 @@ function noteRequiredItemIds(recipient) {
   return ids;
 }
 
+// STRICT amp4email CSS ONLY (docs/amp-email-verified-findings.md §7): the
+// document declares data-css-strict, and Gmail enforces the strict property
+// set even on documents that do not. Consequences baked into these rules:
+//   - No logical properties. dir=rtl is fixed in this document, so the
+//     physical equivalents are exact: inline-start = right, inline-end = left.
+//   - No `filter`, no `pointer-events`. `cursor` is value-restricted to a
+//     tiny set (initial|pointer in current validator rules), so the ONLY
+//     cursor in this document is the base `pointer` — no per-state override.
+//   - `transition` may only animate none|offset-distance|opacity|transform|
+//     visibility (official value regex) — box-shadow is NOT among them, so
+//     the document ships no transition at all; hover/active box-shadow
+//     changes are instant.
+// `npm run validate:amp` checks all of this against the official validator.
 const STYLES_BASE = `
       body { margin:0; padding:14px 10px; background:#F5F6F8; font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif; color:#323338; }
-      .wrap { max-width:720px; margin:0 auto; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; padding:18px; }
+      .wrap { position:relative; max-width:720px; margin:0 auto; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; padding:18px; }
       .hi { font-size:18px; font-weight:bold; margin:0 0 6px; }
       .lead { font-size:14px; color:#676879; line-height:1.6; margin:0 0 18px; }
       .cluster { margin:0 0 22px; }
       .cluster-title { font-size:15px; font-weight:bold; color:#323338; margin:0 0 8px; line-height:1.4; }
       table.board { width:100%; border-collapse:collapse; background:#ffffff; border:1px solid #E6E9EF; }
-      th { font-size:12px; color:#676879; font-weight:500; text-align:center; padding:8px; border-bottom:1px solid #E6E9EF; border-inline-end:1px solid #D0D4E4; background:#FAFBFC; white-space:nowrap; }
+      th { font-size:12px; color:#676879; font-weight:500; text-align:center; padding:8px; border-bottom:1px solid #E6E9EF; border-left:1px solid #D0D4E4; background:#FAFBFC; white-space:nowrap; }
       th.name-h { text-align:right; }
       th.status-h { min-width:200px; }
-      th:last-child { border-inline-end:none; }
-      td { font-size:14px; font-weight:normal; padding:0 8px; border-bottom:1px solid #E6E9EF; border-inline-end:1px solid #D0D4E4; vertical-align:middle; height:44px; text-align:center; }
-      td:last-child { border-inline-end:none; }
-      td.name { text-align:right; padding-inline-start:12px; white-space:nowrap; }
+      th:last-child { border-left:none; }
+      td { font-size:14px; font-weight:normal; padding:0 8px; border-bottom:1px solid #E6E9EF; border-left:1px solid #D0D4E4; vertical-align:middle; height:44px; text-align:center; }
+      td:last-child { border-left:none; }
+      td.name { text-align:right; padding-right:12px; white-space:nowrap; }
       td.date { color:#676879; font-size:13px; white-space:nowrap; }
       td.dd-cell { padding:8px; width:220px; vertical-align:middle; text-align:right; }
       .dd-wrap { position:relative; display:inline-block; width:200px; max-width:100%; text-align:right; }
@@ -280,7 +293,7 @@ const STYLES_BASE = `
         background:${NEUTRAL_STATUS};
       }
       .dd-menu {
-        position:absolute; top:100%; inset-inline-end:0; z-index:20;
+        position:absolute; top:100%; left:0; z-index:20;
         width:200px; margin-top:4px; padding:8px; box-sizing:border-box;
         background:#ffffff; border:1px solid #E6E9EF; border-radius:8px;
         box-shadow:0 10px 25px rgba(0,0,0,0.15);
@@ -292,21 +305,28 @@ const STYLES_BASE = `
         font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
       }
       .dd-opt:last-child { margin-bottom:0; }
+      /* Tap-away catcher. Fixed positioning is outside the strict set, so the
+         overlay is absolute inside the position:relative .wrap card — it
+         covers the card (where every interactive element lives), not the
+         viewport, which is an acceptable trade. */
       .dd-overlay {
-        position:fixed; top:0; right:0; bottom:0; left:0; z-index:10;
+        position:absolute; top:0; right:0; bottom:0; left:0; z-index:10;
         background:transparent;
       }
       .go { margin:8px 0 4px; }
-      .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; cursor:pointer; transition:filter .12s ease, box-shadow .12s ease; }
-      /* Hover affordance. amp4email permits :hover; clients that ignore it
-         simply render the base state, so this degrades to today's behaviour. */
-      .dd-trig:hover, .dd-opt:hover { filter:brightness(1.08); box-shadow:0 1px 4px rgba(0,0,0,0.18); }
-      .send:hover { filter:brightness(1.08); box-shadow:0 2px 6px rgba(0,0,0,0.2); }
-      .dd-trig:active, .dd-opt:active, .send:active { filter:brightness(0.94); }
+      .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; cursor:pointer; }
+      /* Hover/active affordance is box-shadow ONLY — filter is outside the
+         strict set. amp4email permits :hover; clients that ignore it simply
+         render the base state, so this degrades to today's behaviour. */
+      .dd-trig:hover, .dd-opt:hover { box-shadow:0 1px 4px rgba(0,0,0,0.18); }
+      .send:hover { box-shadow:0 2px 6px rgba(0,0,0,0.2); }
+      .dd-trig:active, .dd-opt:active, .send:active { box-shadow:inset 0 2px 4px rgba(0,0,0,0.22); }
       /* In-flight state. amp-form stamps these classes on the <form> itself, so
-         no binding is needed and it cannot desync from the actual request. */
-      form.amp-form-submitting .send { opacity:0.55; cursor:progress; filter:none; box-shadow:none; }
-      form.amp-form-submitting .dd-trig, form.amp-form-submitting .dd-opt { pointer-events:none; opacity:0.75; }
+         no binding is needed and it cannot desync from the actual request.
+         Strict set: no cursor override (value-restricted), no input-freeze
+         property — the dropdown freeze is dropped (accepted), the dim stays. */
+      form.amp-form-submitting .send { opacity:0.55; box-shadow:none; }
+      form.amp-form-submitting .dd-trig, form.amp-form-submitting .dd-opt { opacity:0.75; }
       .sending { margin-top:10px; font-size:13px; color:#676879; }
       .ok { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#E6F7EF; color:#00754A; font-size:13px; }
       .err { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#FDECEE; color:#B4222F; font-size:13px; white-space:pre-wrap; word-break:break-word; }
@@ -330,8 +350,11 @@ const STYLES_NOTES = `
       /* Bound class: a marked row with an empty note is the ONLY thing holding
          the submit button down, so it has to be findable at a glance. */
       .note-in.note-missing { border-color:#E2445C; background:#FDECEE; }
-      /* The submit's disabled state is bound, so this styles the gate itself. */
-      .send[disabled] { opacity:0.45; cursor:not-allowed; filter:grayscale(1); box-shadow:none; }
+      /* The submit's disabled state is bound, so this styles the gate itself.
+         Strict set: no filter, no cursor override. Opacity is what greys the
+         button — its background is an inline style, which no class rule can
+         beat without !important, and AMP forbids !important. */
+      .send[disabled] { opacity:0.45; box-shadow:none; }
 `;
 
 /**
@@ -567,7 +590,7 @@ export function renderDigestAmp({
     : '';
 
   return `<!doctype html>
-<html amp4email lang="he">
+<html amp4email data-css-strict lang="he">
   <head>
     <meta charset="utf-8">
     <script async src="https://cdn.ampproject.org/v0.js"></script>
@@ -579,9 +602,9 @@ export function renderDigestAmp({
   </head>
   <body dir="rtl">
     <amp-state id="dd"><script type="application/json">${JSON.stringify(ddState)}</script></amp-state>
-    <div class="dd-overlay" hidden [hidden]="dd.o == ''" role="button" tabindex="0"
-         on="tap:AMP.setState({dd:{o:''}})"></div>
     <div class="wrap">
+      <div class="dd-overlay" hidden [hidden]="dd.o == ''" role="button" tabindex="0"
+           on="tap:AMP.setState({dd:{o:''}})"></div>
       <p class="hi">&#8207;שלום ${escapeHtml(recipient.name)},</p>
       <p class="lead">&#8207;לחצו על תגית הסטטוס לבחירה מהתפריט הנפתח, ואז על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
       ${noteHint}

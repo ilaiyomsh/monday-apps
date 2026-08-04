@@ -128,10 +128,12 @@ const render = (recipient = RECIPIENT) =>
   });
 
 describe('renderDigestAmp — amp4email document validity', () => {
-  it('opens with the doctype and the amp4email html tag', () => {
+  it('opens with the doctype and the strict-CSS amp4email html tag', () => {
     const doc = render();
     expect(doc.startsWith('<!doctype html>')).toBe(true);
-    expect(doc).toContain('<html amp4email');
+    // data-css-strict is load-bearing: without it the validator hides the
+    // strict-CSS rules that Gmail enforces regardless (findings doc §7).
+    expect(doc).toContain('<html amp4email data-css-strict lang="he">');
   });
 
   it('puts <meta charset="utf-8"> as the first child of <head>', () => {
@@ -325,6 +327,75 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).not.toContain('name="k"');
     expect(doc).not.toContain(`value="${SECRET}"`);
     expect(doc).toContain(`action-xhr="${BASE}/amp/confirm"`);
+  });
+});
+
+// Strict amp4email CSS (docs/amp-email-verified-findings.md §7): Gmail enforces
+// the strict property set whether or not the document declares it, so the
+// document declares data-css-strict and every rule stays inside the set.
+// dir=rtl is fixed in this document, so physical properties are safe stand-ins
+// for the logical ones (inline-start = right, inline-end = left).
+describe('renderDigestAmp — strict amp4email CSS (data-css-strict)', () => {
+  it('declares data-css-strict on the html tag', () => {
+    expect(render()).toContain('<html amp4email data-css-strict');
+  });
+
+  it('emits no property outside the strict set (logical props, filter, pointer-events, fixed, cursor:progress)', () => {
+    const doc = render();
+    expect(doc).not.toMatch(/border-inline|padding-inline|inset-inline/);
+    expect(doc).not.toMatch(/filter\s*:/);
+    expect(doc).not.toContain('pointer-events');
+    expect(doc).not.toContain('position:fixed');
+    expect(doc).not.toContain('cursor:progress');
+    expect(doc).not.toContain('cursor:not-allowed');
+  });
+
+  it('pins the physical replacements for the old logical properties', () => {
+    const doc = render();
+    // th/td cell separators: inline-end under dir=rtl is the LEFT edge.
+    expect(doc).toContain('border-left:1px solid #D0D4E4');
+    expect(doc).toMatch(/th:last-child \{ border-left:none; \}/);
+    expect(doc).toMatch(/td:last-child \{ border-left:none; \}/);
+    // td.name padding-inline-start under dir=rtl is padding-RIGHT.
+    expect(doc).toMatch(/td\.name \{[^}]*padding-right:12px/);
+    // .dd-menu inset-inline-end under dir=rtl is left:0.
+    expect(doc).toMatch(/\.dd-menu \{[^}]*left:0/);
+    // transition may only animate none|offset-distance|opacity|transform|
+    // visibility (official value regex) — box-shadow is out too, so the
+    // document carries NO transition at all.
+    expect(doc).not.toMatch(/transition\s*:/);
+    // cursor is restricted to a tiny value set; pointer is the only value
+    // that is inside every published revision of it, so it is the only
+    // cursor this document uses.
+    expect(doc).not.toMatch(/cursor:(?!pointer)/);
+  });
+
+  it('anchors the tap-away overlay to the relatively-positioned card, not the viewport', () => {
+    const doc = render();
+    expect(doc).toMatch(/\.wrap \{[^}]*position:relative/);
+    expect(doc).toMatch(/\.dd-overlay \{[^}]*position:absolute/);
+    // absolute positioning only covers the card if the overlay sits INSIDE it.
+    expect(doc.indexOf('class="wrap"')).toBeLessThan(doc.indexOf('class="dd-overlay"'));
+  });
+
+  it('keeps the in-flight and disabled affordances inside the strict set', () => {
+    const doc = render();
+    expect(doc).toMatch(/form\.amp-form-submitting \.send \{ opacity:0\.55; box-shadow:none; \}/);
+    // The dropdown freeze (pointer-events) is gone by decision; the dim stays.
+    expect(doc).toMatch(
+      /form\.amp-form-submitting \.dd-trig, form\.amp-form-submitting \.dd-opt \{ opacity:0\.75; \}/
+    );
+    // Disabled submit (note gate): opacity greys the inline background — a bg
+    // class cannot beat an inline style without !important, which AMP forbids.
+    const noted = {
+      ...RECIPIENT,
+      sections: [
+        { ...RECIPIENT.sections[0], noteColumnId: 'text_note', noteColumnTitle: 'הערה' },
+      ],
+    };
+    const withNotes = render(noted);
+    expect(withNotes).toMatch(/\.send\[disabled\] \{ opacity:0\.45; box-shadow:none; \}/);
+    expect(withNotes).not.toContain('grayscale');
   });
 });
 

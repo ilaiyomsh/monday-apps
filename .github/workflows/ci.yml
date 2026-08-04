@@ -95,6 +95,60 @@ jobs:
       - name: error-kit tests + drift (blocking)
         run: pnpm --filter @mapps/error-kit test
 
+  # amp4email document validation (deadline-confirm). Gmail answers a dynamic
+  # part it refuses with `INTERNAL_ERROR` — a documented catch-all with no
+  # content — so an invalid document and a rejected envelope are
+  # indistinguishable from the inbox. The official validator names the rule and
+  # the line, which is the only way to tell them apart before sending.
+  #
+  # The exit code is the contract (see apps/deadline-confirm/scripts/validate-amp.mjs):
+  #   1 = a document is INVALID → a real defect, this job FAILS.
+  #   3 = the validator itself could not be fetched (it loads from
+  #       cdn.ampproject.org) → nothing was assessed. Reported, never fatal:
+  #       failing here would couple every PR in the monorepo to an external CDN.
+  # Separate job so a CDN outage cannot stall the blocking type-check/lint/build.
+  amp4email:
+    name: amp4email document validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Invoked as plain `node`, NOT through a package-manager runner: the exit
+      # code must arrive unmodified for the 1-vs-3 distinction to survive.
+      - name: Validate rendered amp4email documents
+        run: |
+          set +e
+          node apps/deadline-confirm/scripts/validate-amp.mjs
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "✅ Every rendered amp4email sample is valid." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$code" -eq 3 ]; then
+            echo "⚠️ SKIPPED — the AMP validator could not be fetched from cdn.ampproject.org." >> "$GITHUB_STEP_SUMMARY"
+            echo "Nothing was validated; this is infrastructure, not a verdict on the documents." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "❌ A rendered amp4email document is INVALID (read the log above for rule + line)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Gmail would answer this with an opaque INTERNAL_ERROR, so do not ship it." >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
+
   # Visibility-only test job (owner decision 2026-07-12): runs the full
   # workspace test suites and reports the outcome in the job summary, but
   # never fails the check — tracker carries 2 known-red deferred tests
