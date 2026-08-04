@@ -366,6 +366,11 @@ const STYLES_NOTES = `
          button — its background is an inline style, which no class rule can
          beat without !important, and AMP forbids !important. */
       .send[disabled] { opacity:0.45; box-shadow:none; }
+      /* A status trigger locked until its note is typed. Same opacity language
+         as the submit gate, so "locked" reads the same way in both places, and
+         no hover shadow — the row must not look tappable when it is not. */
+      .dd-trig[disabled] { opacity:0.45; box-shadow:none; }
+      .dd-trig[disabled]:hover { box-shadow:none; }
 `;
 
 /**
@@ -378,8 +383,18 @@ const STYLES_NOTES = `
  * @param {Array<{ id: string, label: string, color: string }>} palette all digest buttons (color match)
  * @param {object} task
  * @param {boolean} includeHidden emit the wire hidden input once per item
+ * @param {number} clusterIndex
+ * @param {boolean} noteGated this item owes a note → trigger locked until typed
  */
-function renderLabelDropdown(fieldName, buttons, palette, task, includeHidden, clusterIndex) {
+function renderLabelDropdown(
+  fieldName,
+  buttons,
+  palette,
+  task,
+  includeHidden,
+  clusterIndex,
+  noteGated
+) {
   const id = String(task.itemId);
   // The OPEN/CLOSED key is per CELL, not per item: an item may legitimately
   // appear in two clusters (it is due to start and due to finish), and keying
@@ -413,9 +428,21 @@ function renderLabelDropdown(fieldName, buttons, palette, task, includeHidden, c
     ? `\n              <input type="hidden" name="${fieldName}" value="" [value]="dd.${vKey}">`
     : '';
 
+  // No text, no status (owner decision 2026-08-04). A disabled <button> fires no
+  // click, so `tap:` never runs and the menu cannot be opened — the ONLY way to
+  // express this here: strict amp4email CSS forbids `pointer-events`.
+  //
+  // The STATIC `disabled` is not belt-and-braces, it is the initial state:
+  // amp-bind does not evaluate bindings on load, so a trigger carrying only
+  // `[disabled]` would be tappable until the reader's first state change — which
+  // is precisely the window being closed. n<id> is seeded '' in buildDropdownState.
+  const lock = noteGated
+    ? ` disabled\n                        [disabled]="dd.n${id} == ''"`
+    : '';
+
   return `              <td class="dd-cell">
               <div class="dd-wrap">
-                <button type="button" class="dd-trig ${curCls}"
+                <button type="button" class="dd-trig ${curCls}"${lock}
                         [class]="'dd-trig ' + dd.${cKey}"
                         on="tap:AMP.setState({dd:{o: dd.o == '${idBind}' ? '' : '${idBind}'}})">
                   <span [text]="dd.${lKey}">&#8207;${escapeHtml(curLabel)}</span>
@@ -455,11 +482,19 @@ function renderNoteCell(task, includeName) {
   // Emitted once per item (an item listed in two mapped clusters would
   // otherwise submit the key twice); later cells render read-only-ish twins
   // with no name, which simply do not participate in the submission.
+  //
+  // The state mirror still matters, and now MORE than before: since the status
+  // trigger is locked on `dd.n<id> == ''`, an event that never fires means a
+  // dropdown that never opens. `input-throttled` alone is exactly that failure
+  // (measured above), so `change` — fired when the field is left, and honoured
+  // by Gmail's own dynamic-email samples — is wired beside it. Two events, one
+  // setState: whichever the client implements unlocks the row.
   const name = includeName ? ` name="${escapeHtml(`note_${id}`)}"` : '';
+  const mirror = `AMP.setState({dd:{${nKey}:event.value}})`;
   return `              <td class="note-cell">
                 <input type="text"${name} class="note-in" placeholder="${escapeHtml(NOTE_PLACEHOLDER)}"
                        [class]="dd.${vKey} != '' && dd.${nKey} == '' ? 'note-in note-missing' : 'note-in'"
-                       on="input-throttled:AMP.setState({dd:{${nKey}:event.value}})">
+                       on="change:${mirror};input-throttled:${mirror}">
               </td>`;
 }
 
@@ -500,7 +535,7 @@ function renderClusterTable(section, emittedHidden, palette, clusterIndex, emitt
       return `            <tr>
               <td class="name">&#8207;${escapeHtml(task.name)}</td>
               <td class="date">${formatDate(task.date) || '—'}</td>${noteCell}
-${renderLabelDropdown(fieldName, buttons, palette, task, includeHidden, clusterIndex)}
+${renderLabelDropdown(fieldName, buttons, palette, task, includeHidden, clusterIndex, notesRequired)}
             </tr>`;
     })
     .join('\n');
@@ -614,7 +649,7 @@ export function renderDigestAmp({
   const noteGate = buildNoteGate(recipient);
   const submitBinding = noteGate ? ` [disabled]="${noteGate}"` : '';
   const noteHint = noteGate
-    ? '<p class="lead">&#8207;בשורות שיש בהן שדה טקסט — חובה למלא אותו כדי לסמן את המשימה. כפתור האישור נשאר מנוטרל עד שכל שורה מסומנת מולאה.</p>'
+    ? '<p class="lead">&#8207;בשורות שיש בהן שדה טקסט — קודם ממלאים את השדה. עד שהוא ריק לא ניתן לבחור סטטוס בשורה: תגית הסטטוס נעולה, ומשתחררת ברגע שיש טקסט.</p>'
     : '';
 
   return `<!doctype html>

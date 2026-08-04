@@ -156,3 +156,66 @@ describe('renderDigestAmp — per-task note column', () => {
     expect(html).not.toContain('<b>');
   });
 });
+
+// The status dropdown is CLOSED until the note is typed (owner decision
+// 2026-08-04). Before this, the menu opened unconditionally and the empty note
+// was caught one step later — at the submit gate. Locking the trigger itself
+// makes the order of operations impossible to get wrong: no text, no status.
+//
+// The lock is `[disabled]` on the trigger, and it has to carry the STATIC
+// `disabled` too: amp-bind does not evaluate bindings on load, so a trigger
+// that is only bound would be tappable until the first state change — exactly
+// the window this change closes.
+describe('renderDigestAmp — the status dropdown is gated on the note', () => {
+  /** The trigger <button> tag of one item's dropdown (it binds dd.c<id>). */
+  const triggerFor = (html, id) => {
+    const m = html.match(new RegExp(`<button type="button" class="dd-trig[^>]*dd\\.c${id}[^>]*>`));
+    return m ? m[0] : '';
+  };
+
+  it('binds the trigger disabled to an empty note', () => {
+    const html = render([noteSection()]);
+    expect(triggerFor(html, '9001')).toContain(`[disabled]="dd.n9001 == ''"`);
+  });
+
+  it('ships the trigger disabled from the start — bindings do not run on load', () => {
+    const html = render([noteSection()]);
+    expect(triggerFor(html, '9001')).toMatch(/\sdisabled[\s>]/);
+  });
+
+  it('leaves a cluster with no mapped text column fully interactive', () => {
+    const html = render([plainSection()]);
+    expect(triggerFor(html, '9002')).not.toContain('disabled');
+  });
+
+  it('gates only the mapped cluster when both kinds are in one message', () => {
+    const html = render([noteSection(), plainSection()]);
+    expect(triggerFor(html, '9001')).toContain(`[disabled]="dd.n9001 == ''"`);
+    expect(triggerFor(html, '9002')).not.toContain('disabled');
+  });
+
+  // The gate reads dd.n<id>, and `input-throttled` was measured NOT firing in
+  // Gmail (2026-08-04) — on that event alone the trigger would stay locked
+  // forever. `change` fires when the field is left, so the state has a second,
+  // independent chance to update.
+  it('feeds the note state from `change` as well as input-throttled', () => {
+    const html = render([noteSection()]);
+    expect(html).toContain('change:AMP.setState({dd:{n9001:event.value}})');
+    expect(html).toContain('input-throttled:AMP.setState({dd:{n9001:event.value}})');
+  });
+
+  it('greys the locked trigger so it reads as locked, not broken', () => {
+    const html = render([noteSection()]);
+    expect(html).toContain('.dd-trig[disabled]');
+  });
+
+  it('does not ship the locked-trigger rule to a message with no notes', () => {
+    const html = render([plainSection()]);
+    expect(html).not.toContain('.dd-trig[disabled]');
+  });
+
+  it('tells the reader in the lead text that the field comes first', () => {
+    const html = render([noteSection()]);
+    expect(html).toContain('לא ניתן לבחור סטטוס');
+  });
+});

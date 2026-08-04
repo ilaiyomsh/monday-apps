@@ -119,10 +119,23 @@ src/
 - **Per-task required note (0.12.0):** a digest section MAY map
   `noteColumnId` + `noteColumnTitle` (a TEXT column on the TASKS board). When it
   does, every row of that cluster gets a text field in the AMP table and the task
-  **cannot be marked without it**. Enforcement is in three places and all three
-  matter: `[disabled]` on the submit (UX only — AMP runs in the reader's client),
-  `routes/amp.js` per-item refusal (the authority), and a final guard inside
-  `performAction`. Status + note go out in ONE `change_multiple_column_values`
+  **cannot be marked without it**. Enforcement is in four places and all four
+  matter: **`disabled` + `[disabled]="dd.n<id> == ''"` on the row's status
+  trigger** (owner decision 2026-08-04 — the dropdown does not open at all until
+  the field holds text; the STATIC attribute is the initial state, because
+  amp-bind does not evaluate bindings on load, and `pointer-events` is outside
+  the strict CSS set so `disabled` is the only lever), `[disabled]` on the submit
+  (both UX only — AMP runs in the reader's client), `routes/amp.js` per-item
+  refusal (the authority), and a final guard inside `performAction`. Clearing the
+  field after picking a status is deliberately NOT handled: the selection stays
+  and the submit gate blocks it (owner: ignore).
+  **The lock lives or dies by the `n<id>` state**, which the text input feeds via
+  `on="change:…;input-throttled:…"` — `input-throttled` was measured dead in
+  Gmail (see `renderNoteCell`), so `change` (fires on leaving the field) is what
+  is expected to carry it. If BOTH ever fail in a client, that client's mapped
+  rows are locked shut — verify with a real send (`send-raw` lane) after any
+  change here, and note the wrinkle: the tap that blurs the field only unlocks
+  the trigger, so the reader's first tap may need a second. Status + note go out in ONE `change_multiple_column_values`
   write, so a marked task can never lack its note; the value **overwrites** the
   column. Target column resolves from the SELECTED BUTTON's section (the wire
   carries no cluster identity) — a button shared by two mapped clusters takes the
