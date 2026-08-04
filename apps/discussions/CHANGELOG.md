@@ -10,6 +10,21 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.13.2 — 2026-08-04
+
+round349 — ממצא P1 שעצר שחרור: רשימה ריקה אחרי טעינה איננה הוכחה שהחנות ריקה.
+
+`TemplatesProvider.load` תופס כשלון קריאה, מקבע `typeTemplates = []` **ואז** מכבה
+`loading`. כלומר גם קריאה שנכשלה או שפגה בזמן נראית בדיוק כמו "אין סוגים" — ו-round348,
+שגדר את חלון ה-`loading`, לא כיסה את זה. זריעה דרך ה-provider במצב הזה הייתה כותבת את
+תבנית ברירת המחדל שלנו **מעל הסוגים השמורים** של החשבון, אחרי כשלון חולף אחד.
+
+נוסף `readStoredTypeTemplates(context)` שמחזיר `{ ok, list }`: `ok: false` אומר **לא
+ידוע**, לא "ריק". רשימה **לא ריקה** מה-provider היא הוכחה ונשארת מקור מהיר; רשימה
+**ריקה** מאומתת מול החנות העמידה לפני כל כתיבה, וקריאה שלא הושלמה עוצרת את הזריעה
+לגמרי. `seedDefaultTypeTemplate` עובר דרך אותו primitive, כך ששני הנתיבים חולקים
+הגדרה אחת של "ריק" במקום שתיים שיכולות לא להסכים.
+
 ## 2.13.1 — 2026-08-04
 
 round348 — שני ממצאי ביקורת על הזריעה של round347, שניהם על נתיב ה-top-up.

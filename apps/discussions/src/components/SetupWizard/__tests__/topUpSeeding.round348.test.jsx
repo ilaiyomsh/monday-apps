@@ -163,6 +163,40 @@ describe('round348 — top-up seeds through the mounted provider', () => {
   });
 
   /*
+   * round349 (review finding) — an EMPTY provider list proves nothing. `TemplatesProvider.load`
+   * catches a failed read, commits `[]` and THEN clears `loading`, so "empty after load" also
+   * describes a timeout. Seeding on that assumption overwrites the account's real types after one
+   * transient failure, which is the worst outcome in this whole feature.
+   */
+  it('confirms an empty provider list against durable storage before writing', async () => {
+    withProvider([]);
+    await clickCreate();
+    await waitFor(() => expect(upsertTypeTemplate).toHaveBeenCalled());
+    // the durable store was consulted, and only THEN written through the provider
+    expect(storage.getItem).toHaveBeenCalledWith('discussions_type_templates_i1');
+  });
+
+  it('writes NOTHING when the provider is empty but storage holds real types', async () => {
+    storage.getItem.mockImplementation(async () => ({
+      data: { value: JSON.stringify({ templates: [{ id: 'x', discussionType: 'הנהלה', topics: [] }] }) },
+    }));
+    withProvider([]);
+    await clickCreate();
+    expect(upsertTypeTemplate).not.toHaveBeenCalled();
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(addDropdownLabel).not.toHaveBeenCalled();
+  });
+
+  // A read we could not complete is UNKNOWN, not empty: do nothing at all.
+  it('writes NOTHING when the durable read itself fails', async () => {
+    storage.getItem.mockRejectedValue(new Error('storage down'));
+    withProvider([]);
+    await clickCreate();
+    expect(upsertTypeTemplate).not.toHaveBeenCalled();
+    expect(addDropdownLabel).not.toHaveBeenCalled();
+  });
+
+  /*
    * round348 (review finding) — the provider write must be STRICT. `persistTypes` otherwise logs
    * a storage failure and resolves anyway, so we would report "seeded" for a write that never
    * landed and then add the label: a selectable type with no agenda after the next reload.

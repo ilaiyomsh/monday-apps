@@ -9,6 +9,7 @@ import {
   seedDefaultTypeTemplate,
   buildDefaultTypeTemplate,
   hasDefaultTypeTemplate,
+  readStoredTypeTemplates,
 } from '@generated/utils/defaultTypeTemplate.js';
 import { TemplatesContext } from '@generated/contexts/TemplatesContext.jsx';
 import { provisionAllBoards } from '../../utils/mondayApi/provisionBoards.js';
@@ -239,9 +240,20 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
       return seedDefaultTypeTemplate(context, currentUser);
     }
     try {
-      // Loaded provider: its list IS the store, so no read and no race.
+      // A NON-EMPTY provider list is proof: those types were really read.
       const list = templatesCtx.typeTemplates || [];
       if (list.length) return hasDefaultTypeTemplate(list) ? 'already-default' : 'skipped-existing';
+      /*
+       * An EMPTY one proves nothing (round349 review finding): `TemplatesProvider.load` catches a
+       * failed read, commits `[]` and then clears `loading`, so "empty after load" also describes
+       * a timeout. Confirm against the DURABLE store before writing — otherwise one transient
+       * read failure turns this seed into an overwrite of the account's real types.
+       */
+      const durable = await readStoredTypeTemplates(context);
+      if (!durable.ok) return 'failed';
+      if (durable.list.length) {
+        return hasDefaultTypeTemplate(durable.list) ? 'already-default' : 'skipped-existing';
+      }
       /*
        * `strict: true` (review finding) — without it `persistTypes` logs a storage failure and
        * resolves anyway, so we would report "seeded" for a write that never landed and then add
