@@ -50,7 +50,13 @@
 
 import express from 'express';
 import { performAction } from '../services/confirm-service.js';
-import { extractNotes, resolveNoteColumn, classifyNote, MAX_NOTE_LENGTH } from '../services/digest-notes.js';
+import {
+  extractNotes,
+  resolveNoteColumn,
+  classifyNote,
+  sectionButtonIds,
+  MAX_NOTE_LENGTH,
+} from '../services/digest-notes.js';
 import { parseManifest, verifyManifest, currentSlot, MAX_MANIFEST_ITEMS } from '../services/manifest-signature.js';
 import { resolveAmpCors } from '../helpers/amp-cors.js';
 import { logAttempt, logError, logInfo, track } from '../helpers/logger.js';
@@ -94,6 +100,12 @@ export const MESSAGES = {
   // E11 — per-task required note (a mapped text column on the cluster)
   note_required: '[E11a] יש למלא את שדה הטקסט בכל שורה שמסומנת — משימה בלי טקסט לא עודכנה.',
   note_too_long: `[E11b] הטקסט ארוך מ-${MAX_NOTE_LENGTH} תווים — קצרו אותו ונסו שוב.`,
+  // The message rendered a text field, so it PROMISED to store the value. If no
+  // column resolves for the chosen button at write time, that promise cannot be
+  // kept — refuse the item rather than mark it and drop the text (2026-08-04:
+  // this path reported "2 updated" while the notes went nowhere).
+  note_unmapped:
+    '[E11c] הטקסט לא נשמר ולכן המשימה לא עודכנה — לכפתור שנבחר אין עמודת טקסט מוגדרת. עדכנו ישירות בלוח ועדכנו את מנהל המערכת.',
   // E10 / E99
   none_updated: '[E10] לא הצלחנו לעדכן את המשימות שסומנו. אפשר לעדכן ישירות בלוח.',
   internal_error: '[E99] שגיאת שרת פנימית. נסו שוב או עדכנו ישירות בלוח.',
@@ -307,6 +319,29 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       for (const { itemId, btnId } of selections) {
         const noteColumn = resolveNoteColumn(config, btnId);
         const note = notes.get(itemId) ?? '';
+        // A note on the wire with no column to put it in is a mismatch between
+        // what the message rendered and what the config can write. Silently
+        // dropping it marked the task and lost the text; name it instead — the
+        // log carries the button id, which is what identifies the bad mapping.
+        if (!noteColumn && note.length > 0) {
+          // The map the resolver actually walked, so the log answers "why" and
+          // not merely "what": which sections carry a note column, and which
+          // button ids each one covers. Ids only — never the reader's text.
+          logError('amp', 'note submitted but no column maps to the chosen button', {
+            itemId,
+            btnId,
+            noteLength: note.length,
+            sections: (config?.digest?.sections ?? []).map((s) => ({
+              id: s?.id ?? null,
+              noteColumnId: s?.noteColumnId ?? null,
+              buttonIds: sectionButtonIds(s),
+            })),
+          });
+          logAttempt({ ip, itemId, outcome: 'note_unmapped' });
+          noteProblems.add('note_unmapped');
+          failed += 1;
+          continue;
+        }
         const verdict = classifyNote({ column: noteColumn, value: note });
         if (verdict !== 'ok') {
           logAttempt({ ip, itemId, outcome: verdict });

@@ -232,6 +232,33 @@ describe('POST /amp/confirm — per-task required notes', () => {
     expect(api.changeColumns.mock.calls[0][0].values.text_note.length).toBe(MAX_NOTE_LENGTH);
   });
 
+  // Silent data loss, found live 2026-08-04: the reader typed text, the reply
+  // said "2 updated", and the text went nowhere because the chosen button
+  // resolved to no column. The email RENDERED the field, so it promised to
+  // store the value — a write that cannot honour that promise is a failure,
+  // never a success with the text quietly dropped.
+  it('a note for a button with NO mapped column FAILS the item instead of dropping the text', async () => {
+    const { app, api } = harness();
+    const res = await post(app, { item_9003: 'b_plain001', note_9003: 'טקסט שהוקלד' });
+
+    expect(res.body.updated).toBe(0);
+    expect(res.body.failed).toBe(1);
+    expect(res.body.message).toContain('E11c');
+    // Nothing was written — not even the status, which would have marked the
+    // task while losing the note the reader attached to that very mark.
+    expect(api.changeColumns).not.toHaveBeenCalled();
+    expect(api.changeStatus).not.toHaveBeenCalled();
+  });
+
+  it('an unmapped cluster with NO note on the wire is untouched — the normal path stays silent', async () => {
+    const { app, api } = harness();
+    const res = await post(app, { item_9003: 'b_plain001' });
+
+    expect(res.body.updated).toBe(1);
+    expect(api.changeStatus).toHaveBeenCalledTimes(1);
+    expect(res.body.message).not.toContain('E11c');
+  });
+
   it('a note field alone, with no selection, is still no_items — notes never act on their own', async () => {
     const { app, api } = harness();
     const res = await post(app, { note_9001: 'רק טקסט' });
