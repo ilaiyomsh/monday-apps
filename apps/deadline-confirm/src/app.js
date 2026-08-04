@@ -16,6 +16,13 @@ import { logError } from './helpers/logger.js';
 
 const ADMIN_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public/admin');
 
+// The admin AMP debug lane (POST /api/digest/send-raw) posts a whole
+// amp4email document as JSON. Express's 100kb default is below a realistic
+// digest, so the default would reject exactly the documents worth debugging.
+// The urlencoded parser keeps ITS default: /amp/confirm is the public write
+// path and its bodies are a handful of short fields.
+const JSON_BODY_LIMIT = '2mb';
+
 /**
  * Assemble the Express app. See the stub JSDoc contract (git history).
  * @param {object} deps
@@ -35,7 +42,7 @@ export function createApp({ storage, api, rateLimiters, env, fetchImpl, todayIso
   const app = express();
   app.set('trust proxy', true); // monday code fronts the container — req.ip must be the client
   app.disable('x-powered-by');
-  app.use(express.json());
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
   app.use(express.urlencoded({ extended: false })); // amp-form posts application/x-www-form-urlencoded
 
   // V6: the ONLY public write path — Gmail dynamic email bulk confirm.
@@ -77,6 +84,12 @@ export function createApp({ storage, api, rateLimiters, env, fetchImpl, todayIso
       error: String(err?.message ?? err),
     });
     if (res.headersSent) return;
+    // An oversized body is the caller's problem and has a specific fix (send
+    // less); reporting it as 500 sends the operator hunting a server bug.
+    if (err?.type === 'entity.too.large') {
+      res.status(413).json({ error: 'payload_too_large' });
+      return;
+    }
     res.status(err?.type === 'entity.parse.failed' ? 400 : 500).json({ error: 'internal_error' });
   });
 

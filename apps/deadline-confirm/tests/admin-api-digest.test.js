@@ -312,6 +312,25 @@ describe('GET /api/digest/preview', () => {
     expect(res.status).toBe(502);
     expect(res.body).toEqual({ error: 'monday_api_failed' });
   });
+
+  it('threads real board label colors from the TASKS-board read into the preview AMP', async () => {
+    const inner = boardItemsDouble();
+    // Hex from tests/fixtures/board-columns-settings.probe.json (label 0 → #fdab3d);
+    // deliberately different from the config button's style.color (#0073ea).
+    const getBoardItems = vi.fn(async (args) =>
+      args.boardId === '111'
+        ? { ...(await inner(args)), statusColumnColors: { status_a: { 0: '#fdab3d' } } }
+        : inner(args)
+    );
+    const { app } = seededHarness({ getBoardItems });
+    const res = await request(app).get('/api/digest/preview').set('Authorization', authHeader());
+    expect(res.status).toBe(200);
+    // Option pill: real board color, not the configured guess.
+    expect(res.body.amp).toMatch(/class="dd-opt" style="background:#fdab3d"/);
+    expect(res.body.amp).not.toMatch(/class="dd-opt" style="background:#0073ea"/);
+    // Current-status chip: task 9001 carries label 0 → board color class.
+    expect(res.body.amp).toContain('"c9001":"bg_fdab3d"');
+  });
 });
 
 // ---------------------------------------------------------------------------

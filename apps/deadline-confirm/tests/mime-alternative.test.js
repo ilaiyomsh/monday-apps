@@ -1,14 +1,12 @@
 // Contract tests for multipart/alternative MIME assembly (V6 §5).
 //
 // THREE parts as of 0.10.3, in the order text/plain → text/x-amp-html →
-// text/html. That order is not a preference: it mirrors, byte-position for
-// byte-position, the ONE message we have observed Gmail render our AMP
-// document from (the AMP playground's send, captured 2026-07-29). Our own
-// 2-part message — plain + amp, no text/html — came back INTERNAL_ERROR with
-// the identical AMP document inside. Google's docs say plain alone should
-// suffice (MALFORMED is defined as "no fallback text/html OR text/plain"), so
-// this is a hypothesis under test, and the comment is here so nobody
-// "simplifies" the html part away without re-running that experiment.
+// text/html. The order/HTML-part-as-INTERNAL_ERROR-fix hypothesis was
+// DISPROVEN by live sends on 2026-08-03 (docs/amp-email-verified-findings.md
+// §6) — the real blockers were the send channel and SPF. The order and the
+// html part stay on their own merits: the preheader sources from the html or
+// plain part, and some clients render only the LAST part, so the inert html
+// part goes last. These tests pin that contract, not the dead hypothesis.
 //
 // The text/html part is DERIVED from the plain part and stays non-actionable:
 // V6's D1/D2 bans an actionable HTML body, not an HTML body. See

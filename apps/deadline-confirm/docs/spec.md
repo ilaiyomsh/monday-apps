@@ -459,6 +459,12 @@ digest: {
 
 A digest block requires `peopleColumnId` to be set (matching column).
 
+**Section order = priority (owner decision 2026-08-04).** The `sections` array
+order is meaningful: a task whose conditions match several sections is claimed
+by the FIRST section in array order and skipped by the rest — each task appears
+exactly once per message (per recipient). The admin UI reorders with ↑/↓ arrows;
+no separate priority field exists.
+
 ## Environment (extends §5)
 
 - `RESEND_API_KEY`, `DIGEST_FROM` — the Resend sender funnel
@@ -561,6 +567,12 @@ under the same CORS gate.
   undocumented, so the production sender becomes a dedicated Google Workspace
   mailbox via the Gmail API with the `gmail.send` scope only (send, never
   read) — see the design log. Until then the AMP part is exercised manually.
+  > **DISPROVEN as the channel, 2026-08-03/04:** the Gmail API strips the
+  > `text/x-amp-html` part on external delivery, so it can never carry AMP
+  > (`docs/amp-email-verified-findings.md` §2). The shipped channel is **SMTP
+  > XOAUTH2** (`src/services/smtp-sender.js`, scope `https://mail.google.com/`,
+  > testing phase — owner decision 2026-08-04); the production channel remains
+  > an open owner decision (findings §5).
 - Per-task status dropdown (`<select>` per row) instead of a checkbox — the
   format supports it; the owner has seen a mock, no decision yet.
 
@@ -571,6 +583,9 @@ under the same CORS gate.
 Design brief: `docs/v6-amp-only-decisions.md`. **Supersedes** the V5 additive
 model: the actionable `text/html` body and the entire `/confirm` route family
 are **removed**. Resend is retired; Gmail API send is the planned channel (T9).
+*(Superseded 2026-08-04: the Gmail API cannot carry AMP — findings §2 — so T9
+landed as **SMTP XOAUTH2**, `src/services/smtp-sender.js`; see the 0.12.x
+addendum at the end of this file.)*
 
 ## Product behavior
 
@@ -578,7 +593,9 @@ are **removed**. Resend is retired; Gmail API send is the planned channel (T9).
   no links/credentials) + `text/x-amp-html` (Gmail dynamic email, the only
   actionable part).
 - One **signature per message** over a manifest of authorized (task × button)
-  pairs. Wire fields: `a`, `p`, `m`, `s`, `sig` + per-task radio `item_<itemId>`.
+  pairs. Wire fields: `a`, `p`, `m`, `s`, `sig` + per-task radio `item_<itemId>`
+  (+ since 0.12.0: `note_<itemId>` — one per item, ≤500 chars — when the item's
+  cluster maps a required note column; see the 0.12.x addendum below).
   No `k` anywhere in the message (D3/D10).
 - Slot = calendar date (YYYYMMDD) of the scheduled send in Asia/Jerusalem;
   configured via `digest.sendHour` (integer 0–23, default 8). No grace window
@@ -603,5 +620,51 @@ are **removed**. Resend is retired; Gmail API send is the planned channel (T9).
 ## Deferred (post-V6)
 
 - T9–T12: Gmail multipart send, scheduler, operator summary, resend-today.
+  *(Landed; T9's channel is SMTP XOAUTH2, not the Gmail API — see below.)*
 - T15: D9 email redesign (multi-button table, one global submit) — awaiting owner briefing.
+
+---
+
+# 0.12.x Addendum — required per-task note + SMTP XOAUTH2 channel (2026-08-03/04)
+
+Shipped state as of 0.12.0; recorded here so §9/§11 stay a complete inventory.
+Full semantics: `CLAUDE.md` ("Per-task required note") and
+`docs/amp-email-verified-findings.md` (the measured channel facts).
+
+## Required per-task note (extends §9 + the V6 wire contract)
+
+- `config.digest.sections[]` gains optional `noteColumnId` + `noteColumnTitle`
+  (a TEXT column on the tasks board), validated by `PUT /api/config`.
+- Wire: `note_<itemId>` — ONE per item even across clusters, cap 500 chars.
+  `routes/amp.js` refuses per item (`note_required` / `note_too_long`) and
+  `performAction` guards again; the AMP `[disabled]` gate is UX only.
+- `POST /api/digest/send-raw` (AMP debug lane, extends §9): sends the
+  operator's edited amp4email document byte-for-byte through the real MIME +
+  send funnel — guards and error codes in `CLAUDE.md`.
+
+## GraphQL (extends §11)
+
+**11.4 Set status + note atomically** — when the selected button's section maps
+a note column, §11.2 is NOT used; status and note go out in ONE write so a
+marked task can never lack its note (the note value **overwrites** the column):
+
+```graphql
+mutation SetColumns($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+  change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id }
+}
+```
+
+`$columnValues` = `JSON.stringify({ [statusColumnId]: { index }, [noteColumnId]: text })`.
+Sandbox-probe procedure before trusting it live:
+`docs/manual-verification-checklist.md` §1.
+
+## Send channel (supersedes "Gmail API send" wherever this file says it)
+
+`users.messages.send` strips the `text/x-amp-html` part on external delivery
+(findings §2), so the wired channel is **SMTP XOAUTH2** to `smtp.gmail.com:465`
+(`src/services/smtp-sender.js` + `services/google-token.js` + `helpers/rfc822.js`).
+SMTP AUTH demands the broad `https://mail.google.com/` scope (findings §5);
+granted for the **testing phase** by owner decision 2026-08-04 (D12 suspension —
+`docs/v6-amp-only-decisions.md`). The production channel is still an open owner
+decision. `gmail-sender.js` is kept for reference/rollback only.
 

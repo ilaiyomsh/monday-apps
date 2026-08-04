@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderDigestAmp } from '../src/helpers/digest-amp.js';
 import { buildManifest, signManifest, currentSlot } from '../src/services/manifest-signature.js';
+import settingsFixture from './fixtures/board-columns-settings.probe.json';
 
 const BASE = 'https://app.example';
 const SECRET = 'wJalrXUtnFEMIK7MDENGbPxRfiCY_EXAMPLEKEY-43x';
@@ -128,10 +129,12 @@ const render = (recipient = RECIPIENT) =>
   });
 
 describe('renderDigestAmp — amp4email document validity', () => {
-  it('opens with the doctype and the amp4email html tag', () => {
+  it('opens with the doctype and the strict-CSS amp4email html tag', () => {
     const doc = render();
     expect(doc.startsWith('<!doctype html>')).toBe(true);
-    expect(doc).toContain('<html amp4email');
+    // data-css-strict is load-bearing: without it the validator hides the
+    // strict-CSS rules that Gmail enforces regardless (findings doc §7).
+    expect(doc).toContain('<html amp4email data-css-strict lang="he">');
   });
 
   it('puts <meta charset="utf-8"> as the first child of <head>', () => {
@@ -285,6 +288,9 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect((doc.match(/class="dd-trig /g) ?? []).length).toBe(1);
   });
 
+  // Since the section-priority dedup (2026-08-04) buildDigest no longer emits
+  // the same item into two sections — this recipient is hand-built to keep the
+  // renderer's defence-in-depth (shared state key + single hidden field) pinned.
   it('shares one hidden wire field when the same item appears in two clusters', () => {
     const dual = {
       ...RECIPIENT,
@@ -314,6 +320,59 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).toContain(`v9001:'${BTN_DONE.id}'`);
   });
 
+  // Real monday status label colors (owner decision 2026-08-04): buildDigest
+  // threads recipient.statusColumnColors (columnId → labelId → hex, sourced from
+  // the board's status column settings) and task.statusColor. Hex values below
+  // come from tests/fixtures/board-columns-settings.probe.json — a real capture.
+  describe('real board label colors', () => {
+    const fixtureLabels = settingsFixture.data.boards[0].columns.find(
+      (c) => c.type === 'status'
+    ).settings.labels;
+    // The digest-amp buttons point at status column 'color_x'; key the probe's
+    // real label→hex pairs under it (labels: 0 → #fdab3d, 1 → #00c875).
+    const BOARD_COLORS = {
+      color_x: Object.fromEntries(fixtureLabels.map((l) => [l.id, l.hex])),
+    };
+
+    it('prefers the real board color over button.style.color for option pills', () => {
+      const doc = render({ ...RECIPIENT, statusColumnColors: BOARD_COLORS });
+      // BTN_DONE targets label 1 on color_x: board says #00c875, config guessed #00854d.
+      expect(doc).toContain('background:#00c875');
+      expect(doc).not.toContain('background:#00854d');
+      expect(doc).toContain("c9004:'bg_00c875'");
+      expect(doc).toContain('.dd-trig.bg_00c875 { background:#00c875; }');
+      // BTN_STUCK targets label 2 — NOT in the board settings → config color kept.
+      expect(doc).toContain(`background:${BTN_STUCK.style.color}`);
+    });
+
+    it('uses task.statusColor for the current-status chip when set', () => {
+      const withColor = {
+        ...RECIPIENT,
+        statusColumnColors: BOARD_COLORS,
+        sections: [
+          {
+            ...RECIPIENT.sections[0],
+            // 9001 current status "טרם החל" matches no button label — today that
+            // guessed neutral; the board's real color wins now.
+            tasks: [{ ...RECIPIENT.sections[0].tasks[0], statusColor: '#00c875' }],
+          },
+        ],
+      };
+      const doc = render(withColor);
+      expect(doc).toContain('"c9001":"bg_00c875"');
+      expect(doc).toContain('class="dd-trig bg_00c875"');
+    });
+
+    it('unknown label (no statusColor) still falls back to config-color match / neutral', () => {
+      const doc = render({ ...RECIPIENT, statusColumnColors: BOARD_COLORS });
+      // 9001: statusText "טרם החל", no statusColor, no button label match → neutral.
+      expect(doc).toContain('"c9001":"bg_c4c4c4"');
+      // 9004: statusText "בעבודה" matches BTN_START whose pill color is the
+      // board's real #fdab3d for label 0 (same hex the config carried).
+      expect(doc).toContain('"c9004":"bg_fdab3d"');
+    });
+  });
+
   it('escapes HTML in task names', () => {
     expect(render()).toContain('הקמת פורום &lt;נציגים&gt;');
   });
@@ -325,6 +384,75 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).not.toContain('name="k"');
     expect(doc).not.toContain(`value="${SECRET}"`);
     expect(doc).toContain(`action-xhr="${BASE}/amp/confirm"`);
+  });
+});
+
+// Strict amp4email CSS (docs/amp-email-verified-findings.md §7): Gmail enforces
+// the strict property set whether or not the document declares it, so the
+// document declares data-css-strict and every rule stays inside the set.
+// dir=rtl is fixed in this document, so physical properties are safe stand-ins
+// for the logical ones (inline-start = right, inline-end = left).
+describe('renderDigestAmp — strict amp4email CSS (data-css-strict)', () => {
+  it('declares data-css-strict on the html tag', () => {
+    expect(render()).toContain('<html amp4email data-css-strict');
+  });
+
+  it('emits no property outside the strict set (logical props, filter, pointer-events, fixed, cursor:progress)', () => {
+    const doc = render();
+    expect(doc).not.toMatch(/border-inline|padding-inline|inset-inline/);
+    expect(doc).not.toMatch(/filter\s*:/);
+    expect(doc).not.toContain('pointer-events');
+    expect(doc).not.toContain('position:fixed');
+    expect(doc).not.toContain('cursor:progress');
+    expect(doc).not.toContain('cursor:not-allowed');
+  });
+
+  it('pins the physical replacements for the old logical properties', () => {
+    const doc = render();
+    // th/td cell separators: inline-end under dir=rtl is the LEFT edge.
+    expect(doc).toContain('border-left:1px solid #D0D4E4');
+    expect(doc).toMatch(/th:last-child \{ border-left:none; \}/);
+    expect(doc).toMatch(/td:last-child \{ border-left:none; \}/);
+    // td.name padding-inline-start under dir=rtl is padding-RIGHT.
+    expect(doc).toMatch(/td\.name \{[^}]*padding-right:12px/);
+    // .dd-menu inset-inline-end under dir=rtl is left:0.
+    expect(doc).toMatch(/\.dd-menu \{[^}]*left:0/);
+    // transition may only animate none|offset-distance|opacity|transform|
+    // visibility (official value regex) — box-shadow is out too, so the
+    // document carries NO transition at all.
+    expect(doc).not.toMatch(/transition\s*:/);
+    // cursor is restricted to a tiny value set; pointer is the only value
+    // that is inside every published revision of it, so it is the only
+    // cursor this document uses.
+    expect(doc).not.toMatch(/cursor:(?!pointer)/);
+  });
+
+  it('anchors the tap-away overlay to the relatively-positioned card, not the viewport', () => {
+    const doc = render();
+    expect(doc).toMatch(/\.wrap \{[^}]*position:relative/);
+    expect(doc).toMatch(/\.dd-overlay \{[^}]*position:absolute/);
+    // absolute positioning only covers the card if the overlay sits INSIDE it.
+    expect(doc.indexOf('class="wrap"')).toBeLessThan(doc.indexOf('class="dd-overlay"'));
+  });
+
+  it('keeps the in-flight and disabled affordances inside the strict set', () => {
+    const doc = render();
+    expect(doc).toMatch(/form\.amp-form-submitting \.send \{ opacity:0\.55; box-shadow:none; \}/);
+    // The dropdown freeze (pointer-events) is gone by decision; the dim stays.
+    expect(doc).toMatch(
+      /form\.amp-form-submitting \.dd-trig, form\.amp-form-submitting \.dd-opt \{ opacity:0\.75; \}/
+    );
+    // Disabled submit (note gate): opacity greys the inline background — a bg
+    // class cannot beat an inline style without !important, which AMP forbids.
+    const noted = {
+      ...RECIPIENT,
+      sections: [
+        { ...RECIPIENT.sections[0], noteColumnId: 'text_note', noteColumnTitle: 'הערה' },
+      ],
+    };
+    const withNotes = render(noted);
+    expect(withNotes).toMatch(/\.send\[disabled\] \{ opacity:0\.45; box-shadow:none; \}/);
+    expect(withNotes).not.toContain('grayscale');
   });
 });
 

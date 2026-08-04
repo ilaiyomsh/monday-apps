@@ -50,6 +50,13 @@
 
 import express from 'express';
 import { performAction } from '../services/confirm-service.js';
+import {
+  extractNotes,
+  resolveNoteColumn,
+  classifyNote,
+  sectionButtonIds,
+  MAX_NOTE_LENGTH,
+} from '../services/digest-notes.js';
 import { parseManifest, verifyManifest, currentSlot, MAX_MANIFEST_ITEMS } from '../services/manifest-signature.js';
 import { resolveAmpCors } from '../helpers/amp-cors.js';
 import { logAttempt, logError, logInfo, track } from '../helpers/logger.js';
@@ -90,6 +97,15 @@ export const MESSAGES = {
   no_items: '[E7a] לא סומנה אף משימה — סמנו לפחות משימה אחת ולחצו שוב.',
   conflict_item: '[E7b] אותה משימה סומנה עם שני סטטוסים שונים (בשני מקבצים) — בחרו אחד.',
   too_many_items: `[E7c] אפשר לעדכן עד ${MAX_ITEMS} משימות בפעם אחת.`,
+  // E11 — per-task required note (a mapped text column on the cluster)
+  note_required: '[E11a] יש למלא את שדה הטקסט בכל שורה שמסומנת — משימה בלי טקסט לא עודכנה.',
+  note_too_long: `[E11b] הטקסט ארוך מ-${MAX_NOTE_LENGTH} תווים — קצרו אותו ונסו שוב.`,
+  // The message rendered a text field, so it PROMISED to store the value. If no
+  // column resolves for the chosen button at write time, that promise cannot be
+  // kept — refuse the item rather than mark it and drop the text (2026-08-04:
+  // this path reported "2 updated" while the notes went nowhere).
+  note_unmapped:
+    '[E11c] הטקסט לא נשמר ולכן המשימה לא עודכנה — לכפתור שנבחר אין עמודת טקסט מוגדרת. עדכנו ישירות בלוח ועדכנו את מנהל המערכת.',
   // E10 / E99
   none_updated: '[E10] לא הצלחנו לעדכן את המשימות שסומנו. אפשר לעדכן ישירות בלוח.',
   internal_error: '[E99] שגיאת שרת פנימית. נסו שוב או עדכנו ישירות בלוח.',
@@ -137,8 +153,9 @@ function extractSelections(body) {
       const existing = byItem.get(itemId);
       if (existing === undefined) byItem.set(itemId, value);
       // One item, two DIFFERENT buttons in one submission is not producible
-      // by a single-table form — with multi-cluster tables it can happen when
-      // the same item is marked in two sections.
+      // by a rendered email: single-table forms never were, and since the
+      // section-priority dedup (2026-08-04) multi-cluster digests carry each
+      // item once. The guard stays — the wire accepts hand-crafted bodies.
       else if (existing !== value) return { error: 'conflict_item' };
     }
   }
@@ -290,11 +307,57 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       }
 
       // 10. execute — per-selection button, D11 assignee check via p.
+      // A cluster that maps a text column makes its note mandatory: the item is
+      // refused BEFORE any monday call, and only that item. Taking the whole
+      // batch down would punish the rows the reader did fill in.
+      const notes = extractNotes(req.body);
       let updated = 0;
       let already = 0;
       let failed = 0;
+      /** Distinct note verdicts seen, so the reply can name the actual cause. */
+      const noteProblems = new Set();
       for (const { itemId, btnId } of selections) {
-        const result = await performAction({ storage: scopedStorage, api, itemId, btnId, expectedPersonId: p });
+        const noteColumn = resolveNoteColumn(config, btnId);
+        const note = notes.get(itemId) ?? '';
+        // A note on the wire with no column to put it in is a mismatch between
+        // what the message rendered and what the config can write. Silently
+        // dropping it marked the task and lost the text; name it instead — the
+        // log carries the button id, which is what identifies the bad mapping.
+        if (!noteColumn && note.length > 0) {
+          // The map the resolver actually walked, so the log answers "why" and
+          // not merely "what": which sections carry a note column, and which
+          // button ids each one covers. Ids only — never the reader's text.
+          logError('amp', 'note submitted but no column maps to the chosen button', {
+            itemId,
+            btnId,
+            noteLength: note.length,
+            sections: (config?.digest?.sections ?? []).map((s) => ({
+              id: s?.id ?? null,
+              noteColumnId: s?.noteColumnId ?? null,
+              buttonIds: sectionButtonIds(s),
+            })),
+          });
+          logAttempt({ ip, itemId, outcome: 'note_unmapped' });
+          noteProblems.add('note_unmapped');
+          failed += 1;
+          continue;
+        }
+        const verdict = classifyNote({ column: noteColumn, value: note });
+        if (verdict !== 'ok') {
+          logAttempt({ ip, itemId, outcome: verdict });
+          noteProblems.add(verdict);
+          failed += 1;
+          continue;
+        }
+        const result = await performAction({
+          storage: scopedStorage,
+          api,
+          itemId,
+          btnId,
+          expectedPersonId: p,
+          noteColumnId: noteColumn?.id ?? null,
+          note,
+        });
         logAttempt({ ip, itemId, outcome: result.outcome });
         if (result.outcome === 'ok') updated += 1;
         else if (result.outcome === 'already_done') already += 1;
@@ -305,18 +368,28 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       if (updated > 0) parts.push(updated === 1 ? 'עודכנה משימה אחת' : `עודכנו ${updated} משימות`);
       if (already > 0) parts.push(`${phrase(already, 'משימה אחת', 'משימות')} היו מעודכנות כבר`);
       if (failed > 0) parts.push(`${phrase(failed, 'משימה אחת', 'משימות')} לא עודכנו`);
+      // "1 task was not updated" alone reads like a platform failure. Name the
+      // fixable cause so the reader knows to type something and press again.
+      for (const problem of noteProblems) parts.push(MESSAGES[problem]);
 
       const anySucceeded = updated + already > 0;
       logInfo('amp', 'bulk confirm finished', { items: selections.length, updated, already, failed });
       track('amp_confirm', { ok: failed === 0, method: 'POST' });
+
+      // Nothing succeeded → the generic failure line, but a note problem is a
+      // KNOWN, reader-fixable cause and must survive into that branch too.
+      const noneUpdatedMessage = [
+        MESSAGES.none_updated,
+        ...[...noteProblems].map((problem) => MESSAGES[problem]),
+      ].join(' · ');
 
       sendJson(res, anySucceeded ? 200 : 502, {
         ok: failed === 0,
         updated,
         already,
         failed,
-        message: anySucceeded ? parts.join(' · ') : MESSAGES.none_updated,
-        ...(anySucceeded ? {} : { detail: 'none_updated' }),
+        message: anySucceeded ? parts.join(' · ') : noneUpdatedMessage,
+        ...(anySucceeded ? {} : { detail: [...noteProblems][0] ?? 'none_updated' }),
       });
     } catch (err) {
       const name = err?.name ? String(err.name) : 'Error';

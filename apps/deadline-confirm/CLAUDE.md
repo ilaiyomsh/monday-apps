@@ -13,10 +13,13 @@ The digest is sent as `multipart/alternative` with **three** parts, in the order
 `text/plain` → `text/x-amp-html` → `text/html` (0.10.3): a non-actionable plain
 fallback (task list only, no links/credentials), the part Gmail renders as
 dynamic email, and a non-actionable HTML fallback **derived from the plain part**
-(`helpers/digest-html-fallback.js`). That order mirrors the only message Gmail
-has been observed to render our AMP document from; see the header comment in
-`helpers/mime-alternative.js` — it is a live hypothesis about `INTERNAL_ERROR`,
-not decoration, so do not drop the HTML part. The AMP form posts to **`POST /amp/confirm`**
+(`helpers/digest-html-fallback.js`). Keep all three — the HTML part sources the
+inbox preheader and some clients render only the last part — but **the order is
+NOT the `INTERNAL_ERROR` fix**: that hypothesis, and the base64-CTE one, were both
+disproven by live sends on 2026-08-03. Read
+**`docs/amp-email-verified-findings.md`** before any AMP work; it is the measured
+account of what actually blocks rendering (the Gmail API strips the AMP part; SPF
+must pass on its own; a self-send can never render). The AMP form posts to **`POST /amp/confirm`**
 — the app's **only** public write endpoint. Each message carries one HMAC
 signature over an explicit manifest of authorized (task × button) pairs; the
 base link secret never leaves the server (D3).
@@ -45,6 +48,13 @@ SecureStorage keys. App ID **11704868**, dev-center slug
   with the `From` domain, which Gmail requires before rendering the AMP part.
   D13's operator-only gate on the connect flow is retired with it — a tenant can
   only ever rebind its own sender.
+- **Send channel is SMTP XOAUTH2 with scope `https://mail.google.com/`, testing
+  phase** (owner decision 2026-08-04 — suspends D12's no-mail-read-scope rule;
+  supersession trail: D12/D13 single vendor mailbox → per-org sender 2026-07-29
+  → SMTP XOAUTH2 + broad scope 2026-08-04). Forced by measurement, findings §2 +
+  §5: the Gmail API strips the AMP part, and SMTP AUTH rejects `gmail.send`.
+  Pre-change grants report `broken` in `/api/state` until re-consent; the
+  production channel is STILL an open owner decision (findings §5 table).
 
 ## Module layout
 
@@ -62,16 +72,22 @@ src/
 │   ├── monday-api.js         # THE GraphQL funnel; API-Version pinned; soft errors thrown
 │   ├── confirm-service.js    # performAction (v2 outcomes + D11 assignee check)
 │   ├── digest-service.js     # users-board matching + pending classification (single personId per recipient)
+│   ├── digest-notes.js       # required-note rules (pure): extractNotes / resolveNoteColumn / classifyNote, cap 500
 │   ├── manifest-signature.js # build/parse/sign/verify manifest + currentSlot (pure, no I/O)
 │   ├── storage.js            # SecureStorage wrapper + 60s read cache + nonce lifecycle
 │   ├── secret.js             # generate / constant-time compare / mask
-│   ├── gmail-sender.js       # THE send funnel (emailSender seam): RFC822 + users.messages.send
+│   ├── smtp-sender.js        # THE send funnel (emailSender seam): SMTP XOAUTH2 → smtp.gmail.com:465
+│   │                         # (the Gmail API strips the AMP part — findings §2); scope pre-flight
+│   ├── google-token.js       # Google token lifecycle: per-account memo, 60s cushion, invalid_grant kill switch
+│   ├── gmail-sender.js       # SUPERSEDED by smtp-sender (2026-08-04) — kept for reference/rollback, nothing constructs it
 │   └── providers/google/oauth.js  # Google token transport (exchange / refresh / auth URL)
 ├── helpers/                  # pages (oauth only), rate-limit, digest-plain, digest-amp,
 │                             # digest-html-fallback (inert text/html part), mime-alternative,
-│                             # digest-email (legacy send path until Gmail T9), amp-cors, logger, environment
+│                             # rfc822 (RFC822 assembly + header-injection refusal, optional Date header),
+│                             # digest-email (legacy, unreferenced — superseded by the smtp-sender funnel), amp-cors, logger, environment
 ├── storage/                  # secure-storage-backend (prod) / memory-backend (dev+tests)
 └── client/admin/             # React 19 + Vite 7 + @vibe/core SPA → public/admin/
+                              # amp-debug.ts — pure rules behind the AMP editor (size/guards)
                               # two tabs — "הגדרות" + "מייל מסכם" (DigestSection)
 ```
 
@@ -94,7 +110,36 @@ src/
   email on two rows → two messages); rows with ≠1 person skipped as
   `multi_person`. Pending = date ≤ today (Asia/Jerusalem) AND status in
   section's `includeStatusLabelIds`.
+- **Section order = priority (owner decision 2026-08-04):** a task matching
+  several sections' conditions appears ONLY in the first section in config
+  order (per recipient — `claimed` set in `digest-service.js`). The admin ↑/↓
+  arrows are the whole priority UI; no priority field exists. A rendered email
+  can therefore never produce `conflict_item` — that guard remains for
+  hand-crafted POSTs only.
+- **Per-task required note (0.12.0):** a digest section MAY map
+  `noteColumnId` + `noteColumnTitle` (a TEXT column on the TASKS board). When it
+  does, every row of that cluster gets a text field in the AMP table and the task
+  **cannot be marked without it**. Enforcement is in three places and all three
+  matter: `[disabled]` on the submit (UX only — AMP runs in the reader's client),
+  `routes/amp.js` per-item refusal (the authority), and a final guard inside
+  `performAction`. Status + note go out in ONE `change_multiple_column_values`
+  write, so a marked task can never lack its note; the value **overwrites** the
+  column. Target column resolves from the SELECTED BUTTON's section (the wire
+  carries no cluster identity) — a button shared by two mapped clusters takes the
+  first. Wire field: `note_<itemId>`, ONE per item even across clusters. Cap 500
+  chars. `already_done` still short-circuits: no mark, so no note write.
+  **`required=` is deliberately NOT used** — one bulk form per message means it
+  would block rows the reader never marked.
 - **V6 preview:** `GET /api/digest/preview` → `{ plain, amp }` (no `html`).
+- **AMP debug lane:** `POST /api/digest/send-raw` `{ amp, to, subject?, plain? }`
+  sends the operator's **edited** amp4email document **byte for byte** (no
+  re-render) through the same `buildMultipartAlternative` + Gmail funnel. Needs
+  neither config nor link secret nor monday token — it tests the MESSAGE, not the
+  data. Guards: `invalid_amp` / `invalid_recipient` / `invalid_subject` (400),
+  `amp_too_large` >1MB (413), `email_not_configured` (409), `send_failed` (502
+  carrying Gmail's own message — that message IS the debug output). Because of it
+  `express.json()` runs at a **2mb** limit, not express's 100kb default, and an
+  oversized body answers 413 `payload_too_large` instead of 500.
   **`POST /api/secret/rotate` → `{ ok: true, secret: '****xxxx' }`** (masked
   only — full secret never leaves the server).
 - **V6 scheduler:** `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`)
@@ -111,9 +156,12 @@ empty = default-deny: nobody admitted, nobody sent)**, `BASE_URL`, `PORT`,
 to `/amp/confirm`), `OPERATOR_EMAIL` (optional; D8 summary destination),
 **`GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET`** (T9b; absent → no
 sender is constructed and `/api/digest/send` answers 409 `email_not_configured`).
-Gmail sending is WIRED as of 0.10.0 — a tenant must still connect a mailbox via
-`/oauth/google/start` before anything sends. Per-org setup:
-`docs/google-setup-guide.md`.
+Sending is WIRED (0.10.0, channel swapped to SMTP XOAUTH2 in 0.12.x) — a tenant
+must still connect a mailbox via `/oauth/google/start` before anything sends,
+with the broad scope (a pre-2026-08-04 grant reports `broken` until re-consent).
+Per-org setup: `docs/google-setup-guide.md`. Post-merge manual verification
+(sandbox probe, two-mailbox send, scheduler round, the outbound-465 risk):
+`docs/manual-verification-checklist.md`.
 
 Deploys ONLY via the pipeline (root CLAUDE.md): merge to `develop` → draft,
 merge to `main` → live. Server-type app: workflow pushes app root; CI runs

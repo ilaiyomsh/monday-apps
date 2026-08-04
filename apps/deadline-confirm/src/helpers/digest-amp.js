@@ -8,7 +8,9 @@
 // Wire format unchanged:
 //   hidden: a, p, m, s, sig
 //   selection: <input type="hidden" name="item_<itemId>" [value]=btnId> ("" = no change)
-// Same item across clusters shares one state key + one hidden field.
+// Same item across clusters shares one state key + one hidden field — since the
+// section-priority dedup (2026-08-04) buildDigest no longer PRODUCES a duplicate
+// item, so this sharing is defence-in-depth for hand-built recipients only.
 
 import { escapeHtml } from './html.js';
 import { buildManifest, signManifest, currentSlot } from '../services/manifest-signature.js';
@@ -20,6 +22,17 @@ const SUBMIT_COLOR = '#0073ea';
 const NEUTRAL_STATUS = '#c4c4c4';
 const TRIGGER_EMPTY = '—';
 const STATUS_HEADER = 'סטטוס';
+const NOTE_PLACEHOLDER = 'חובה למילוי';
+
+/**
+ * A cluster requires a per-task note when it maps a text column.
+ * @param {object} section
+ * @returns {boolean}
+ */
+function sectionNoteColumn(section) {
+  const id = section?.noteColumnId;
+  return typeof id === 'string' && id.length > 0 ? id : null;
+}
 
 /** YYYY-MM-DD → DD/MM/YYYY (unset → ''). */
 function formatDate(date) {
@@ -43,10 +56,14 @@ function escapeBindStr(raw) {
 /**
  * Action buttons offered for a section — multi-button (`buttons` / `buttonIds`)
  * with legacy fallback to singular `button` / `buttonId`.
+ * Pill color prefers the REAL board color of the button's target label
+ * (statusColumnColors[statusColumnId][targetIndex], sourced from the board's
+ * status column settings) over the configured button.style.color guess.
  * @param {object} section
+ * @param {Record<string, Record<string, string>>} [statusColumnColors]
  * @returns {Array<{ id: string, label: string, color: string }>}
  */
-export function resolveSectionButtons(section) {
+export function resolveSectionButtons(section, statusColumnColors) {
   /** @type {Array<{ id: string, label: string, color: string }>} */
   const out = [];
   const seen = new Set();
@@ -56,10 +73,15 @@ export function resolveSectionButtons(section) {
     const id = raw.id ?? '';
     if (!id || seen.has(id)) return;
     seen.add(id);
+    // targetIndex 0 is a valid label id — the lookup itself is the check.
+    const boardColor = statusColumnColors?.[raw.statusColumnId]?.[raw.targetIndex];
     out.push({
       id,
       label: raw.targetLabel || raw.name || 'עדכן',
-      color: raw.style?.color || NEUTRAL_STATUS,
+      color:
+        (typeof boardColor === 'string' && boardColor.length > 0 ? boardColor : '') ||
+        raw.style?.color ||
+        NEUTRAL_STATUS,
     });
   };
 
@@ -131,7 +153,7 @@ function allRecipientButtons(recipient) {
   const seen = new Set();
   for (const section of recipient.sections ?? []) {
     if (!section.tasks || section.tasks.length === 0) continue;
-    for (const button of resolveSectionButtons(section)) {
+    for (const button of resolveSectionButtons(section, recipient.statusColumnColors)) {
       if (seen.has(button.id)) continue;
       seen.add(button.id);
       out.push(button);
@@ -213,24 +235,64 @@ function buildDropdownState(recipient) {
       state[`c${id}`] = cls;
     }
   }
+  // n<id> exists only for items whose cluster maps a text column — the gate
+  // expression reads these keys, and a key that is never seeded reads as
+  // undefined (not ''), which would leave the submit button stuck.
+  for (const id of noteRequiredItemIds(recipient)) state[`n${id}`] = '';
   return state;
 }
 
+/**
+ * Item ids that owe a note, in first-appearance order. An item in two mapped
+ * clusters appears ONCE: the wire carries one note per task, exactly like it
+ * carries one status selection per task.
+ * @param {object} recipient
+ * @returns {string[]}
+ */
+function noteRequiredItemIds(recipient) {
+  const ids = [];
+  const seen = new Set();
+  for (const section of recipient.sections ?? []) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    if (!sectionNoteColumn(section)) continue;
+    for (const task of section.tasks) {
+      const id = String(task.itemId);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+// STRICT amp4email CSS ONLY (docs/amp-email-verified-findings.md §7): the
+// document declares data-css-strict, and Gmail enforces the strict property
+// set even on documents that do not. Consequences baked into these rules:
+//   - No logical properties. dir=rtl is fixed in this document, so the
+//     physical equivalents are exact: inline-start = right, inline-end = left.
+//   - No `filter`, no `pointer-events`. `cursor` is value-restricted to a
+//     tiny set (initial|pointer in current validator rules), so the ONLY
+//     cursor in this document is the base `pointer` — no per-state override.
+//   - `transition` may only animate none|offset-distance|opacity|transform|
+//     visibility (official value regex) — box-shadow is NOT among them, so
+//     the document ships no transition at all; hover/active box-shadow
+//     changes are instant.
+// `npm run validate:amp` checks all of this against the official validator.
 const STYLES_BASE = `
       body { margin:0; padding:14px 10px; background:#F5F6F8; font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif; color:#323338; }
-      .wrap { max-width:720px; margin:0 auto; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; padding:18px; }
+      .wrap { position:relative; max-width:720px; margin:0 auto; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; padding:18px; }
       .hi { font-size:18px; font-weight:bold; margin:0 0 6px; }
       .lead { font-size:14px; color:#676879; line-height:1.6; margin:0 0 18px; }
       .cluster { margin:0 0 22px; }
       .cluster-title { font-size:15px; font-weight:bold; color:#323338; margin:0 0 8px; line-height:1.4; }
       table.board { width:100%; border-collapse:collapse; background:#ffffff; border:1px solid #E6E9EF; }
-      th { font-size:12px; color:#676879; font-weight:500; text-align:center; padding:8px; border-bottom:1px solid #E6E9EF; border-inline-end:1px solid #D0D4E4; background:#FAFBFC; white-space:nowrap; }
+      th { font-size:12px; color:#676879; font-weight:500; text-align:center; padding:8px; border-bottom:1px solid #E6E9EF; border-left:1px solid #D0D4E4; background:#FAFBFC; white-space:nowrap; }
       th.name-h { text-align:right; }
       th.status-h { min-width:200px; }
-      th:last-child { border-inline-end:none; }
-      td { font-size:14px; font-weight:normal; padding:0 8px; border-bottom:1px solid #E6E9EF; border-inline-end:1px solid #D0D4E4; vertical-align:middle; height:44px; text-align:center; }
-      td:last-child { border-inline-end:none; }
-      td.name { text-align:right; padding-inline-start:12px; white-space:nowrap; }
+      th:last-child { border-left:none; }
+      td { font-size:14px; font-weight:normal; padding:0 8px; border-bottom:1px solid #E6E9EF; border-left:1px solid #D0D4E4; vertical-align:middle; height:44px; text-align:center; }
+      td:last-child { border-left:none; }
+      td.name { text-align:right; padding-right:12px; white-space:nowrap; }
       td.date { color:#676879; font-size:13px; white-space:nowrap; }
       td.dd-cell { padding:8px; width:220px; vertical-align:middle; text-align:right; }
       .dd-wrap { position:relative; display:inline-block; width:200px; max-width:100%; text-align:right; }
@@ -242,7 +304,7 @@ const STYLES_BASE = `
         background:${NEUTRAL_STATUS};
       }
       .dd-menu {
-        position:absolute; top:100%; inset-inline-end:0; z-index:20;
+        position:absolute; top:100%; left:0; z-index:20;
         width:200px; margin-top:4px; padding:8px; box-sizing:border-box;
         background:#ffffff; border:1px solid #E6E9EF; border-radius:8px;
         box-shadow:0 10px 25px rgba(0,0,0,0.15);
@@ -254,26 +316,56 @@ const STYLES_BASE = `
         font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
       }
       .dd-opt:last-child { margin-bottom:0; }
+      /* Tap-away catcher. Fixed positioning is outside the strict set, so the
+         overlay is absolute inside the position:relative .wrap card — it
+         covers the card (where every interactive element lives), not the
+         viewport, which is an acceptable trade. */
       .dd-overlay {
-        position:fixed; top:0; right:0; bottom:0; left:0; z-index:10;
+        position:absolute; top:0; right:0; bottom:0; left:0; z-index:10;
         background:transparent;
       }
       .go { margin:8px 0 4px; }
-      .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; cursor:pointer; transition:filter .12s ease, box-shadow .12s ease; }
-      /* Hover affordance. amp4email permits :hover; clients that ignore it
-         simply render the base state, so this degrades to today's behaviour. */
-      .dd-trig:hover, .dd-opt:hover { filter:brightness(1.08); box-shadow:0 1px 4px rgba(0,0,0,0.18); }
-      .send:hover { filter:brightness(1.08); box-shadow:0 2px 6px rgba(0,0,0,0.2); }
-      .dd-trig:active, .dd-opt:active, .send:active { filter:brightness(0.94); }
+      .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; cursor:pointer; }
+      /* Hover/active affordance is box-shadow ONLY — filter is outside the
+         strict set. amp4email permits :hover; clients that ignore it simply
+         render the base state, so this degrades to today's behaviour. */
+      .dd-trig:hover, .dd-opt:hover { box-shadow:0 1px 4px rgba(0,0,0,0.18); }
+      .send:hover { box-shadow:0 2px 6px rgba(0,0,0,0.2); }
+      .dd-trig:active, .dd-opt:active, .send:active { box-shadow:inset 0 2px 4px rgba(0,0,0,0.22); }
       /* In-flight state. amp-form stamps these classes on the <form> itself, so
-         no binding is needed and it cannot desync from the actual request. */
-      form.amp-form-submitting .send { opacity:0.55; cursor:progress; filter:none; box-shadow:none; }
-      form.amp-form-submitting .dd-trig, form.amp-form-submitting .dd-opt { pointer-events:none; opacity:0.75; }
+         no binding is needed and it cannot desync from the actual request.
+         Strict set: no cursor override (value-restricted), no input-freeze
+         property — the dropdown freeze is dropped (accepted), the dim stays. */
+      form.amp-form-submitting .send { opacity:0.55; box-shadow:none; }
+      form.amp-form-submitting .dd-trig, form.amp-form-submitting .dd-opt { opacity:0.75; }
       .sending { margin-top:10px; font-size:13px; color:#676879; }
       .ok { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#E6F7EF; color:#00754A; font-size:13px; }
       .err { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#FDECEE; color:#B4222F; font-size:13px; white-space:pre-wrap; word-break:break-word; }
       .err-detail { display:block; margin-top:6px; font-size:11px; opacity:0.9; font-family:ui-monospace,Menlo,Consolas,monospace; }
       .foot { font-size:12px; color:#9699A6; line-height:1.6; border-top:1px solid #E6E9EF; padding-top:12px; margin-top:10px; }
+`;
+
+/**
+ * Note-column styles. Emitted ONLY when this message actually requires a note —
+ * a tenant that maps no text column ships neither the markup nor the rules, and
+ * the document stays exactly the size it was before the feature.
+ */
+const STYLES_NOTES = `
+      td.note-cell { padding:8px; width:210px; text-align:right; }
+      .note-in {
+        width:190px; max-width:100%; height:34px; box-sizing:border-box;
+        padding:0 10px; border:1px solid #D0D4E4; border-radius:4px;
+        font-size:13px; color:#323338; background:#ffffff; text-align:right;
+        font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
+      }
+      /* Bound class: a marked row with an empty note is the ONLY thing holding
+         the submit button down, so it has to be findable at a glance. */
+      .note-in.note-missing { border-color:#E2445C; background:#FDECEE; }
+      /* The submit's disabled state is bound, so this styles the gate itself.
+         Strict set: no filter, no cursor override. Opacity is what greys the
+         button — its background is an inline style, which no class rule can
+         beat without !important, and AMP forbids !important. */
+      .send[disabled] { opacity:0.45; box-shadow:none; }
 `;
 
 /**
@@ -336,18 +428,62 @@ ${options}
 }
 
 /**
+ * The note cell for one row. The VISIBLE input is deliberately nameless: two
+ * named inputs for one item (a task listed in two mapped clusters) would submit
+ * the key twice. It writes to shared state instead, and one hidden field per
+ * item carries that state to the wire — the same split the dropdown uses.
+ *
+ * `required` is NOT used. This is one bulk form for the whole message, so a
+ * required attribute would block submission over rows the reader never marked;
+ * the gate has to be conditional, which is what the submit binding does.
+ *
+ * @param {object} task
+ * @param {boolean} includeHidden emit the wire hidden input once per item
+ */
+function renderNoteCell(task, includeName) {
+  const id = String(task.itemId);
+  const nKey = `n${id}`;
+  const vKey = `v${id}`;
+  // THE TYPED INPUT CARRIES THE NAME. It used to be nameless, with the value
+  // riding a hidden twin bound `[value]="dd.n<id>"` and fed by
+  // input-throttled:AMP.setState — the same split the dropdown uses. Measured
+  // live 2026-08-04: that state never updated in Gmail, so every note reached
+  // the server EMPTY while the status (fed by `tap:`) arrived intact. The
+  // difference is the EVENT, not the binding: `tap` is honoured in AMP4EMAIL,
+  // `input-throttled` on a text input is not. A named input needs no event and
+  // no binding to submit, so the value no longer depends on either.
+  // Emitted once per item (an item listed in two mapped clusters would
+  // otherwise submit the key twice); later cells render read-only-ish twins
+  // with no name, which simply do not participate in the submission.
+  const name = includeName ? ` name="${escapeHtml(`note_${id}`)}"` : '';
+  return `              <td class="note-cell">
+                <input type="text"${name} class="note-in" placeholder="${escapeHtml(NOTE_PLACEHOLDER)}"
+                       [class]="dd.${vKey} != '' && dd.${nKey} == '' ? 'note-in note-missing' : 'note-in'"
+                       on="input-throttled:AMP.setState({dd:{${nKey}:event.value}})">
+              </td>`;
+}
+
+/**
  * @param {object} section
  * @param {Set<string>} emittedHidden
  * @param {Array<{ id: string, label: string, color: string }>} palette
+ * @param {number} clusterIndex
+ * @param {Set<string>} emittedNotes item ids whose hidden note field already exists
+ * @param {Record<string, Record<string, string>>} [statusColumnColors] real board label colors
  */
-function renderClusterTable(section, emittedHidden, palette, clusterIndex) {
-  const buttons = resolveSectionButtons(section);
+function renderClusterTable(section, emittedHidden, palette, clusterIndex, emittedNotes, statusColumnColors) {
+  const buttons = resolveSectionButtons(section, statusColumnColors);
   if (buttons.length === 0) return '';
 
   const dateHeader =
     section.dateColumnTitle && String(section.dateColumnTitle).length > 0
       ? String(section.dateColumnTitle)
       : 'תאריך';
+  const notesRequired = Boolean(sectionNoteColumn(section));
+  const noteHeader =
+    section.noteColumnTitle && String(section.noteColumnTitle).length > 0
+      ? String(section.noteColumnTitle)
+      : 'הערה';
 
   const rows = section.tasks
     .map((task) => {
@@ -355,25 +491,48 @@ function renderClusterTable(section, emittedHidden, palette, clusterIndex) {
       const fieldName = escapeHtml(`item_${itemId}`);
       const includeHidden = !emittedHidden.has(itemId);
       if (includeHidden) emittedHidden.add(itemId);
+      let noteCell = '';
+      if (notesRequired) {
+        const includeNoteHidden = !emittedNotes.has(itemId);
+        if (includeNoteHidden) emittedNotes.add(itemId);
+        noteCell = `\n${renderNoteCell(task, includeNoteHidden)}`;
+      }
       return `            <tr>
               <td class="name">&#8207;${escapeHtml(task.name)}</td>
-              <td class="date">${formatDate(task.date) || '—'}</td>
+              <td class="date">${formatDate(task.date) || '—'}</td>${noteCell}
 ${renderLabelDropdown(fieldName, buttons, palette, task, includeHidden, clusterIndex)}
             </tr>`;
     })
     .join('\n');
+
+  const noteHeaderCell = notesRequired
+    ? `\n              <th class="note-h">&#8207;${escapeHtml(noteHeader)}</th>`
+    : '';
 
   return `        <div class="cluster">
           <p class="cluster-title">&#8207;${escapeHtml(section.title)}</p>
           <table class="board">
             <tr>
               <th class="name-h">&#8207;שם הפעולה</th>
-              <th>&#8207;${escapeHtml(dateHeader)}</th>
+              <th>&#8207;${escapeHtml(dateHeader)}</th>${noteHeaderCell}
               <th class="status-h">&#8207;${STATUS_HEADER}</th>
             </tr>
 ${rows}
           </table>
         </div>`;
+}
+
+/**
+ * amp-bind expression for the submit button's [disabled], or '' when nothing in
+ * this message requires a note. Reads: "some row is marked but has no note".
+ * @param {object} recipient
+ * @returns {string}
+ */
+function buildNoteGate(recipient) {
+  const clauses = noteRequiredItemIds(recipient).map(
+    (id) => `(dd.v${id} != '' && dd.n${id} == '')`
+  );
+  return clauses.join(' || ');
 }
 
 /**
@@ -434,16 +593,32 @@ export function renderDigestAmp({
   const ddState = buildDropdownState(recipient);
   const palette = allRecipientButtons(recipient);
   const colorCss = buildColorClassCss(collectColors(recipient));
-  const styles = `${STYLES_BASE}\n      ${colorCss}`;
+  const notesInPlay = noteRequiredItemIds(recipient).length > 0;
+  const styles = `${STYLES_BASE}${notesInPlay ? STYLES_NOTES : ''}\n      ${colorCss}`;
   const emittedHidden = new Set();
+  const emittedNotes = new Set();
   const clusters = (recipient.sections ?? [])
     .filter((section) => section.tasks && section.tasks.length > 0)
-    .map((section, clusterIndex) => renderClusterTable(section, emittedHidden, palette, clusterIndex))
+    .map((section, clusterIndex) =>
+      renderClusterTable(
+        section,
+        emittedHidden,
+        palette,
+        clusterIndex,
+        emittedNotes,
+        recipient.statusColumnColors
+      )
+    )
     .filter((html) => html.length > 0)
     .join('\n');
+  const noteGate = buildNoteGate(recipient);
+  const submitBinding = noteGate ? ` [disabled]="${noteGate}"` : '';
+  const noteHint = noteGate
+    ? '<p class="lead">&#8207;בשורות שיש בהן שדה טקסט — חובה למלא אותו כדי לסמן את המשימה. כפתור האישור נשאר מנוטרל עד שכל שורה מסומנת מולאה.</p>'
+    : '';
 
   return `<!doctype html>
-<html amp4email lang="he">
+<html amp4email data-css-strict lang="he">
   <head>
     <meta charset="utf-8">
     <script async src="https://cdn.ampproject.org/v0.js"></script>
@@ -455,11 +630,12 @@ export function renderDigestAmp({
   </head>
   <body dir="rtl">
     <amp-state id="dd"><script type="application/json">${JSON.stringify(ddState)}</script></amp-state>
-    <div class="dd-overlay" hidden [hidden]="dd.o == ''" role="button" tabindex="0"
-         on="tap:AMP.setState({dd:{o:''}})"></div>
     <div class="wrap">
+      <div class="dd-overlay" hidden [hidden]="dd.o == ''" role="button" tabindex="0"
+           on="tap:AMP.setState({dd:{o:''}})"></div>
       <p class="hi">&#8207;שלום ${escapeHtml(recipient.name)},</p>
       <p class="lead">&#8207;לחצו על תגית הסטטוס לבחירה מהתפריט הנפתח, ואז על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
+      ${noteHint}
       <form method="post"
             action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
             enctype="application/x-www-form-urlencoded">
@@ -469,12 +645,12 @@ export function renderDigestAmp({
         <input type="hidden" name="s" value="${escapeHtml(signed.slot)}">
         <input type="hidden" name="sig" value="${escapeHtml(signed.signature)}">
 ${clusters}
-        <div class="go"><input class="send" type="submit" style="background:${SUBMIT_COLOR}" value="${SUBMIT_LABEL}"></div>
+        <div class="go"><input class="send" type="submit" style="background:${SUBMIT_COLOR}" value="${SUBMIT_LABEL}"${submitBinding}></div>
         <div submitting><div class="sending">שולח את העדכונים…</div></div>
         <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
         <div submit-error><template type="amp-mustache"><div class="err">{{message}}{{#detail}}<span class="err-detail">{{detail}}</span>{{/detail}}</div></template></div>
       </form>
-      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה בתפריט לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
+      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה בתפריט לא משתנות · כל משימה מופיעה פעם אחת, במקבץ בעל העדיפות הגבוהה · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
     </div>
   </body>
 </html>`;

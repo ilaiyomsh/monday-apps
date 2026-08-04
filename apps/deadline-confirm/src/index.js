@@ -17,7 +17,7 @@ import { createRateLimiter } from './helpers/rate-limit.js';
 import { createSecureStorageBackend } from './storage/secure-storage-backend.js';
 import { createMemoryBackend } from './storage/memory-backend.js';
 import { getEnv } from './helpers/environment.js';
-import { createGmailSender } from './services/gmail-sender.js';
+import { createSmtpSender } from './services/smtp-sender.js';
 import logger, { logInfo, logWarn, health } from './helpers/logger.js';
 import { attachAxiomServerSink, flushAxiom } from './helpers/axiomServerSink.js';
 import {
@@ -93,21 +93,24 @@ const rateLimiters = {
   perAccount: createRateLimiter(),
 };
 
-// V6 T9: Gmail API is the only sending channel (Resend is gone). The sender is
-// constructed only when an OAuth client pair is present — with neither an
-// app-level pair nor (later) a per-tenant one there is nothing to authenticate
-// with, and leaving the seam empty is what makes POST /api/digest/send answer a
-// clean 409 email_not_configured instead of failing mid-flight.
+// SMTP XOAUTH2 is the only sending channel — a hard swap off the Gmail API,
+// which strips the text/x-amp-html part on external delivery
+// (docs/amp-email-verified-findings.md §2; gmail-sender.js is kept for
+// reference/rollback only). The sender is constructed only when an OAuth
+// client pair is present — with neither an app-level pair nor (later) a
+// per-tenant one there is nothing to authenticate with, and leaving the seam
+// empty is what makes POST /api/digest/send answer a clean 409
+// email_not_configured instead of failing mid-flight.
 const emailSender =
   env.googleOauthClientId && env.googleOauthClientSecret
-    ? createGmailSender({
+    ? createSmtpSender({
         storage,
         clientId: env.googleOauthClientId,
         clientSecret: env.googleOauthClientSecret,
       })
     : undefined;
 if (!emailSender) {
-  logWarn('server', 'Gmail sender not configured — digest sending is disabled', {});
+  logWarn('server', 'SMTP sender not configured — digest sending is disabled', {});
 }
 
 // `version` is stamped in here, not in getEnv(): the number lives in

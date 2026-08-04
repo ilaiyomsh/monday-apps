@@ -115,6 +115,10 @@ export function createGoogleOauthRouter({ storage, env, fetchImpl, now = Date.no
         accessToken: tokens.accessToken,
         accessTokenExpiresAt: tokens.accessTokenExpiresAt,
         senderAddress: tokens.senderAddress,
+        // Granted scope, verbatim from Google. /api/state reads it to flag a
+        // grant that predates the 2026-08-04 scope change (findings §5) as
+        // 'broken', which is what drives the admin's reconnect (re-consent).
+        scope: tokens.scope,
         connectedAt: now(),
       });
       logger.logInfo('oauth-google', 'sender mailbox connected', { accountId: entry.accountId });
