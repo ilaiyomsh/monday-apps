@@ -186,19 +186,32 @@ kit remains visibility-only until the standing lint debt is cleared.
 
 ## Activation status — what is still required (OWNER ONLY)
 
-> **Last verified: 2026-07-28** (after #328 + #486 merged to `develop`).
-> The code is fully wired and **fail-soft**: every item below is a token/env action agents
-> cannot perform, and until it lands the corresponding sink is *inert* — nothing breaks, nothing
-> ships. Exact commands: *Runbooks → One-time setup*. Verify with *Runbooks → Acceptance test*.
+> **Last verified: 2026-08-04** (during the `apps/discussions` security scan — see
+> `docs/SECURITY-SCAN-REPORT.md` Finding 2b, which was raised *because* this section was stale).
+> The code is fully wired and **fail-soft**: every item still marked outstanding below is a
+> token/env action agents cannot perform, and until it lands the corresponding sink is *inert* —
+> nothing breaks, nothing ships. Exact commands: *Runbooks → One-time setup*. Verify with
+> *Runbooks → Acceptance test*.
+>
+> **Do not read this section as authoritative without re-checking.** It drifted once and caused a
+> live telemetry path to be reviewed as dormant. Confirm state from the source of truth:
+> `gh secret list --repo ilaiyomsh/monday-apps` (names only) plus `gh run list` for a deploy since.
 
-### 1. All 9 client surfaces — one GitHub secret
+### 1. All 9 client surfaces — one GitHub secret ✅ **DONE**
 
-| Required | Where | Without it |
+| Required | Where | Status |
 |---|---|---|
-| `AXIOM_INGEST_TOKEN` | repo GitHub secret | every client build bakes an empty token; the `PROD && token` gate stays inert. Blocks **all** browser surfaces at once. |
+| `AXIOM_INGEST_TOKEN` | repo GitHub secret | ✅ **set 2026-07-22.** Every client build since bakes a real token, so the `PROD && dataset && token && app` gate is **OPEN** and browser surfaces ship. |
 
 One secret covers every client build — each deploy workflow's Build step derives
 `VITE_AXIOM_TOKEN` from it.
+
+**Consequence, now that this is live:** anything a client attaches to a log record is a
+potential egress. It is safe today only because `mapRecordToEvent()` is a strict allowlist
+that never maps `record.context` query/variables or `record.data` — see
+`.claude/skills/error-guard/references/telemetry-egress-boundary.md`. That allowlist is a
+security boundary, locked by tests in `packages/error-kit/test/axiomSink.test.ts`
+("egress boundary" describe block). Widening it is a security change, not a telemetry change.
 
 ### 2. Server runtime env — per app, via `mapps code:env`
 

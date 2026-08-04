@@ -90,6 +90,70 @@ describe('shouldShip — level policy', () => {
   });
 });
 
+// F-2 (security scan 2026-08-04, docs/SECURITY-SCAN-REPORT.md). The mapper's allowlist is
+// the ONLY thing keeping user-authored business content out of Axiom: callers legitimately
+// attach the full GraphQL document and its variables to error records for the in-app
+// ErrorDetailsModal (see discussions' client.js:279/321/330). Those must never ship.
+// Widening this mapper is a SECURITY change — if one of these fails, that is the alarm.
+describe('mapRecordToEvent — egress boundary: business content never ships', () => {
+  const SECRETS = {
+    query: 'mutation { change_column_value(item_id: 1, value: "{\\"text\\":\\"salary review\\"}") { id } }',
+    variables: { name0: 'Q3 layoff plan', cv0: '{"text":"do not disclose"}' },
+    rawResponse: { data: { items: [{ name: 'confidential discussion' }] } },
+  };
+
+  it('drops context.query, context.variables and context.rawResponse entirely', () => {
+    const ev = mapRecordToEvent(rec({ context: { ...SECRETS, duration: 42 } }));
+
+    expect(ev).not.toHaveProperty('query');
+    expect(ev).not.toHaveProperty('variables');
+    expect(ev).not.toHaveProperty('rawResponse');
+    // the allowlisted sibling on the same context object still maps, proving the
+    // context was read and these keys were skipped rather than the object ignored
+    expect(ev.ms).toBe(42);
+  });
+
+  it('leaks no business substring anywhere in the serialised event', () => {
+    const ev = mapRecordToEvent(
+      rec({
+        context: SECRETS,
+        error: Object.assign(new Error('GraphQL error'), { errorCode: 'ColumnValueException' }),
+      })
+    );
+
+    const wire = JSON.stringify(ev);
+    for (const needle of ['salary review', 'Q3 layoff plan', 'do not disclose', 'confidential discussion']) {
+      expect(wire).not.toContain(needle);
+    }
+  });
+
+  it('ignores record.data wholesale', () => {
+    const ev = mapRecordToEvent(rec({ data: SECRETS } as Partial<LogRecord>));
+
+    expect(JSON.stringify(ev)).not.toContain('salary review');
+    expect(ev).not.toHaveProperty('data');
+  });
+
+  it('ships only keys from the known allowlist — a new key must be reviewed', () => {
+    const ALLOWED = new Set([
+      'level', 'tag', 'message', 'kind', 'corr',
+      'err_name', 'err_code', 'stack1', 'stack', 'err_msg',
+      'ms', 'total_ms', 'step', 'component_stack',
+    ]);
+    const err = Object.assign(new Error('boom'), { errorCode: 'X' });
+    err.stack = 'Error: boom\n    at foo (bar.js:1:1)';
+    const ev = mapRecordToEvent(
+      rec({
+        correlationId: 3,
+        error: err,
+        context: { ...SECRETS, duration: 1, totalMs: 2, step: 3, componentStack: 'at <App>' },
+      })
+    );
+
+    expect(Object.keys(ev).filter((k) => !ALLOWED.has(k))).toEqual([]);
+  });
+});
+
 describe('mapRecordToEvent — allowlisted mapping', () => {
   it('maps level/tag/message + corr', () => {
     const ev = mapRecordToEvent(rec({ level: 'ERROR', module: 'API', message: 'boom', correlationId: 7 }));

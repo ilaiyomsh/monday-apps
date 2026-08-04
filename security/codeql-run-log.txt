@@ -1,0 +1,25 @@
+[84/105 eval 14.9s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-1427/SystemPromptInjection.bqrs.
+[85/105 eval 25.5s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-116/BadTagFilter.bqrs.
+[86/105 eval 25.7s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-116/IncompleteMultiCharacterSanitization.bqrs.
+[87/105 eval 15.9s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-134/TaintedFormatString.bqrs.
+[88/105 eval 15.7s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-327/BrokenCryptoAlgorithm.bqrs.
+[89/105 eval 14.4s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-916/InsufficientPasswordHash.bqrs.
+[90/105 eval 16.5s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-200/FileAccessToHttp.bqrs.
+[91/105 eval 16.8s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-312/CleartextStorage.bqrs.
+[92/105 eval 16.2s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-506/HardcodedDataInterpretedAsCode.bqrs.
+[93/105 eval 16.8s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-400/RemotePropertyInjection.bqrs.
+[94/105 eval 27.8s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-079/XssThroughDom.bqrs.
+[95/105 eval 16.9s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-829/InsecureDownload.bqrs.
+[96/105 eval 17.4s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-776/XmlBomb.bqrs.
+[97/105 eval 17s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-918/RequestForgery.bqrs.
+[98/105 eval 17.8s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-754/UnvalidatedDynamicMethodCall.bqrs.
+[99/105 eval 18.4s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-601/ClientSideUrlRedirect.bqrs.
+[100/105 eval 18.1s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-915/PrototypePollutingAssignment.bqrs.
+[101/105 eval 18.5s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-915/PrototypePollutingFunction.bqrs.
+[102/105 eval 30.2s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-079/ExceptionXss.bqrs.
+[103/105 eval 20s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-312/CleartextLogging.bqrs.
+[104/105 eval 20s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-338/InsecureRandomness.bqrs.
+[105/105 eval 20s] Evaluation done; writing results to codeql/javascript-queries/Security/CWE-918/ClientSideRequestForgery.bqrs.
+Shutting down query evaluator.
+Interpreting results.
+CodeQL scanned 290 out of 290 JavaScript/TypeScript files in this invocation. Typically CodeQL is configured to analyze a single CodeQL language per invocation, so check other invocations to determine overall coverage information.
