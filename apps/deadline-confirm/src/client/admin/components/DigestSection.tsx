@@ -38,7 +38,7 @@ const GUARD_MESSAGES: Record<string, string> = {
   digest_not_configured: 'המייל המסכם עוד לא נשמר — הפעילו אותו, השלימו את השדות ולחצו "שמירת הגדרות".',
   no_secret: 'אין מפתח קישורים פעיל — צרו מפתח בלשונית ההגדרות.',
   not_connected: 'אין חיבור monday פעיל — התחברו מחדש בלשונית ההגדרות.',
-  email_not_configured: 'ערוץ השליחה לא מוגדר בשרת (Gmail API — חסרים credentials בסביבת האפליקציה).',
+  email_not_configured: 'ערוץ השליחה לא מוגדר בשרת (חסר צמד ה-OAuth client בסביבת האפליקציה).',
   monday_api_failed: 'קריאת הלוחות ממאנדיי נכשלה. נסו שוב.',
 };
 
@@ -573,8 +573,8 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     <label>קוד ה-AMP המלא שנבנה — ניתן לעריכה ולשליחה</label>
                     <div className="dc-hint">
                       זה בדיוק המסמך שנשלח כחלק <code>text/x-amp-html</code>. אפשר לערוך אותו כאן
-                      ולשלוח את הבתים שנערכו כמו שהם דרך Gmail API — בלי רינדור מחדש — כדי לבודד
-                      מה בדיוק ג׳ימייל דוחה.
+                      ולשלוח את הבתים שנערכו כמו שהם בערוץ השליחה (SMTP) — בלי רינדור מחדש —
+                      כדי לבודד מה בדיוק ג׳ימייל דוחה.
                     </div>
                     <textarea
                       dir="ltr"
