@@ -25,8 +25,12 @@ const DISC_CAPS = [
   // disc-tier capability — like createTask.
   'createDecision',
   'addTopicOrPoint',
+  // round340 — edit/delete of a topic or point each split into a BEFORE and an
+  // AFTER-discussed capability (owner spec).
   'editTopicOrPoint',
   'deleteTopicOrPoint',
+  'editTopicOrPointDiscussed',
+  'deleteTopicOrPointDiscussed',
   'checkPoint',
   'editResponses',
 ];
@@ -44,6 +48,8 @@ const TASK_CAPS = [
 // (decisionCreatorID / deciderID), mirroring the task tier.
 const DECISION_CAPS = [
   'editDecisionStatus',
+  // round340 — מעקב החלטה split off editDecisionStatus into its own capability.
+  'editDecisionTracking',
   'editDecisionPriority',
   'editDecisionDate',
   'editDecisionAffected',
@@ -133,10 +139,10 @@ describe('PERMISSION_ROLE_SOURCES', () => {
   it('lists the people-column role aliases per board', () => {
     expect(PERMISSION_ROLE_SOURCES).toEqual({
       discussions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID', 'participantsID'],
-      // item 19 (2026-07-14): the tasks board gained יכולת צפייה (viewers) +
-      // יכולת עריכה (editors) people columns, auto-filled at task creation and
-      // acting as first-class roles (viewers = read-only, editors = full edit).
-      tasks: ['taskCreatorID', 'responsibilityID', 'taskViewersID', 'taskEditorsID'],
+      // item 19 (2026-07-14): the tasks board gained יכולת עריכה (taskEditorsID),
+      // auto-filled at task creation and acting as a first-class full-edit role.
+      // round340 retired its read-only twin taskViewersID.
+      tasks: ['taskCreatorID', 'responsibilityID', 'taskEditorsID'],
       // decisions now includes affectedID ("מושפעים") as a first-class role source.
       decisions: ['decisionCreatorID', 'deciderID', 'affectedID'],
     });
@@ -169,7 +175,6 @@ describe('DEFAULT_PERMISSION_SEED (LOCKED defaults)', () => {
   it('participants: view/export/createTask/createDecision/addTopicOrPoint/checkPoint/editResponses on; field/summary/edit/delete off', () => {
     const caps = DEFAULT_PERMISSION_SEED['discussions:participantsID'].capabilities;
     expect(caps.viewDiscussion).toBe(true);
-    expect(caps.exportDocs).toBe(true);
     expect(caps.createTask).toBe(true);
     expect(caps.createDecision).toBe(true); // createDecision mirrors createTask per role
     expect(caps.addTopicOrPoint).toBe(true);
@@ -177,8 +182,20 @@ describe('DEFAULT_PERMISSION_SEED (LOCKED defaults)', () => {
     expect(caps.editResponses).toBe(true);
     expect(caps.editDiscussionFields).toBe(false);
     expect(caps.editSummary).toBe(false);
-    expect(caps.editTopicOrPoint).toBe(false);
-    expect(caps.deleteTopicOrPoint).toBe(false);
+    // round340 (owner spec) — exporting the discussion to a document is a publishing
+    // act, not a participation one, so it left the participant seed.
+    expect(caps.exportDocs).toBe(false);
+    /*
+     * round340 (owner spec) — a participant may edit or delete a topic/point while it
+     * is still only a plan, and may NOT once it has been discussed. Both halves are
+     * asserted together on purpose: granting "before" without revoking "after" is the
+     * failure mode that would silently hand participants edit rights over the record
+     * of a meeting that already happened.
+     */
+    expect(caps.editTopicOrPoint).toBe(true);
+    expect(caps.deleteTopicOrPoint).toBe(true);
+    expect(caps.editTopicOrPointDiscussed).toBe(false);
+    expect(caps.deleteTopicOrPointDiscussed).toBe(false);
   });
 
   it('task creator grants ALL task caps', () => {
@@ -199,11 +216,16 @@ describe('DEFAULT_PERMISSION_SEED (LOCKED defaults)', () => {
     expect(caps.deleteTask).toBe(false);
   });
 
-  it('task editors (יכולת עריכה) grant ALL task caps; task viewers (יכולת צפייה) grant NONE (item 19)', () => {
+  it('task editors (יכולת עריכה) grant ALL task caps (item 19)', () => {
     const editors = DEFAULT_PERMISSION_SEED['tasks:taskEditorsID'].capabilities;
     TASK_CAPS.forEach((id) => expect(editors[id]).toBe(true));
-    const viewers = DEFAULT_PERMISSION_SEED['tasks:taskViewersID'].capabilities;
-    TASK_CAPS.forEach((id) => expect(viewers[id]).toBe(false));
+  });
+
+  // round340 — the retired viewers role must leave no seed entry behind. The
+  // `is keyed by ${boardKey}:${alias}` test above already pins the key SET, but this
+  // states the retirement itself so the reason survives the next refactor.
+  it('the retired task viewers role has NO seed entry', () => {
+    expect(DEFAULT_PERMISSION_SEED).not.toHaveProperty('tasks:taskViewersID');
   });
 
   it('discussion creator + lead + coordinator + participants may create decisions', () => {
@@ -222,24 +244,24 @@ describe('DEFAULT_PERMISSION_SEED (LOCKED defaults)', () => {
     DECISION_CAPS.forEach((id) => expect(caps[id]).toBe(true));
   });
 
-  it('decider (מחליט): edits everything; NOT delete', () => {
+  // round340 (owner spec) — "the decision creator and the decider get ALL the
+  // permissions", delete included; the decider used to be barred from delete alone.
+  it('decider (מחליט): grants EVERY decision cap, delete included', () => {
     const caps = DEFAULT_PERMISSION_SEED['decisions:deciderID'].capabilities;
-    expect(caps.editDecisionStatus).toBe(true);
-    expect(caps.editDecisionPriority).toBe(true);
-    expect(caps.editDecisionDate).toBe(true);
-    expect(caps.editDecisionAffected).toBe(true);
-    expect(caps.editDecisionName).toBe(true);
-    expect(caps.deleteDecision).toBe(false);
+    DECISION_CAPS.forEach((id) => expect(caps[id]).toBe(true));
   });
 
-  it('affected (מושפעים): the least-privileged decision role — status edit on; priority/date/affected/name/delete off', () => {
+  /*
+   * round340 (owner spec: "ולמושפעים אין שום הרשאה") — being listed as affected by a
+   * decision is being told about it, not being given a say in it. The role used to
+   * grant editDecisionStatus, which let any stakeholder mark someone else's decision
+   * done; every cap is now an EXPLICIT false, which also vetoes the
+   * 'creatorLeadOwner' default bucket so nothing leaks back in through the
+   * item-tier self-role scan.
+   */
+  it('affected (מושפעים): grants NOTHING — every decision cap explicitly false', () => {
     const caps = DEFAULT_PERMISSION_SEED['decisions:affectedID'].capabilities;
-    expect(caps.editDecisionStatus).toBe(true);
-    expect(caps.editDecisionPriority).toBe(false);
-    expect(caps.editDecisionDate).toBe(false);
-    expect(caps.editDecisionAffected).toBe(false);
-    expect(caps.editDecisionName).toBe(false);
-    expect(caps.deleteDecision).toBe(false);
+    DECISION_CAPS.forEach((id) => expect(caps[id]).toBe(false));
   });
 
   it('seeded capability ids are all real catalog ids', () => {

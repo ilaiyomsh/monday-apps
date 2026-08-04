@@ -242,7 +242,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   const resolveTargetIds = useBatchTargets(selectedIds, allow); // round143 — shared resolver
   const applyStatus = useCallback((id, status) => resolveTargetIds(id, 'editDecisionStatus').forEach((t) => updateDecisionStatus(t, status)), [resolveTargetIds, updateDecisionStatus]);
   // round153 — "מעקב החלטה" second status column; same batch-aware apply path.
-  const applyTracking = useCallback((id, tracking) => resolveTargetIds(id, 'editDecisionStatus').forEach((t) => updateDecisionTracking(t, tracking)), [resolveTargetIds, updateDecisionTracking]);
+  const applyTracking = useCallback((id, tracking) => resolveTargetIds(id, 'editDecisionTracking').forEach((t) => updateDecisionTracking(t, tracking)), [resolveTargetIds, updateDecisionTracking]);
   const applyPriority = useCallback((id, value) => resolveTargetIds(id, 'editDecisionPriority').forEach((t) => updateDecisionPriority(t, value)), [resolveTargetIds, updateDecisionPriority]);
   const applyDate = useCallback((id, date) => resolveTargetIds(id, 'editDecisionDate').forEach((t) => updateDecisionDate(t, date)), [resolveTargetIds, updateDecisionDate]);
   // מחליט + מושפעים share the single editDecisionAffected capability (same

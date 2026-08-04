@@ -41,7 +41,7 @@ async function fetchTasksByDiscussion(discussionId) {
   // [] and `itemReady` (an array IS "ready") lets the matrix falsely DENY a task
   // creator/editor here while allowing them in My Tasks (which does fetch them).
   // responsibilityID is already fetched above; add the rest.
-  const PERMISSION_COLS = ['taskCreatorID', 'taskViewersID', 'taskEditorsID'];
+  const PERMISSION_COLS = ['taskCreatorID', 'taskEditorsID'];
   const FETCH_ALIASES = [...RENDERED, ...PERMISSION_COLS];
   const taskCols = FETCH_ALIASES.map((alias) => taskColumns?.[alias]?.id).filter(Boolean);
   const taskCv = cvSelection(FETCH_ALIASES.map((alias) => taskColumns?.[alias]?.type));
@@ -398,7 +398,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
   // Extracted from createTask so a failed create can be retried against the SAME
   // temp row (same id → same React key → no flicker/dup/disappear).
   const runCreate = useCallback(async (tempId, name, o) => {
-    const { status = null, assignee = [], deadline = null, topicId = null, viewers = [], editors = [] } = o || {};
+    const { status = null, assignee = [], deadline = null, topicId = null, editors = [] } = o || {};
     // Clear any prior error flag (retry path).
     setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, _createFailed: false } : i)));
     try {
@@ -434,12 +434,10 @@ export function useTasks(discussionId, discussionTypeId = null) {
         data.taskCreationDateID = new Date();
       }
       if (assignee.length) data.responsibilityID = assignee.map(p => Number(p.id));
-      // Item 19 — access columns, auto-filled from the parent discussion:
-      // participants → יכולת צפייה (viewers), single-person discussion roles →
-      // יכולת עריכה (editors). Written only when the owner mapped the columns.
-      if (viewers.length && getColumns('tasks')?.taskViewersID?.id) {
-        data.taskViewersID = viewers.map((p) => Number(p?.id ?? p)).filter((n) => Number.isFinite(n));
-      }
+      // Item 19 — the access column, auto-filled from the parent discussion: its
+      // single-person roles (lead / coordinator / creator) → יכולת עריכה (editors).
+      // Written only when the owner mapped the column. round340 dropped the
+      // participants → יכולת צפייה half with the column itself.
       if (editors.length && getColumns('tasks')?.taskEditorsID?.id) {
         data.taskEditorsID = editors.map((p) => Number(p?.id ?? p)).filter((n) => Number.isFinite(n));
       }

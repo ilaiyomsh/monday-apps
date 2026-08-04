@@ -52,6 +52,35 @@ describe('resolveLayout', () => {
     expect(Object.keys(l).sort()).toEqual([...WIDGET_IDS].sort());
     expect(l.bar).toMatchObject({ ...DEFAULT_LAYOUT.bar, hidden: false });
   });
+
+  /*
+   * round340 (owner request) — the LOGO widget starts HIDDEN; every other widget still
+   * starts visible. With no logo uploaded the widget rendered a grey "לוגו" placeholder
+   * card, so the old default spent a block of every personal dashboard on an empty box.
+   * The owner's wording is the spec: it appears "only if they chose to add it during
+   * editing", i.e. via the layout editor's show/hide.
+   */
+  it('starts the logo widget HIDDEN and every other widget visible', () => {
+    const l = resolveLayout(null);
+    expect(l.logo.hidden).toBe(true);
+    WIDGET_IDS.filter((id) => id !== 'logo').forEach((id) => expect(l[id].hidden).toBe(false));
+  });
+
+  /*
+   * …and an explicit choice still wins in BOTH directions. This is the whole reason the
+   * default is applied per-widget on "no stored entry" rather than by flipping the
+   * coercion: an owner who deliberately unhid the logo must keep it, and their stored
+   * `hidden: false` is indistinguishable from a default one unless the absence of the
+   * entry is what selects the default.
+   */
+  it('lets a stored choice override the logo default either way', () => {
+    const shown = resolveLayout({ __v: LAYOUT_VERSION, logo: { ...DEFAULT_LAYOUT.logo, hidden: false } });
+    expect(shown.logo.hidden).toBe(false);
+    const hiddenBar = resolveLayout({ __v: LAYOUT_VERSION, bar: { ...DEFAULT_LAYOUT.bar, hidden: true } });
+    expect(hiddenBar.bar.hidden).toBe(true);
+    // a stored layout that simply says nothing about the logo still hides it
+    expect(hiddenBar.logo.hidden).toBe(true);
+  });
   it('merges a stored rect over the default, clamps it, coerces hidden, drops unknowns', () => {
     const l = resolveLayout({ __v: LAYOUT_VERSION, bar: { x: 1, y: 1, w: 99, h: 4, hidden: true }, bogusWidget: { x: 0 } });
     expect(l.bar).toEqual({ x: 0, y: 1, w: GRID_COLS, h: 4, hidden: true }); // w capped, x pulled in
@@ -72,7 +101,8 @@ describe('layoutRows', () => {
     const base = resolveLayout(null);
     const maxBottom = Math.max(...WIDGET_IDS.map((id) => DEFAULT_LAYOUT[id].y + DEFAULT_LAYOUT[id].h));
     expect(layoutRows(base)).toBe(maxBottom);
-    // hiding every widget but the (short) logo leaves just the logo's bottom
+    // hiding every widget but the (short) logo leaves just the logo's bottom. The logo
+    // needs an EXPLICIT hidden:false here — round340 made hidden its default.
     const stored = { __v: LAYOUT_VERSION };
     WIDGET_IDS.forEach((id) => { stored[id] = { ...DEFAULT_LAYOUT[id], hidden: id !== 'logo' }; });
     expect(layoutRows(resolveLayout(stored))).toBe(DEFAULT_LAYOUT.logo.y + DEFAULT_LAYOUT.logo.h);

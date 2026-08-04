@@ -171,6 +171,9 @@ function SortableTopicSection({
   // feature is off). add → add topic/point; edit → rename/priority/drag-reorder;
   // del → delete/hide; check → "נידונה" toggle.
   canAdd = true, canEditTopic = true, canHideTopic = true, canDelete = true, canCheck = true,
+  // round340 — the AFTER-discussed halves of edit/delete. Default true so an
+  // existing harness/test that passes only the pre-split props behaves as before.
+  canEditTopicDiscussed = true, canDeleteDiscussed = true,
   priorityMapped = false, priorityOptions, priorityLabelById, priorityColorById, updateTopicPriority,
   // Decisions/tasks-from-point wiring (threaded from TopicsTab).
   onCreatePointDecision, onCreatePointTask, onOpenPointItems, onDeletePoint,
@@ -219,6 +222,18 @@ function SortableTopicSection({
   const titleClickTimerRef = useRef(null);
 
   const points = topic._subitems || [];
+  /*
+   * round340 — edit/delete split on whether the thing was already DISCUSSED.
+   * A POINT is discussed when its "נידונה" tick is on. A TOPIC counts as discussed
+   * once ANY of its points is: the topic is the container, so renaming or removing
+   * it after the meeting reached one of its points rewrites the record just as much
+   * as editing that point would.
+   */
+  const topicDiscussed = points.some((p) => p?.discussed);
+  const canEditThisTopic = topicDiscussed ? canEditTopicDiscussed : canEditTopic;
+  const canDeleteThisTopic = topicDiscussed ? canDeleteDiscussed : canDelete;
+  const canEditPointOf = (point) => (point?.discussed ? canEditTopicDiscussed : canEditTopic);
+  const canDeletePointOf = (point) => (point?.discussed ? canDeleteDiscussed : canDelete);
   const excluded = topic.notForDiscussion === true;
   // Background create failed: keep the topic + show a clear error + retry in the
   // header (dismissal = the existing kebab "מחק", which removes a temp row locally).
@@ -263,7 +278,7 @@ function SortableTopicSection({
   // ride on the card HEADER when the topic is editable — no six-dot grip. The
   // PointerSensor activation distance (TopicsTab, ~8px) keeps a plain click on
   // the header controls working; only a press-move starts a group drag.
-  const headerDragProps = canEditTopic ? { ...attributes, ...listeners } : {};
+  const headerDragProps = canEditThisTopic ? { ...attributes, ...listeners } : {};
   const stopEvt = (e) => e.stopPropagation();
 
   // Header "+" (נקודה חדשה): make sure the card is open, then focus the inline
@@ -316,7 +331,7 @@ function SortableTopicSection({
           propagation. Hover reveals the actions cluster (mockup .tActs). */}
       {!headless && (
       <div
-        className={`${styles.cardHead} ${canEditTopic ? styles.sectionHeaderDraggable : ''}`}
+        className={`${styles.cardHead} ${canEditThisTopic ? styles.sectionHeaderDraggable : ''}`}
         {...headerDragProps}
         onClick={excluded ? undefined : () => {
           if (titleClickTimerRef.current) clearTimeout(titleClickTimerRef.current);
@@ -378,7 +393,7 @@ function SortableTopicSection({
               onDoubleClick={!excluded ? (e) => {
                 e.preventDefault(); e.stopPropagation();
                 if (titleClickTimerRef.current) { clearTimeout(titleClickTimerRef.current); titleClickTimerRef.current = null; }
-                if (canEditTopic) { setTitleDraft(topic.name || ''); setEditingTitle(true); }
+                if (canEditThisTopic) { setTitleDraft(topic.name || ''); setEditingTitle(true); }
               } : undefined}
               title={topic.name}
             >
@@ -414,7 +429,7 @@ function SortableTopicSection({
               <Plus size={16} />
             </button>
           )}
-          {canEditTopic && !excluded && !editingTitle && (
+          {canEditThisTopic && !excluded && !editingTitle && (
             <button
               type="button"
               className={styles.headActBtn}
@@ -426,7 +441,7 @@ function SortableTopicSection({
             </button>
           )}
           {/* round260 (owner request) — topic hide button removed. */}
-          {canDelete && (
+          {canDeleteThisTopic && (
             <RowKebabMenu
               excluded={excluded}
               kind="נושא"
@@ -441,13 +456,13 @@ function SortableTopicSection({
 
         <span className={styles.headerSpacer} />
 
-        {priorityMapped && (hasPriorityLabel || canEditTopic) && (
+        {priorityMapped && (hasPriorityLabel || canEditThisTopic) && (
           <PriorityPill
             value={topic.priority}
             options={priorityOptions}
             labelById={priorityLabelById}
             colorById={priorityColorById}
-            canEdit={canEditTopic}
+            canEdit={canEditThisTopic}
             onChange={(labelId) => updateTopicPriority && updateTopicPriority(topic.id, labelId)}
           />
         )}
@@ -466,9 +481,9 @@ function SortableTopicSection({
                   columns={columns}
                   onToggle={togglePoint}
                   onRename={renamePoint}
-                  onDelete={canDelete ? onDeletePoint : undefined}
+                  onDelete={canDeletePointOf(point) ? onDeletePoint : undefined}
                   onRetryCreate={onRetryCreate}
-                  canEditPoint={canEditTopic}
+                  canEditPoint={canEditPointOf(point)}
                   canCheck={canCheck}
                   decisionCount={getPointItemIds(pointItemsByPoint, point._realId || point.id, 'decision')
                     .filter((id) => decisionIdSet.has(String(id))).length}
@@ -542,6 +557,10 @@ export function TopicsTab({
   // permissions feature is off, so behavior is unchanged; Phase 3 lets a role
   // grant some and not others.
   addTopicOrPoint = true, editTopicOrPoint = true, deleteTopicOrPoint = true,
+  // round340 — the AFTER-discussed halves. editTopicOrPoint/deleteTopicOrPoint now
+  // mean "before it was discussed"; these two cover after. Defaults true so callers
+  // that pass only the pre-split props keep the old behaviour.
+  editTopicOrPointDiscussed = true, deleteTopicOrPointDiscussed = true,
   checkPoint = true, editResponses: _editResponses = true, // kept for prop compat (התייחסויות column removed from display)
   // Hide/show a topic or point (item 10) — a FIXED rule (discussion lead /
   // coordinator / owner), computed by DiscussionCard, independent of
@@ -684,10 +703,22 @@ export function TopicsTab({
     const targets = selectedPointIds.size > 1 && selectedPointIds.has(originId) ? selectedPoints : [point];
     targets.forEach((p) => togglePoint(p, discussed));
   };
+  /*
+   * round340 — per-ROW edit/delete gates. The two capabilities each come in a
+   * before/after-discussed pair, and which one applies is a property of the row, not
+   * of the discussion, so every gate below is a function of the topic or point.
+   */
+  const topicIsDiscussed = (topic) => ((topic?._subitems) || []).some((p) => p?.discussed);
+  const canEditTopicRow = (topic) => (topicIsDiscussed(topic) ? editTopicOrPointDiscussed : editTopicOrPoint);
+  const canDeleteTopicRow = (topic) => (topicIsDiscussed(topic) ? deleteTopicOrPointDiscussed : deleteTopicOrPoint);
+  const canDeletePointRow = (point) => (point?.discussed ? deleteTopicOrPointDiscussed : deleteTopicOrPoint);
+
   // Bulk delete — iterate the per-point optimistic delete (no batch endpoint).
+  // A mixed selection deletes only the points the user is actually allowed to
+  // delete, rather than refusing the whole batch or ignoring the gate.
   const deleteSelectedPoints = () => {
-    if (!deleteTopicOrPoint || selectedPoints.length === 0) return;
-    const pts = selectedPoints;
+    const pts = selectedPoints.filter(canDeletePointRow);
+    if (pts.length === 0) return;
     clearPointSelection();
     // Soft-delete with an undo window; GREEN (success) toast with a "בטל" (undo)
     // button rendered to the LEFT of the message (see Toast) that restores the
@@ -699,14 +730,14 @@ export function TopicsTab({
   // round232 (owner request) — per-point delete from the row's trash button:
   // one soft-delete + an undo toast (same restore window as the old bulk path).
   const deletePoint = (point) => {
-    if (!deleteTopicOrPoint || !point) return;
+    if (!point || !canDeletePointRow(point)) return;
     const { undo } = softDeletePoints([point]);
     onNotify?.('הנקודה נמחקה', 'success', 6000, { label: 'בטל', onClick: undo });
   };
   // round239 (owner request) — right-click "מחיקת נושא" deletes IMMEDIATELY with
   // an undo toast (like a point), no "?למחוק" confirmation step.
   const deleteTopicWithUndo = (topic) => {
-    if (!deleteTopicOrPoint || !topic) return;
+    if (!topic || !canDeleteTopicRow(topic)) return;
     if (activeTopicId != null && String(activeTopicId) === String(topic.id)) {
       const rest = items.filter((t) => String(t.id) !== String(topic.id));
       setActiveTopicId(rest[0] ? String(rest[0].id) : null);
@@ -1230,14 +1261,20 @@ export function TopicsTab({
   }, [syncRibbonScroll]);
   useEffect(() => stopEdgePan, [stopEdgePan]);
 
-  const canDragRibbon = editTopicOrPoint;
+  /*
+   * round340 — a ribbon drag reorders EVERY topic, including discussed ones, so it
+   * takes the after-discussed grant as soon as anything in this discussion has been
+   * discussed. Before that there is nothing to protect and the pre-discussed grant
+   * is enough, which keeps the agenda reorderable while the meeting is still a plan.
+   */
+  const canDragRibbon = items.some(topicIsDiscussed) ? editTopicOrPointDiscussed : editTopicOrPoint;
   const ghostRef = useRef(null);
   const clearGhost = () => { if (ghostRef.current) { ghostRef.current.remove(); ghostRef.current = null; } };
 
   // round237 — RIGHT-CLICK on a topic opens the edit/delete menu at the cursor.
   const handleTileContextMenu = (e, topic) => {
     e.preventDefault();
-    if (!(editTopicOrPoint || deleteTopicOrPoint || canHide)) return;
+    if (!(canEditTopicRow(topic) || canDeleteTopicRow(topic) || canHide)) return;
     setTopicMenu({
       topicId: String(topic.id),
       x: Math.max(10, Math.min(e.clientX, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 180)),
@@ -1383,7 +1420,7 @@ export function TopicsTab({
             {canHide && (
               <Button kind={"secondary"} size={"small"} onClick={hideSelectedPoints}>הסתרה</Button>
             )}
-            {deleteTopicOrPoint && (
+            {selectedPoints.some(canDeletePointRow) && (
               <Button kind={"secondary"} size={"small"} onClick={deleteSelectedPoints}>מחיקה</Button>
             )}
           </div>
@@ -1523,7 +1560,7 @@ export function TopicsTab({
               // round267 (owner request) — LEFT double-click on a topic tile opens
               // its inline rename (same editor the ⋮/right-click "עריכת שם" opens).
               onDoubleClick={(e) => {
-                if (!editTopicOrPoint) return;
+                if (!canEditTopicRow(topic)) return;
                 e.preventDefault();
                 e.stopPropagation();
                 setTopicMenu(null);
@@ -1650,6 +1687,8 @@ export function TopicsTab({
               columns={visibleKeys}
               canAdd={addTopicOrPoint}
               canEditTopic={editTopicOrPoint}
+              canEditTopicDiscussed={editTopicOrPointDiscussed}
+              canDeleteDiscussed={deleteTopicOrPointDiscussed}
               canHideTopic={canHide}
               canDelete={deleteTopicOrPoint}
               canCheck={checkPoint}
@@ -1764,7 +1803,7 @@ export function TopicsTab({
                   </span>
                 </div>
               )}
-              {editTopicOrPoint && (
+              {canEditTopicRow(t) && (
                 <button
                   type="button"
                   className={styles.topicMenuItem}
@@ -1775,7 +1814,7 @@ export function TopicsTab({
               )}
               {/* round260 (owner request) — the "הסתר/הצג נושא" menu item was
                   removed; topic hiding is no longer offered in the UI. */}
-              {priorityMapped && editTopicOrPoint && (priorityOpts.options || []).length > 0 && (
+              {priorityMapped && canEditTopicRow(t) && (priorityOpts.options || []).length > 0 && (
                 <div className={styles.topicMenuPrio}>
                   <span className={styles.topicMenuPrioLabel}>עדיפות</span>
                   {(priorityOpts.options || []).map((opt) => (
@@ -1794,7 +1833,7 @@ export function TopicsTab({
                   ))}
                 </div>
               )}
-              {deleteTopicOrPoint && (
+              {canDeleteTopicRow(t) && (
                 <button
                   type="button"
                   className={`${styles.topicMenuItem} ${styles.topicMenuDanger}`}

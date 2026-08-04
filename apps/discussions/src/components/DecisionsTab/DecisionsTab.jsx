@@ -363,7 +363,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     for (const t of resolveDecisionTargets(id, 'editDecisionStatus')) await updateDecisionStatus(t, status);
   };
   const applyDecisionTracking = async (id, tracking) => {
-    for (const t of resolveDecisionTargets(id, 'editDecisionStatus')) await updateDecisionTracking(t, tracking);
+    for (const t of resolveDecisionTargets(id, 'editDecisionTracking')) await updateDecisionTracking(t, tracking);
   };
   const applyDecisionDate = async (id, date) => {
     for (const t of resolveDecisionTargets(id, 'editDecisionDate')) await updateDecisionDate(t, date);

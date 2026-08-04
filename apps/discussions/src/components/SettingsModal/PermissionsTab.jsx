@@ -150,7 +150,14 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
       // catalog AFTER an instance stored its roles are seeded into the EXISTING
       // role rows so the cells reflect the live default. Only wholly-ABSENT keys
       // are added — an owner's explicit true/false is never touched.
-      const NEW_CAPS = ['viewReferencesBox', 'viewSummaryBox', 'writeBackground', 'writeReferences'];
+      const NEW_CAPS = [
+        'viewReferencesBox', 'viewSummaryBox', 'writeBackground', 'writeReferences',
+        // round340 — the after-discussed halves of topic/point edit+delete, and
+        // מעקב החלטה, which was split off editDecisionStatus. Without these three
+        // listed here an instance that already stored a roles map would show the new
+        // rows permanently blank and silently fall back to CAPABILITY_DEFAULTS.
+        'editTopicOrPointDiscussed', 'deleteTopicOrPointDiscussed', 'editDecisionTracking',
+      ];
       const capBackfill = needsSeed
         ? []
         : Object.keys(DEFAULT_PERMISSION_SEED).filter((k) => {

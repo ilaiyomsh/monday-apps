@@ -61,6 +61,36 @@ const STATUS_DEFAULTS = JSON.stringify({
  * Display order: הוקפאה, בוטלה, בתוקף. "בתוקף" must exist — it's the default
  * status a new decision gets (see useDecisions).
  */
+/*
+ * round340 (owner request) — the tasks PRIORITY column (tasks.priorityID).
+ *
+ * Priority is a second STATUS column and its DISPLAY ORDER is the priority order:
+ * `labels_positions_v2` is what useStatusOptions reads to sort, so position 0 is the
+ * most urgent.
+ *
+ * THE LABEL IDS ARE NOT ARBITRARY — verified by live probe in the sandbox, and this is
+ * the reason there is no `labels_colors` block here:
+ *
+ *   · `create_column` IGNORES `labels_colors`. A status column's colour is fixed by the
+ *     label's ID, from monday's own palette: 0 orange · 1 green-shadow · 2 red-shadow ·
+ *     3 blue-links · 4 purple · 5 grey · 6 grass-green · 7 bright-blue · 8 mustered ·
+ *     9 yellow · 10 soft-black · 11 dark-red. (STATUS_DEFAULTS above appears to set
+ *     colours successfully only because its ids happen to match that palette already.)
+ *     So the ids below are CHOSEN for their colours: 2=red for דחופה, 0=orange for
+ *     גבוהה, 9=yellow for בינונית, 5=grey for נמוכה. Renumber them and the colours move.
+ *   · `create_column` also ignores `done_colors` and always writes back `[1]`. Nothing
+ *     here can prevent that, so the ids deliberately SKIP 1: the done marker then points
+ *     at a label that does not exist and is inert, instead of silently marking a real
+ *     priority as a completion. (No consumer reads a done label off this column today —
+ *     this keeps it that way if one ever does.)
+ *
+ * Ids and positions are decoupled on purpose, which is what makes both true at once.
+ */
+const PRIORITY_DEFAULTS = JSON.stringify({
+  labels: { 2: 'דחופה', 0: 'גבוהה', 9: 'בינונית', 5: 'נמוכה' },
+  labels_positions_v2: { 2: 0, 0: 1, 9: 2, 5: 3 },
+});
+
 const DECISION_STATUS_DEFAULTS = JSON.stringify({
   labels: { 0: 'הוקפאה', 1: 'בתוקף', 2: 'בוטלה' },
   labels_positions_v2: { 0: 0, 1: 2, 2: 1 },
@@ -205,6 +235,18 @@ export const PROVISION_SPEC = {
       { alias: 'partnersID', type: 'people', title: 'שותפים' },
       { alias: 'deadlineID', type: 'date', title: 'דד ליין' },
       { alias: 'statusID', type: 'status', title: 'סטאטוס', defaults: STATUS_DEFAULTS },
+      /*
+       * round340 (owner-reported from a fresh-account install) — עדיפות and הערות.
+       *
+       * Both aliases have been in COLUMN_SCHEMA.tasks and in the tasks mapping screen
+       * since the "המשימות שלי" tab shipped, but neither was ever in this spec. So on
+       * every fresh install the columns did not exist, the mapping rows sat empty, and
+       * both features silently hid: MyTasksTable gates the priority and notes columns
+       * on `cols.priorityID?.id` / `cols.taskNotesID?.id`. Exactly the class of gap
+       * round312/round313 closed for partnersID, externalParticipantsID and topicsLinkID.
+       */
+      { alias: 'priorityID', type: 'status', title: 'עדיפות', defaults: PRIORITY_DEFAULTS },
+      { alias: 'taskNotesID', type: 'long_text', title: 'הערות' },
       { alias: 'detailsID', type: 'long_text', title: 'מקור המשימה' },
       // round294 — the tasks board ALWAYS carries a people column "יכולת עריכה"
       // (taskEditorsID). It is the INFRASTRUCTURE column into which task creation

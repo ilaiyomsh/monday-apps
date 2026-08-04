@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { monday } from '../utils/mondayApi/monday-client.js';
 import { useMondayContext } from './MondayContext.jsx';
-import { BOARD_KEYS, buildEmptyConfig, COLUMN_SCHEMA, migrateColumnAliases, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED } from '../utils/mondayApi/boards.config.js';
+import { BOARD_KEYS, buildEmptyConfig, COLUMN_SCHEMA, migrateColumnAliases, pruneRetiredSettings, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED } from '../utils/mondayApi/boards.config.js';
 import { setActiveConfig } from '../utils/mondayApi/board-config-store.js';
 import logger from '../utils/logger.js';
 
@@ -119,7 +119,22 @@ export function SettingsProvider({ children }) {
         // from the CODE schema so a schema type change (e.g. dropdown→status)
         // reaches already-configured instances instead of the stale stored
         // type silently driving parse/format forever.
-        const migrated = { ...saved, columns: reconcileColumns(changed ? migratedColumns : (saved.columns || {})) };
+        /*
+         * round340 — prune RETIRED aliases before reconciling. Order matters: the
+         * prune must see the alias under its CURRENT key, so it runs after the
+         * rename migration; and it must run before reconcileColumns, whose
+         * `{ ...saved }` spread is exactly what would otherwise carry a retired
+         * alias forward forever.
+         *
+         * `pruneRetiredSettings` returns the SAME object when there is nothing to
+         * prune, so identity is a safe "did anything change" test — that is what
+         * folds it into the existing `changed` flag and its one storage write,
+         * instead of re-persisting settings on every single load.
+         */
+        const prunedSource = { ...saved, columns: changed ? migratedColumns : (saved.columns || {}) };
+        const pruned = pruneRetiredSettings(prunedSource);
+        const migrated = { ...pruned, columns: reconcileColumns(pruned.columns || {}) };
+        const needsPersist = changed || pruned !== prunedSource;
         // Debug: expose on window so the console can read it regardless of log
         // level — `copy(window.__appSettings)`.
         if (typeof window !== 'undefined') window.__appSettings = migrated;
@@ -129,7 +144,7 @@ export function SettingsProvider({ children }) {
         // Persist the cleaned config so old keys don't linger in storage. Best
         // effort — if the write fails the in-memory migration still applies on
         // every load (it's idempotent).
-        if (changed) {
+        if (needsPersist) {
           try {
             await monday.storage.setItem(key, JSON.stringify(migrated));
           } catch (err) {
