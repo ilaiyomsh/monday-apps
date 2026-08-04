@@ -48,7 +48,7 @@ export function extractNotes(body) {
 }
 
 /** Button ids a section offers (multi, with the legacy singular fallback). */
-function sectionButtonIds(section) {
+export function sectionButtonIds(section) {
   if (Array.isArray(section?.buttonIds) && section.buttonIds.length > 0) return section.buttonIds;
   return section?.buttonId ? [section.buttonId] : [];
 }

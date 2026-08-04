@@ -50,7 +50,13 @@
 
 import express from 'express';
 import { performAction } from '../services/confirm-service.js';
-import { extractNotes, resolveNoteColumn, classifyNote, MAX_NOTE_LENGTH } from '../services/digest-notes.js';
+import {
+  extractNotes,
+  resolveNoteColumn,
+  classifyNote,
+  sectionButtonIds,
+  MAX_NOTE_LENGTH,
+} from '../services/digest-notes.js';
 import { parseManifest, verifyManifest, currentSlot, MAX_MANIFEST_ITEMS } from '../services/manifest-signature.js';
 import { resolveAmpCors } from '../helpers/amp-cors.js';
 import { logAttempt, logError, logInfo, track } from '../helpers/logger.js';
@@ -318,9 +324,18 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
         // dropping it marked the task and lost the text; name it instead — the
         // log carries the button id, which is what identifies the bad mapping.
         if (!noteColumn && note.length > 0) {
+          // The map the resolver actually walked, so the log answers "why" and
+          // not merely "what": which sections carry a note column, and which
+          // button ids each one covers. Ids only — never the reader's text.
           logError('amp', 'note submitted but no column maps to the chosen button', {
             itemId,
             btnId,
+            noteLength: note.length,
+            sections: (config?.digest?.sections ?? []).map((s) => ({
+              id: s?.id ?? null,
+              noteColumnId: s?.noteColumnId ?? null,
+              buttonIds: sectionButtonIds(s),
+            })),
           });
           logAttempt({ ip, itemId, outcome: 'note_unmapped' });
           noteProblems.add('note_unmapped');
