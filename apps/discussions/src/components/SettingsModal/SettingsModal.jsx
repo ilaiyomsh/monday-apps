@@ -70,7 +70,7 @@ export function toggleAccessRoleSource(preferences, accessAlias, roleAlias) {
 }
 import { api } from '../../utils/mondayApi/monday-client.js';
 import { detectManagedColumnId } from '../../utils/mondayApi/managedColumns.js';
-import { moveBoardsIntoProvisionFolder, resolveWorkspaceId, PROVISION_FOLDER_NAME } from '../../utils/mondayApi/provisionBoards.js';
+import { moveBoardsIntoProvisionFolder, readBoardWorkspaceId, PROVISION_FOLDER_NAME } from '../../utils/mondayApi/provisionBoards.js';
 import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js';
 import { fileToLogoDataUrl, LOGO_MAX_PX } from '../../utils/imageLogo.js';
 import SearchablePicker from './SearchablePicker';
@@ -178,6 +178,8 @@ function mergeBoardsWithSchema(stored) {
  * Exported for the tests; the component is the only production caller.
  */
 export const NO_BOARDS_TO_RELOCATE = 'אין לוחות ממופים להעברה — מפו ושמרו קודם';
+// round344 — a FAILED workspace lookup is its own outcome, not "the main workspace".
+export const WORKSPACE_LOOKUP_FAILED = 'לא זוהה מרחב העבודה של הלוחות — לא הועבר דבר, נסו שוב';
 
 /** The subset of a boards draft that actually has an id — the only ones movable. */
 export function pickMappedBoards(boards) {
@@ -210,7 +212,21 @@ export async function relocateBoardsToFolder(boards) {
      * relocation would drag that board out of the workspace it belongs to.
      */
     const hostBoardId = mapped.discussions?.id || Object.values(mapped).find((b) => b?.id)?.id;
-    const wsId = await resolveWorkspaceId(hostBoardId, null);
+    /*
+     * round344 (review finding) — the STRICT read, so a failed lookup ABORTS instead of
+     * reading as "main workspace". `resolveWorkspaceId` returns null for both, which is the
+     * right trade for provisioning (never abort an install over folder cosmetics) and the
+     * wrong one here: this moves boards that already exist, and a transient API or
+     * permission error would pull them out of their workspace into a main-workspace folder,
+     * with nothing to undo it.
+     */
+    let wsId = null;
+    try {
+      wsId = await readBoardWorkspaceId(hostBoardId);
+    } catch (err) {
+      logger.error('SettingsModal', 'איתור מרחב העבודה נכשל — ההעברה בוטלה', err);
+      return WORKSPACE_LOOKUP_FAILED;
+    }
     const { folderId, moved, failed } = await moveBoardsIntoProvisionFolder(mapped, wsId);
     if (!folderId) return 'יצירת התיקייה נכשלה — נסו שוב';
     // Report the real counts: claiming "done" when one board refused would send the

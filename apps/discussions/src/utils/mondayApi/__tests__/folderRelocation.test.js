@@ -55,7 +55,7 @@ vi.mock('../managedColumns.js', () => ({
   findManagedDropdownColumnByTitle: vi.fn(async () => null),
 }));
 
-import { resolveWorkspaceId, moveBoardsIntoProvisionFolder } from '../provisionBoards.js';
+import { resolveWorkspaceId, readBoardWorkspaceId, moveBoardsIntoProvisionFolder } from '../provisionBoards.js';
 
 const BOARDS = {
   discussions: { id: 'B1' }, topics: { id: 'B2' }, tasks: { id: 'B3' }, decisions: { id: 'B4' },
@@ -91,6 +91,27 @@ describe('resolveWorkspaceId', () => {
   it('returns null when there is no board, and when the read throws', async () => {
     expect(await resolveWorkspaceId(null, null)).toBeNull();
     state.boardsThrow = true;
+    expect(await resolveWorkspaceId('B1', null)).toBeNull();
+  });
+});
+
+/*
+ * round344 (review finding) — the RAW read, which throws. `resolveWorkspaceId` returns null
+ * both for "this board has no workspace" (⇒ main) and for a failed read, and that ambiguity
+ * is only safe for provisioning: relocation moves boards that already exist, so a swallowed
+ * error would pull them out of their workspace into a main-workspace folder with no undo.
+ */
+describe('readBoardWorkspaceId', () => {
+  it('returns the workspace, and null when the board genuinely has none', async () => {
+    expect(await readBoardWorkspaceId('B1')).toBe('999');
+    state.boardWorkspace = null;
+    expect(await readBoardWorkspaceId('B1')).toBeNull();
+  });
+
+  // The whole point: it must PROPAGATE, where resolveWorkspaceId swallows.
+  it('THROWS when the read fails, unlike resolveWorkspaceId', async () => {
+    state.boardsThrow = true;
+    await expect(readBoardWorkspaceId('B1')).rejects.toThrow('boards read failed');
     expect(await resolveWorkspaceId('B1', null)).toBeNull();
   });
 });

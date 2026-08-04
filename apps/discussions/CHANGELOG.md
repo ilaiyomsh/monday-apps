@@ -10,6 +10,23 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.11.1 — 2026-08-04
+
+round344 — ממצא ביקורת נוסף על אותו כפתור, שנתפס לפני שהגיע ללקוחות.
+
+### כשלון בזיהוי מרחב העבודה נקרא כ"המרחב הראשי"
+
+`resolveWorkspaceId` מחזיר `null` לשני מצבים שונים לגמרי: "ללוח הזה אין מרחב עבודה"
+(כלומר הראשי) ו"הקריאה נכשלה". בהקמה זה טרייד לגיטימי — לוח שנוצר במרחב הראשי הוא
+פגם קוסמטי, ולא סיבה להפיל התקנה. בהעברה זה הפוך: מדובר בלוחות **שכבר קיימים**,
+ולכן שגיאה חולפת (API או הרשאות) הייתה גורפת אותם לתיקייה במרחב הראשי, מחוץ למרחב
+שהם שייכים אליו, בלי שום דרך לבטל.
+
+הקריאה הגולמית חולצה ל-`readBoardWorkspaceId`, שזורק; `resolveWorkspaceId` נשאר
+עטיפה fail-soft מעליו לשימוש ההקמה. ההעברה משתמשת בגרסה הזורקת ונעצרת עם הודעה —
+"לא זוהה מרחב העבודה של הלוחות — לא הועבר דבר". לוח שבאמת אין לו מרחב עבודה נשאר
+תשובה תקפה וההעברה ממשיכה.
+
 ## 2.11.0 — 2026-08-04
 
 round343 — ממצא ביקורת על הפעולה של round342, והסרת הרשאה מיותרת לפי החלטת הבעלים.

@@ -360,18 +360,31 @@ const FOLDER_MAX_PAGES = 20; // 2,000 folders — a runaway guard, not a real li
  * Reading it off the board is authoritative and needs no extra context plumbing. Falls
  * back to whatever the caller passed (then to null = main) so a failure degrades to the
  * previous behaviour rather than aborting the install.
+ *
+ * round344 (review finding) — the raw read is now its own THROWING function. `null` from
+ * `resolveWorkspaceId` conflates two very different facts: "this board legitimately has no
+ * workspace" (⇒ main) and "the read failed". Swallowing that is right for PROVISIONING (a
+ * board created in the main workspace is a cosmetic miss on an install that must not abort),
+ * and wrong for RELOCATION, which moves boards that already exist: a transient error would
+ * drag them into a main-workspace folder, out of the workspace they belong to, with no undo.
+ * Callers that cannot tolerate the ambiguity use `readBoardWorkspaceId` and handle the throw.
  */
+export async function readBoardWorkspaceId(boardId) {
+  const data = await api(
+    'query ($ids: [ID!]) { boards(ids: $ids) { id workspace { id } } }',
+    { ids: [String(boardId)] },
+    'resolveWorkspaceId'
+  );
+  const ws = data?.boards?.[0]?.workspace?.id;
+  // null here is a REAL answer: the board sits outside any workspace, i.e. the main one.
+  return ws ? String(ws) : null;
+}
+
 export async function resolveWorkspaceId(boardId, fallback = null) {
   if (fallback) return String(fallback);
   if (!boardId) return null;
   try {
-    const data = await api(
-      'query ($ids: [ID!]) { boards(ids: $ids) { id workspace { id } } }',
-      { ids: [String(boardId)] },
-      'resolveWorkspaceId'
-    );
-    const ws = data?.boards?.[0]?.workspace?.id;
-    return ws ? String(ws) : null;
+    return await readBoardWorkspaceId(boardId);
   } catch (err) {
     logger.warn(MODULE, 'איתור מרחב העבודה של לוח הדיונים נכשל — התיקייה תיווצר במרחב הראשי', err);
     return null;

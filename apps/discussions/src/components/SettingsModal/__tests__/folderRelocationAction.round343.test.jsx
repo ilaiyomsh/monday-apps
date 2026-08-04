@@ -18,10 +18,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 
 const moveBoardsIntoProvisionFolder = vi.fn(async () => ({ folderId: 'F1', moved: ['discussions', 'topics', 'tasks', 'decisions'], failed: [] }));
-const resolveWorkspaceId = vi.fn(async () => '999');
+const readBoardWorkspaceId = vi.fn(async () => '999');
 vi.mock('../../../utils/mondayApi/provisionBoards.js', () => ({
   moveBoardsIntoProvisionFolder: (...a) => moveBoardsIntoProvisionFolder(...a),
-  resolveWorkspaceId: (...a) => resolveWorkspaceId(...a),
+  readBoardWorkspaceId: (...a) => readBoardWorkspaceId(...a),
   PROVISION_FOLDER_NAME: 'בסיס מידע',
 }));
 
@@ -59,6 +59,7 @@ import {
   relocateBoardsToFolder,
   pickMappedBoards,
   NO_BOARDS_TO_RELOCATE,
+  WORKSPACE_LOOKUP_FAILED,
 } from '../SettingsModal.jsx';
 import { SettingsProvider } from '../../../contexts/SettingsContext.jsx';
 import { MondayContext } from '../../../contexts/MondayContext.jsx';
@@ -74,7 +75,7 @@ const Host = () => (
 beforeEach(() => {
   vi.clearAllMocks();
   moveBoardsIntoProvisionFolder.mockResolvedValue({ folderId: 'F1', moved: ['discussions'], failed: [] });
-  resolveWorkspaceId.mockResolvedValue('999');
+  readBoardWorkspaceId.mockResolvedValue('999');
 });
 
 describe('round343 — the relocation action reads the DRAFT', () => {
@@ -111,7 +112,7 @@ describe('round343 — the relocation action reads the DRAFT', () => {
 
     await waitFor(() => expect(moveBoardsIntoProvisionFolder).toHaveBeenCalled());
     // The workspace is resolved from the DRAFT's discussions board...
-    expect(resolveWorkspaceId).toHaveBeenCalledWith('NEW_D', null);
+    expect(readBoardWorkspaceId).toHaveBeenCalledWith('NEW_D');
     // ...and every id handed to the move is the draft's, with no stored id surviving.
     const passed = moveBoardsIntoProvisionFolder.mock.calls[0][0];
     expect(Object.values(passed).map((b) => b.id).sort()).toEqual(['NEW_C', 'NEW_D', 'NEW_K', 'NEW_T']);
@@ -129,7 +130,7 @@ describe('round343 — relocateBoardsToFolder', () => {
     expect(await relocateBoardsToFolder({ discussions: { id: '' }, tasks: {} })).toBe(NO_BOARDS_TO_RELOCATE);
     expect(await relocateBoardsToFolder(null)).toBe(NO_BOARDS_TO_RELOCATE);
     expect(moveBoardsIntoProvisionFolder).not.toHaveBeenCalled();
-    expect(resolveWorkspaceId).not.toHaveBeenCalled();
+    expect(readBoardWorkspaceId).not.toHaveBeenCalled();
   });
 
   // A partially-mapped instance still relocates what it CAN — and the unmapped roles are
@@ -147,13 +148,13 @@ describe('round343 — relocateBoardsToFolder', () => {
    */
   it('resolves the workspace off a mapped board when discussions is absent', async () => {
     await relocateBoardsToFolder({ discussions: { id: '' }, tasks: { id: 'K' }, decisions: { id: 'C' } });
-    expect(resolveWorkspaceId).toHaveBeenCalledWith('K', null);
+    expect(readBoardWorkspaceId).toHaveBeenCalledWith('K');
   });
 
   // ...and prefers the discussions board when there IS one, since that is the host.
   it('still prefers the discussions board', async () => {
     await relocateBoardsToFolder({ topics: { id: 'T' }, discussions: { id: 'D' } });
-    expect(resolveWorkspaceId).toHaveBeenCalledWith('D', null);
+    expect(readBoardWorkspaceId).toHaveBeenCalledWith('D');
   });
 
   it('reports the real counts, including a partial failure', async () => {
@@ -168,6 +169,27 @@ describe('round343 — relocateBoardsToFolder', () => {
     expect(await relocateBoardsToFolder({ discussions: { id: 'D' } })).toBe('יצירת התיקייה נכשלה — נסו שוב');
     moveBoardsIntoProvisionFolder.mockRejectedValueOnce(new Error('boom'));
     expect(await relocateBoardsToFolder({ discussions: { id: 'D' } })).toBe('ההעברה נכשלה');
+  });
+
+  /*
+   * round344 (review finding) — a FAILED workspace lookup must ABORT, not read as "the main
+   * workspace". `resolveWorkspaceId` returns null for both cases; using it here meant a
+   * transient API/permission error moved existing boards into a main-workspace folder, out
+   * of the workspace they belong to, with no undo. Nothing may be touched on that path.
+   */
+  it('aborts without touching a single board when the workspace lookup throws', async () => {
+    readBoardWorkspaceId.mockRejectedValueOnce(new Error('403'));
+    expect(await relocateBoardsToFolder({ discussions: { id: 'D' }, tasks: { id: 'K' } }))
+      .toBe(WORKSPACE_LOOKUP_FAILED);
+    expect(moveBoardsIntoProvisionFolder).not.toHaveBeenCalled();
+  });
+
+  // ...while a board that genuinely has NO workspace is a real answer, not a failure: the
+  // relocation proceeds with null, which is the main workspace — where that board already is.
+  it('proceeds with null when the board genuinely has no workspace', async () => {
+    readBoardWorkspaceId.mockResolvedValueOnce(null);
+    await relocateBoardsToFolder({ discussions: { id: 'D' } });
+    expect(moveBoardsIntoProvisionFolder).toHaveBeenCalledWith({ discussions: { id: 'D' } }, null);
   });
 
   it('pickMappedBoards keeps ids and drops blanks', () => {
