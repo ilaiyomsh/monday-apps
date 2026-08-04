@@ -227,12 +227,27 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
    * the caller's label decision is unchanged.
    */
   const seedTypeTemplate = useCallback(async () => {
-    if (!templatesCtx?.upsertTypeTemplate) return seedDefaultTypeTemplate(context, currentUser);
+    /*
+     * round348 (review finding) — a MOUNTED provider is not a LOADED provider. Its
+     * `typeTemplates` starts as `[]` while four sequential storage reads run, so treating that
+     * as "an empty store" during the load window would persist our singleton default OVER an
+     * account's real types. While `loading` is true the DURABLE store is the only honest
+     * source, so we go through it — the in-memory list may then be stale until a reload, which
+     * is the pre-round348 behaviour and infinitely preferable to losing someone's types.
+     */
+    if (!templatesCtx?.upsertTypeTemplate || templatesCtx.loading) {
+      return seedDefaultTypeTemplate(context, currentUser);
+    }
     try {
-      // The provider already holds the loaded list — no storage read needed, and no race.
+      // Loaded provider: its list IS the store, so no read and no race.
       const list = templatesCtx.typeTemplates || [];
       if (list.length) return hasDefaultTypeTemplate(list) ? 'already-default' : 'skipped-existing';
-      await templatesCtx.upsertTypeTemplate(buildDefaultTypeTemplate(currentUser));
+      /*
+       * `strict: true` (review finding) — without it `persistTypes` logs a storage failure and
+       * resolves anyway, so we would report "seeded" for a write that never landed and then add
+       * the dropdown label: a selectable type with no agenda after the next reload.
+       */
+      await templatesCtx.upsertTypeTemplate(buildDefaultTypeTemplate(currentUser), { strict: true });
       return 'seeded';
     } catch (err) {
       logger.warn('SetupWizard', 'זריעת תבנית סוג הדיון נכשלה — ניתן ליצור אותה ידנית בתבניות', err);

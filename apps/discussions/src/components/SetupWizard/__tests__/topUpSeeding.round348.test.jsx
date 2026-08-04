@@ -56,9 +56,9 @@ vi.mock('@generated/components/PartyProgress', () => ({ PartyProgress: () => <di
 import { SetupWizard } from '../SetupWizard.jsx';
 import { TemplatesContext } from '../../../contexts/TemplatesContext.jsx';
 
-// A MOUNTED provider, i.e. the top-up world. `typeTemplates` is what it has already loaded.
-const withProvider = (typeTemplates) => render(
-  <TemplatesContext.Provider value={{ typeTemplates, upsertTypeTemplate }}>
+// A MOUNTED, LOADED provider — the top-up world. `typeTemplates` is what it has already read.
+const withProvider = (typeTemplates, loading = false) => render(
+  <TemplatesContext.Provider value={{ typeTemplates, upsertTypeTemplate, loading }}>
     <SetupWizard onManual={() => {}} />
   </TemplatesContext.Provider>
 );
@@ -135,5 +135,42 @@ describe('round348 — top-up seeds through the mounted provider', () => {
     await clickCreate();
     expect(addDropdownLabel).not.toHaveBeenCalled();
     expect(screen.queryByText(/אירעה שגיאה בהקמת הלוחות/)).toBeNull();
+  });
+
+  /*
+   * round348 (review finding) — a MOUNTED provider is not a LOADED one. `typeTemplates` is `[]`
+   * while its storage reads are still in flight, so seeding through it in that window would
+   * persist our singleton default OVER the account's real types. The durable store is the only
+   * honest source until loading finishes: this must go to storage, and the provider must NOT be
+   * written to (that write is what would destroy data).
+   */
+  it('does NOT write through a provider that is still loading', async () => {
+    withProvider([], true);
+    await clickCreate();
+    await waitFor(() => expect(storage.getItem).toHaveBeenCalled());
+    expect(upsertTypeTemplate).not.toHaveBeenCalled();
+  });
+
+  it('and in that window it respects the types already in durable storage', async () => {
+    storage.getItem.mockImplementation(async () => ({
+      data: { value: JSON.stringify({ templates: [{ id: 'x', discussionType: 'הנהלה', topics: [] }] }) },
+    }));
+    withProvider([], true);
+    await clickCreate();
+    expect(upsertTypeTemplate).not.toHaveBeenCalled();
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(addDropdownLabel).not.toHaveBeenCalled();
+  });
+
+  /*
+   * round348 (review finding) — the provider write must be STRICT. `persistTypes` otherwise logs
+   * a storage failure and resolves anyway, so we would report "seeded" for a write that never
+   * landed and then add the label: a selectable type with no agenda after the next reload.
+   */
+  it('asks the provider for a STRICT write', async () => {
+    withProvider([]);
+    await clickCreate();
+    await waitFor(() => expect(upsertTypeTemplate).toHaveBeenCalled());
+    expect(upsertTypeTemplate.mock.calls[0][1]).toEqual({ strict: true });
   });
 });
