@@ -357,3 +357,27 @@ Probed on a scratch `WZ-report` board with rows at 2026-07-15, 2026-07-20 (×2),
   `name`; a `create_column` `defaults` payload written with `name` is normalized to `label`.
 - **rating / timeline / people / checkbox / date**: `{}` — EMPTY. Notably a rating column
   exposes no scale, so a consumer must default to 5 stars rather than read a maximum.
+
+## Folders (verified live 2026-08-04, sandbox 16291824)
+
+Provisioning boards into a folder — all three shapes probed end-to-end:
+
+```graphql
+mutation ($name: String!, $ws: ID) { create_folder(name: $name, workspace_id: $ws) { id name } }
+mutation ($name: String!, $ws: ID, $folder: ID) {
+  create_board(board_name: $name, board_kind: public, workspace_id: $ws, folder_id: $folder, empty: true) { id }
+}
+query ($ws: [ID]) { folders(workspace_ids: $ws, limit: 100) { id name children { id name } } }
+```
+
+- `create_board`'s folder argument is **`folder_id`** (not `folder`), type `ID`. A board created
+  with it really is returned as a `child` of that folder — confirmed by reading the folder back.
+- **`Folder.children` is `[Board]!` and EXCLUDES sub-folders and dashboards** (per the schema
+  description). Do not use it to enumerate a folder tree.
+- `folders(workspace_ids:)` takes `[ID]` (nullable elements): **pass `null` as an element to mean
+  the Main Workspace**. `limit` defaults to 25 — pass it explicitly when scanning for a folder by
+  name, or an account with many folders silently misses the match.
+- There is no "create folder if absent" upsert: read `folders` and match by name yourself, or a
+  re-run creates a duplicate folder with the same name (monday allows duplicates).
+- `delete_folder(folder_id:)` exists and deleting the folder does NOT delete boards implicitly in
+  the same call — delete boards first if that is the intent (the probe deleted both explicitly).
