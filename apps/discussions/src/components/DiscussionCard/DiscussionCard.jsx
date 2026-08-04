@@ -9,7 +9,7 @@ import { useDecisions } from '@generated/hooks/useDecisions';
 import { useDiscussionDetails } from '@generated/hooks/useDiscussions';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { DEFAULT_PREFERENCES, resolveAccessPeople, isComponentVisible } from '@api/boards.config.js';
+import { DEFAULT_PREFERENCES, resolveAccessPeople, isComponentVisible, resolvePreference } from '@api/boards.config.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { usePermissions } from '@generated/hooks/usePermission.js';
@@ -279,8 +279,13 @@ export function DiscussionCard({
   // the owner fixed its rule to coordinator/creator/lead; see canEditSummaryBox.)
   const createTask = can('createTask');
   const addTopicOrPoint = can('addTopicOrPoint');
+  // round340 — topic/point edit and delete are each resolved TWICE: once for the
+  // not-yet-discussed case and once for after. TopicsTab picks per row, because
+  // whether a given topic or point is "discussed" is row state, not discussion state.
   const editTopicOrPoint = can('editTopicOrPoint');
   const deleteTopicOrPoint = can('deleteTopicOrPoint');
+  const editTopicOrPointDiscussed = can('editTopicOrPointDiscussed');
+  const deleteTopicOrPointDiscussed = can('deleteTopicOrPointDiscussed');
   const checkPoint = can('checkPoint');
   // NOTE: `editResponses` is currently INERT — the Topics-table redesign removed
   // the "התייחסויות" responses cell, so TopicPointRow renders no responses-edit
@@ -346,17 +351,15 @@ export function DiscussionCard({
   }, [visibleTabs, activeTab]);
 
   // Item 19 / round 78 — access-column payload for every task created FROM this
-  // discussion. Which discussion ROLES fill each tasks access column is
-  // owner-configurable (settings.preferences.accessRoleSources); the default
-  // reproduces the original behavior — participants → יכולת צפייה (viewers),
-  // lead + coordinator + creator → יכולת עריכה (editors). People from the
-  // configured roles are UNIONED (deduped by id). useTasks writes them only
-  // when the owner mapped the columns.
+  // discussion. Which discussion ROLES fill the tasks access column is
+  // owner-configurable (settings.preferences.accessRoleSources); the default is
+  // lead + coordinator + creator → יכולת עריכה (editors). People from the configured
+  // roles are UNIONED (deduped by id). useTasks writes them only when the owner
+  // mapped the column. round340 retired the participants → יכולת צפייה half.
   const accessRoleSources = settings?.preferences?.accessRoleSources || DEFAULT_PREFERENCES.accessRoleSources;
   // round108 — owner-set logo (data-URI). round158 relocated it to the dashboard's
   // top-left corner; it no longer renders in the discussion-view header.
   const taskAccess = useMemo(() => ({
-    viewers: resolveAccessPeople(data, accessRoleSources?.taskViewersID),
     editors: resolveAccessPeople(data, accessRoleSources?.taskEditorsID),
   }), [accessRoleSources, data]);
 
@@ -365,7 +368,10 @@ export function DiscussionCard({
   // discussion type's template (deciderIsLead). Falls back to the hook default
   // (current user) when off / no lead. Always replaceable inline afterwards.
   const defaultDecider = useMemo(() => {
-    const globalOn = settings?.preferences?.defaultDeciderLead === true;
+    // round340 — `=== true` treated an UNSET preference as false, so the shipped default
+    // could never apply. resolvePreference returns a stored `false` as-is and only an
+    // absent value as the default.
+    const globalOn = resolvePreference(settings?.preferences, 'defaultDeciderLead') === true;
     const typeTpl = (typeTemplates || []).find((t) => t?.discussionType === data?.discussionTypeID);
     const on = globalOn || typeTpl?.deciderIsLead === true;
     const lead = Array.isArray(data?.discussionLeadID) ? data.discussionLeadID : [];
@@ -1011,7 +1017,7 @@ export function DiscussionCard({
         {(showTopicsTables || showBackground || showReferences || showSummaryPane) && (
         <div className={activeTab === 'topics' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'topics' ? undefined : 'none' }}>
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} onLoadingChange={handleTopicsLoadingChange}
-            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditBackground={canEditBackgroundPane} canEditReferences={canEditReferencesPane} canEditSummary={canEditSummaryPane} canAttachDocuments={canEditTitle} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} editTopicOrPointDiscussed={editTopicOrPointDiscussed} deleteTopicOrPointDiscussed={deleteTopicOrPointDiscussed} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditBackground={canEditBackgroundPane} canEditReferences={canEditReferencesPane} canEditSummary={canEditSummaryPane} canAttachDocuments={canEditTitle} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
             showTopics={showTopicsTables} showBackground={showBackground} showReferences={showReferences} showSummary={showSummaryPane}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
             decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus}

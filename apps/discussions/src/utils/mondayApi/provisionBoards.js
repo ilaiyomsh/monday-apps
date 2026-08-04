@@ -61,6 +61,36 @@ const STATUS_DEFAULTS = JSON.stringify({
  * Display order: הוקפאה, בוטלה, בתוקף. "בתוקף" must exist — it's the default
  * status a new decision gets (see useDecisions).
  */
+/*
+ * round340 (owner request) — the tasks PRIORITY column (tasks.priorityID).
+ *
+ * Priority is a second STATUS column and its DISPLAY ORDER is the priority order:
+ * `labels_positions_v2` is what useStatusOptions reads to sort, so position 0 is the
+ * most urgent.
+ *
+ * THE LABEL IDS ARE NOT ARBITRARY — verified by live probe in the sandbox, and this is
+ * the reason there is no `labels_colors` block here:
+ *
+ *   · `create_column` IGNORES `labels_colors`. A status column's colour is fixed by the
+ *     label's ID, from monday's own palette: 0 orange · 1 green-shadow · 2 red-shadow ·
+ *     3 blue-links · 4 purple · 5 grey · 6 grass-green · 7 bright-blue · 8 mustered ·
+ *     9 yellow · 10 soft-black · 11 dark-red. (STATUS_DEFAULTS above appears to set
+ *     colours successfully only because its ids happen to match that palette already.)
+ *     So the ids below are CHOSEN for their colours: 2=red for דחופה, 0=orange for
+ *     גבוהה, 9=yellow for בינונית, 5=grey for נמוכה. Renumber them and the colours move.
+ *   · `create_column` also ignores `done_colors` and always writes back `[1]`. Nothing
+ *     here can prevent that, so the ids deliberately SKIP 1: the done marker then points
+ *     at a label that does not exist and is inert, instead of silently marking a real
+ *     priority as a completion. (No consumer reads a done label off this column today —
+ *     this keeps it that way if one ever does.)
+ *
+ * Ids and positions are decoupled on purpose, which is what makes both true at once.
+ */
+const PRIORITY_DEFAULTS = JSON.stringify({
+  labels: { 2: 'דחופה', 0: 'גבוהה', 9: 'בינונית', 5: 'נמוכה' },
+  labels_positions_v2: { 2: 0, 0: 1, 9: 2, 5: 3 },
+});
+
 const DECISION_STATUS_DEFAULTS = JSON.stringify({
   labels: { 0: 'הוקפאה', 1: 'בתוקף', 2: 'בוטלה' },
   labels_positions_v2: { 0: 0, 1: 2, 2: 1 },
@@ -205,6 +235,18 @@ export const PROVISION_SPEC = {
       { alias: 'partnersID', type: 'people', title: 'שותפים' },
       { alias: 'deadlineID', type: 'date', title: 'דד ליין' },
       { alias: 'statusID', type: 'status', title: 'סטאטוס', defaults: STATUS_DEFAULTS },
+      /*
+       * round340 (owner-reported from a fresh-account install) — עדיפות and הערות.
+       *
+       * Both aliases have been in COLUMN_SCHEMA.tasks and in the tasks mapping screen
+       * since the "המשימות שלי" tab shipped, but neither was ever in this spec. So on
+       * every fresh install the columns did not exist, the mapping rows sat empty, and
+       * both features silently hid: MyTasksTable gates the priority and notes columns
+       * on `cols.priorityID?.id` / `cols.taskNotesID?.id`. Exactly the class of gap
+       * round312/round313 closed for partnersID, externalParticipantsID and topicsLinkID.
+       */
+      { alias: 'priorityID', type: 'status', title: 'עדיפות', defaults: PRIORITY_DEFAULTS },
+      { alias: 'taskNotesID', type: 'long_text', title: 'הערות' },
       { alias: 'detailsID', type: 'long_text', title: 'מקור המשימה' },
       // round294 — the tasks board ALWAYS carries a people column "יכולת עריכה"
       // (taskEditorsID). It is the INFRASTRUCTURE column into which task creation
@@ -280,12 +322,83 @@ function countSteps(tasks, createDiscussionsBoard = false) {
   return n;
 }
 
-async function createBoard(name, workspaceId) {
+/*
+ * round339 (owner request) — every board this app provisions lands inside ONE
+ * folder named "בסיס מידע", so a fresh install does not scatter four boards
+ * across the workspace root.
+ *
+ * REUSED, not blindly created: a top-up run (or a second install in the same
+ * workspace) must not end up with two "בסיס מידע" folders. `folders(workspace_ids)`
+ * is read first and a name match wins. Verified live in the sandbox: the folder
+ * read returns `children { id name }`, i.e. the boards inside it, which is what
+ * makes the match trustworthy.
+ *
+ * FAIL-SOFT BY DESIGN: if the folder cannot be read or created (permissions, a
+ * plan without folders, an API hiccup), provisioning continues with folderId
+ * null and the boards land in the workspace root exactly as before. Losing the
+ * tidy grouping is a cosmetic loss; failing the whole install over it would not
+ * be. The failure is logged, never swallowed.
+ */
+export const PROVISION_FOLDER_NAME = 'בסיס מידע';
+
+const FOLDER_PAGE_SIZE = 100;
+const FOLDER_MAX_PAGES = 20; // 2,000 folders — a runaway guard, not a real limit
+
+export async function ensureProvisionFolder(workspaceId) {
+  try {
+    /*
+     * PAGINATED (PR review on round339, correct): `folders` is a paged
+     * collection — reading page 1 only meant that in a workspace with more
+     * folders than one page, an existing "בסיס מידע" on a later page read as
+     * ABSENT and a duplicate got created. That is the very failure the reuse
+     * lookup exists to prevent, so the lookup has to see every page.
+     *
+     * Stop conditions: a match, a short page (the last one), or the runaway
+     * guard. `limit` is passed explicitly because the API default is 25.
+     */
+    let existing = null;
+    for (let page = 1; page <= FOLDER_MAX_PAGES; page += 1) {
+      const read = await api(
+        `query ($ws: [ID], $limit: Int!, $page: Int!) {
+          folders(workspace_ids: $ws, limit: $limit, page: $page) { id name }
+        }`,
+        { ws: [workspaceId ? String(workspaceId) : null], limit: FOLDER_PAGE_SIZE, page },
+        'folders'
+      );
+      const batch = read?.folders || [];
+      existing = batch.find((f) => String(f?.name || '').trim() === PROVISION_FOLDER_NAME);
+      if (existing?.id || batch.length < FOLDER_PAGE_SIZE) break;
+    }
+    if (existing?.id) {
+      logger.info(MODULE, 'תיקיית בסיס המידע קיימת — הלוחות ייווצרו בתוכה', { folderId: existing.id });
+      return String(existing.id);
+    }
+    const vars = { name: PROVISION_FOLDER_NAME };
+    if (workspaceId) vars.ws = String(workspaceId);
+    const created = await api(
+      `mutation ($name: String!, $ws: ID) { create_folder(name: $name, workspace_id: $ws) { id } }`,
+      vars,
+      'create_folder'
+    );
+    const id = created?.create_folder?.id;
+    if (!id) throw new Error('create_folder לא החזיר מזהה');
+    logger.info(MODULE, 'נוצרה תיקיית בסיס מידע', { folderId: id });
+    return String(id);
+  } catch (err) {
+    // Cosmetic grouping only — the install proceeds with boards at the workspace
+    // root rather than failing. Logged (never silent) so the reason is visible.
+    logger.warn(MODULE, 'יצירת/איתור תיקיית "בסיס מידע" נכשלה — הלוחות ייווצרו ישירות במרחב העבודה', err);
+    return null;
+  }
+}
+
+async function createBoard(name, workspaceId, folderId = null) {
   const vars = { name, kind: 'public' };
   if (workspaceId) vars.wsId = String(workspaceId);
+  if (folderId) vars.folderId = String(folderId);
   const data = await api(
-    `mutation ($name: String!, $kind: BoardKind!, $wsId: ID) {
-      create_board(board_name: $name, board_kind: $kind, workspace_id: $wsId) { id }
+    `mutation ($name: String!, $kind: BoardKind!, $wsId: ID, $folderId: ID) {
+      create_board(board_name: $name, board_kind: $kind, workspace_id: $wsId, folder_id: $folderId) { id }
     }`,
     vars,
     'create_board'
@@ -569,9 +682,26 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // tasks is either created (mode 'create') or an existing board is connected
   // (mode 'connect'), in which case its columns are still ensured/reused below.
   const boardIds = {};
+  /*
+   * round339 — resolved ONCE, before any create_board, so every board this run
+   * CREATES shares the same folder. Null (fail-soft) means "workspace root".
+   *
+   * SCOPE, stated precisely (PR review on round339 was right to flag the gap):
+   * this folders the boards provisioning CREATES. In a BOARD-VIEW install the
+   * discussions board is the pre-existing HOST board — it never goes through
+   * createBoard, so it stays wherever the account already keeps it, and only
+   * topics/tasks/decisions land in the folder. All four land there in the
+   * CUSTOM-OBJECT install, where the discussions board is created too.
+   *
+   * Relocating a board the account already owns is deliberately NOT done here:
+   * `update_board_hierarchy` could move it, but silently moving a board someone
+   * placed on purpose is a surprise that is hard to undo (they would have to
+   * remember where it was). Left as an owner decision.
+   */
+  const folderId = await ensureProvisionFolder(workspaceId);
   if (createDiscussionsBoard && !(existingConfig && hasIdEarly(existingConfig.boards?.discussions))) {
     setPhase('מקים את לוח הדיונים…');
-    boardIds.discussions = await createBoard(PROVISION_SPEC.discussions.name, workspaceId);
+    boardIds.discussions = await createBoard(PROVISION_SPEC.discussions.name, workspaceId, folderId);
     tick('נוצר לוח: דיונים');
   } else {
     boardIds.discussions = String(
@@ -610,7 +740,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       continue;
     }
     setPhase(`יוצר את לוח "${PROVISION_SPEC[key].name}"…`);
-    boardIds[key] = await createBoard(PROVISION_SPEC[key].name, workspaceId);
+    boardIds[key] = await createBoard(PROVISION_SPEC[key].name, workspaceId, folderId);
     tick(`נוצר לוח: ${PROVISION_SPEC[key].name}`);
   }
 

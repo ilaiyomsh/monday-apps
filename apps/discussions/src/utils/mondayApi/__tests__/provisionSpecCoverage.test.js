@@ -58,10 +58,16 @@ const EXEMPT = {
   tasks: new Set([
     'taskTypeID',            // the SAME managed dropdown as discussions
     'discussionLinkID',      // reflection of discussions.tasksBoardLinkID
-    // Owner-mapped optional columns: the app hides the feature when unmapped and
-    // the owner chooses which existing column to use, so creating one would be
-    // presumptuous rather than helpful.
-    'taskNotesID', 'priorityID', 'taskViewersID',
+    /*
+     * round340 — `taskNotesID` and `priorityID` LEFT this set: they are provisioned now.
+     *
+     * The exemption reasoning ("owner-mapped optional columns … creating one would be
+     * presumptuous") was wrong for these two, and the owner reported the consequence
+     * from a fresh-account install: MyTasksTable gates both cells on the mapping being
+     * present, so with no column created there was nothing to map and both features
+     * silently did not exist. `taskViewersID` left the set too, by being retired from
+     * COLUMN_SCHEMA entirely.
+     */
     // round313 — dead schema entry: no reference anywhere outside boards.config.js.
     'phaseID',
   ]),

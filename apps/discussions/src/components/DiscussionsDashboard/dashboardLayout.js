@@ -99,7 +99,21 @@ export function resolveLayout(stored, cols = GRID_COLS) {
     const rect = s
       ? clampRect({ x: s.x ?? d.x, y: s.y ?? d.y, w: s.w ?? d.w, h: s.h ?? d.h }, cols)
       : { ...d };
-    out[id] = { ...rect, hidden: !!(s && s.hidden) };
+    /*
+     * round340 (owner request) — the LOGO widget starts HIDDEN and appears only if
+     * somebody explicitly shows it in "ערוך פריסה". Every other widget still starts
+     * visible.
+     *
+     * `s` is the widget's own stored rect, so "no stored entry" is the same test the
+     * rect above uses: an instance that never edited its layout (or whose layout was
+     * invalidated by a LAYOUT_VERSION bump) gets the new default, while one that
+     * deliberately unhid the logo keeps it — its saved `hidden: false` wins. Note the
+     * asymmetry is deliberate: with no logo uploaded the widget rendered a grey "לוגו"
+     * placeholder card, so the old default spent a block of every dashboard on an
+     * empty box that most instances never wanted.
+     */
+    const hiddenByDefault = id === 'logo';
+    out[id] = { ...rect, hidden: s ? !!s.hidden : hiddenByDefault };
   }
   return out;
 }

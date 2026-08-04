@@ -11,6 +11,8 @@ import {
   DEFAULT_PERMISSION_SEED,
   DEFAULT_PERMISSIONS,
   PERMISSION_ROLE_SOURCES,
+  TIER_EXTRA_ROLE_SOURCES,
+  backfillSeedCapabilities,
 } from '../../utils/mondayApi/boards.config.js';
 import {
   getPeopleColumns,
@@ -98,6 +100,36 @@ function isPeopleType(type) {
 }
 
 /**
+ * round341 (owner request) — the extra role COLUMNS a tier borrows from another board.
+ *
+ * The decisions card shows יוצר דיון / מוביל דיון / מרכז דיון beside the decision's own
+ * roles, because a decision belongs to a discussion and the people running it are as
+ * entitled to act on it as the decider. Their people columns live on the DISCUSSIONS
+ * board, so they are built from that board's config and keep `discussions:<alias>` keys —
+ * one role, one stored capabilities map, shared with its discussion-tier grants.
+ *
+ * Titles prefer the LIVE discussions column title (what the owner renamed it to), then
+ * the stored mapping title, then the schema fallback — same precedence as the main path.
+ */
+function buildBorrowedRoles(itemBoardKey, columns) {
+  const aliases = TIER_EXTRA_ROLE_SOURCES[itemBoardKey] || [];
+  if (!aliases.length) return [];
+  const cfg = columns?.discussions || {};
+  const liveById = Object.fromEntries(getPeopleColumns('discussions').map((c) => [String(c.id), c.title]));
+  return aliases
+    // Only offer a role the owner has actually mapped — an unmapped column has no people
+    // to hold it, so its row would be a checkbox that can never apply to anybody.
+    .filter((alias) => isPeopleType(cfg[alias]?.type) && cfg[alias]?.id)
+    .map((alias) => ({
+      key: `discussions:${alias}`,
+      boardKey: 'discussions',
+      alias,
+      title: liveById[String(cfg[alias].id)] || cfg[alias]?.title || alias,
+      borrowed: true,
+    }));
+}
+
+/**
  * The role COLUMNS of one board tier: ALL the live people columns of that board
  * (a column added there appears automatically). Mapped role-source aliases keep
  * their alias key (preserves stored config); extra columns key by raw column id.
@@ -146,32 +178,30 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
       const missingSeedKeys = needsSeed
         ? []
         : Object.keys(DEFAULT_PERMISSION_SEED).filter((k) => !prev.roles[k]);
-      // Per-CAPABILITY backfill (round209/round212): capability ids added to the
-      // catalog AFTER an instance stored its roles are seeded into the EXISTING
-      // role rows so the cells reflect the live default. Only wholly-ABSENT keys
-      // are added — an owner's explicit true/false is never touched.
-      const NEW_CAPS = ['viewReferencesBox', 'viewSummaryBox', 'writeBackground', 'writeReferences'];
-      const capBackfill = needsSeed
-        ? []
-        : Object.keys(DEFAULT_PERMISSION_SEED).filter((k) => {
-          if (!prev.roles[k]) return false;
-          const seedCaps = DEFAULT_PERMISSION_SEED[k]?.capabilities || {};
-          return NEW_CAPS.some((c) => c in seedCaps && prev.roles[k]?.capabilities?.[c] === undefined);
-        });
-      if (prev?.enabled === true && !needsSeed && !missingSeedKeys.length && !capBackfill.length) return prev;
+      /*
+       * Per-CAPABILITY backfill (round209/round212): capability ids added to the catalog
+       * AFTER an instance stored its roles are seeded into the EXISTING role rows so the
+       * cells reflect the live default. Only wholly-ABSENT keys are added — an owner's
+       * explicit true/false is never touched.
+       *
+       * round340 (PR review, P1) — this used to be a HAND-MAINTAINED `NEW_CAPS` list, and
+       * that list was the bug: forgetting to add a new id left the matrix row blank and,
+       * worse, left the resolver falling through to CAPABILITY_DEFAULTS at runtime. It is
+       * now the shared `backfillSeedCapabilities`, the same rule SettingsContext applies
+       * on load, so there is ONE definition of "a capability the stored map predates" and
+       * no list to keep in sync. What stays local here is adding missing ROLE keys, which
+       * only the owner UI should do.
+       */
+      const backfilled = needsSeed ? prev.roles : backfillSeedCapabilities(prev.roles);
+      const capBackfillNeeded = !needsSeed && backfilled !== prev.roles;
+      if (prev?.enabled === true && !needsSeed && !missingSeedKeys.length && !capBackfillNeeded) return prev;
       const next = { ...DEFAULT_PERMISSIONS, ...prev, enabled: true };
       if (needsSeed) {
         next.roles = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED));
-      } else if (missingSeedKeys.length || capBackfill.length) {
-        next.roles = { ...prev.roles };
+      } else if (missingSeedKeys.length || capBackfillNeeded) {
+        next.roles = { ...backfilled };
         for (const k of missingSeedKeys) {
           next.roles[k] = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED[k]));
-        }
-        for (const k of capBackfill) {
-          const seedCaps = DEFAULT_PERMISSION_SEED[k]?.capabilities || {};
-          const caps = { ...(next.roles[k]?.capabilities || {}) };
-          NEW_CAPS.forEach((c) => { if (c in seedCaps && caps[c] === undefined) caps[c] = seedCaps[c]; });
-          next.roles[k] = { ...next.roles[k], capabilities: caps };
         }
       }
       return next;
@@ -194,7 +224,10 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
     const map = {};
     for (const tier of TIERS) {
       const boardKey = TIER_BOARD_KEY[tier.id];
-      map[tier.id] = buildTierRoles(boardKey, columns);
+      // round341 — the borrowed cross-board roles come AFTER the tier's own, so the
+      // decision's own roles keep the leading columns and the discussion's managers read
+      // as the addition they are.
+      map[tier.id] = [...buildTierRoles(boardKey, columns), ...buildBorrowedRoles(boardKey, columns)];
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps

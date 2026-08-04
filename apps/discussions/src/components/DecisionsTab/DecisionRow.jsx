@@ -316,7 +316,7 @@ function DecisionRow({
         <LabelPickerCell
           value={decision.decisionTrackingID}
           opts={trackingOpts}
-          canEdit={can('editDecisionStatus', decision)}
+          canEdit={can('editDecisionTracking', decision)}
           onPick={(id) => onTracking(decision.id, id)}
           placeholder="בחר מעקב"
         />
