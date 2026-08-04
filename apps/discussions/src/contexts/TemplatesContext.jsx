@@ -34,7 +34,13 @@ const TYPE_STORAGE_KEY_BASE = 'discussions_type_templates';
 const TYPE_COLORS_STORAGE_KEY_BASE = 'discussions_type_colors';
 const TIMEOUT_MS = 5000;
 
-const TemplatesContext = createContext(null);
+/*
+ * round348 — EXPORTED so a component can distinguish "provider mounted" from the
+ * empty-store fallback `useTemplates()` returns. `SetupWizard` runs in both worlds: first-run
+ * it is mounted by SettingsGate ABOVE this provider, and in top-up mode it is inside it, where
+ * seeding must go THROUGH the provider or its in-memory state never learns about the write.
+ */
+export const TemplatesContext = createContext(null);
 let missingProviderWarned = false;
 
 function genId() {

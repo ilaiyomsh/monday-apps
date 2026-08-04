@@ -10,6 +10,32 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.13.1 — 2026-08-04
+
+round348 — שני ממצאי ביקורת על הזריעה של round347, שניהם על נתיב ה-top-up.
+
+### 1. ב-top-up הזריעה עוברת דרך ה-provider, לא ישר לאחסון
+
+בהתקנה מוגדרת, `TemplatesProvider` **כבר טעון** וקרא את תבניות הסוגים פעם אחת. כתיבה
+ישירה ל-`monday.storage` לא מגיעה לרשימה שבזיכרון שלו: הסוג נראה נבחר, אבל
+`CreateDiscussionModal` עוד רואה `typeTemplates = []`, ולכן דיון שנוצר באותו סשן מקבל
+אג'נדה ריקה ובלי תפקידים — עד רענון של האפליקציה.
+
+האשף קורא עכשיו את **ההקשר** ולא את ה-hook (‏`useTemplates()` מחזיר חנות ריקה כשאין
+provider ולכן מסתיר בדיוק את ההבדל שחשוב כאן), ומזהה בין שני העולמות שהוא רץ בהם:
+בהרצה ראשונה הוא מורכב **מעל** ה-provider וכתיבה ישירה היא הנכונה, ובהרצת top-up הוא
+בתוכו — ואז הזריעה עוברת ב-`upsertTypeTemplate`, שמעדכן גם את המצב וגם את האחסון.
+
+### 2. תווית שנכשלה פעם אחת תנוסה שוב
+
+`skipped-existing` כיסה שני מצבים שונים לגמרי. אם הוספת התווית נכשלה **אחרי** שהתבנית
+נשמרה, כל הרצה עתידית קראה "דילוג" ולא ניסתה שוב — ונשארה אג'נדה בלי סוג נבחר, עד
+שמישהו יצר את התווית מחדש בדיוק באותו שם.
+
+עכשיו יש הבחדה: **`already-default`** (הסוג שלנו כבר בחנות ⇒ שווה להשלים את התווית;
+`addDropdownLabel` אידמפוטנטי, תווית קיימת מחזירה את המזהה שלה בלי כתיבה) לעומת
+**`skipped-existing`** (לחשבון יש סוגים משלו ושלנו לא ביניהם ⇒ לא נוגעים בהתקנה חיה).
+
 ## 2.13.0 — 2026-08-04
 
 round347 — התקנה מגיעה עם נקודת פתיחה: סוג דיון אחד ותבנית אג'נדה.
