@@ -42,9 +42,31 @@ export async function clearFileColumn({ itemId, columnId, boardId }) {
   );
 }
 
-const ADD_FILE_MUTATION = (itemId, columnId) =>
-  `mutation ($file: File!) {
-     add_file_to_column (item_id: ${Number(itemId)}, column_id: "${columnId}", file: $file) { id name url }
+// A monday column identifier: lowercase alphanumerics + underscore (monday's own
+// create_column contract for custom ids; auto-generated ids follow the same shape).
+// Uppercase is tolerated for legacy boards. Anything else cannot be a real column id.
+const COLUMN_ID_RE = /^[A-Za-z0-9_]+$/;
+
+/**
+ * F-1 (security scan 2026-08-04) — guard for the LEGACY multipart path only, which
+ * inlines the mutation into a `query` form field and therefore cannot use a typed
+ * variable for `column_id`. The seamless path below needs no guard: its ids travel
+ * as GraphQL variables, so the document is a constant.
+ * @throws if columnId is not a monday column identifier.
+ */
+function assertColumnId(columnId) {
+  if (!COLUMN_ID_RE.test(String(columnId))) {
+    throw new Error(`uploadFileToColumn: columnId is not a valid monday column id: ${columnId}`);
+  }
+}
+
+// F-1 fix (security scan 2026-08-04): item_id and column_id were interpolated into the
+// mutation DOCUMENT TEXT (column_id unescaped). Both are now typed variables, matching
+// CLEAR_FILE_MUTATION above. Validated against the live schema:
+// add_file_to_column(column_id: String!, file: File!, item_id: ID!).
+const ADD_FILE_MUTATION =
+  `mutation ($item: ID!, $col: String!, $file: File!) {
+     add_file_to_column (item_id: $item, column_id: $col, file: $file) { id name url }
    }`;
 
 /**
@@ -57,7 +79,11 @@ const ADD_FILE_MUTATION = (itemId, columnId) =>
  */
 export async function uploadFileToColumnSeamless({ itemId, columnId, file }) {
   if (!itemId || !columnId) throw new Error('uploadFileToColumnSeamless: itemId and columnId are required');
-  const data = await api(ADD_FILE_MUTATION(itemId, columnId), { file }, 'uploadFileToColumnSeamless');
+  const data = await api(
+    ADD_FILE_MUTATION,
+    { item: String(itemId), col: String(columnId), file },
+    'uploadFileToColumnSeamless',
+  );
   return data?.add_file_to_column || null;
 }
 
@@ -91,6 +117,9 @@ export async function uploadFileToUpdateSeamless({ updateId, file }) {
 export async function uploadFileToColumn({ itemId, columnId, blob, filename, token }) {
   if (!token) throw new Error('uploadFileToColumn: API token is required');
   if (!itemId || !columnId) throw new Error('uploadFileToColumn: itemId and columnId are required');
+  // This path inlines the mutation into a multipart `query` field, so column_id cannot
+  // become a typed variable here — validate its shape instead (F-1).
+  assertColumnId(columnId);
 
   const mutation =
     `mutation ($file: File!) {

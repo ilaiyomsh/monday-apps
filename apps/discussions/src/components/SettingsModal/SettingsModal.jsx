@@ -70,7 +70,6 @@ export function toggleAccessRoleSource(preferences, accessAlias, roleAlias) {
 }
 import { api } from '../../utils/mondayApi/monday-client.js';
 import { detectManagedColumnId } from '../../utils/mondayApi/managedColumns.js';
-import { moveBoardsIntoProvisionFolder, readBoardWorkspaceId, PROVISION_FOLDER_NAME } from '../../utils/mondayApi/provisionBoards.js';
 import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js';
 import { fileToLogoDataUrl, LOGO_MAX_PX } from '../../utils/imageLogo.js';
 import SearchablePicker from './SearchablePicker';
@@ -168,76 +167,6 @@ export function seedExportTemplate(stored) {
 // mapping section — preserving every board id the user already set.
 function mergeBoardsWithSchema(stored) {
   return { ...buildEmptyConfig().boards, ...(stored || {}) };
-}
-
-/*
- * round343 — the "ריכוז הלוחות בתיקייה" action, extracted out of the JSX so both
- * halves of the review finding it fixes are directly testable: that it acts on the
- * DRAFT mapping, and that an unmapped instance never reaches the API at all.
- *
- * Exported for the tests; the component is the only production caller.
- */
-export const NO_BOARDS_TO_RELOCATE = 'אין לוחות ממופים להעברה — מפו ושמרו קודם';
-// round344 — a FAILED workspace lookup is its own outcome, not "the main workspace".
-export const WORKSPACE_LOOKUP_FAILED = 'לא זוהה מרחב העבודה של הלוחות — לא הועבר דבר, נסו שוב';
-
-/** The subset of a boards draft that actually has an id — the only ones movable. */
-export function pickMappedBoards(boards) {
-  return Object.fromEntries(Object.entries(boards || {}).filter(([, b]) => b?.id));
-}
-
-export function hasBoardsToRelocate(boards) {
-  return Object.keys(pickMappedBoards(boards)).length > 0;
-}
-
-/**
- * Move the mapped boards into the provisioning folder; returns the Hebrew status
- * line to show. Never throws — a failed relocation is a message, not a crash.
- */
-export async function relocateBoardsToFolder(boards) {
-  const mapped = pickMappedBoards(boards);
-  /*
-   * The empty guard is the first-run half of the finding: with nothing mapped there
-   * is nothing to move, and calling through would still MINT the folder — an empty
-   * "בסיס מידע" nobody asked for. Repeated here (the caller checks too) so the guard
-   * cannot be lost by a future call site.
-   */
-  if (!Object.keys(mapped).length) return NO_BOARDS_TO_RELOCATE;
-  try {
-    /*
-     * The workspace is read off the discussions board when there is one, and otherwise off
-     * whichever board IS mapped (review finding): passing `undefined` here resolves to null,
-     * i.e. "main workspace" — so a partially-configured instance whose only mapped board
-     * lives elsewhere would have had its folder created in the wrong workspace, and the
-     * relocation would drag that board out of the workspace it belongs to.
-     */
-    const hostBoardId = mapped.discussions?.id || Object.values(mapped).find((b) => b?.id)?.id;
-    /*
-     * round344 (review finding) — the STRICT read, so a failed lookup ABORTS instead of
-     * reading as "main workspace". `resolveWorkspaceId` returns null for both, which is the
-     * right trade for provisioning (never abort an install over folder cosmetics) and the
-     * wrong one here: this moves boards that already exist, and a transient API or
-     * permission error would pull them out of their workspace into a main-workspace folder,
-     * with nothing to undo it.
-     */
-    let wsId = null;
-    try {
-      wsId = await readBoardWorkspaceId(hostBoardId);
-    } catch (err) {
-      logger.error('SettingsModal', 'איתור מרחב העבודה נכשל — ההעברה בוטלה', err);
-      return WORKSPACE_LOOKUP_FAILED;
-    }
-    const { folderId, moved, failed } = await moveBoardsIntoProvisionFolder(mapped, wsId);
-    if (!folderId) return 'יצירת התיקייה נכשלה — נסו שוב';
-    // Report the real counts: claiming "done" when one board refused would send the
-    // owner looking for a folder that is half-full.
-    return failed.length
-      ? `${moved.length} לוחות הועברו, ${failed.length} נכשלו`
-      : `${moved.length} לוחות הועברו לתיקייה`;
-  } catch (err) {
-    logger.error('SettingsModal', 'ריכוז הלוחות בתיקייה נכשל', err);
-    return 'ההעברה נכשלה';
-  }
 }
 
 // Merge the alias schema over the stored mapping so columns added to the schema
@@ -453,8 +382,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   const [columnsByBoardId, setColumnsByBoardId] = useState({});
   const [loadingColumnsByBoardId, setLoadingColumnsByBoardId] = useState({});
   const [subitemsBoardByBoard, setSubitemsBoardByBoard] = useState({});
-  // round342 — the "move the boards into בסיס מידע" action: 'idle' | 'running' | a result string.
-  const [folderMove, setFolderMove] = useState('idle');
   const [importMsg, setImportMsg] = useState(null);
   // TOP-UP wizard (post-install "add/complete boards & columns"): when true the
   // reusable SetupWizard replaces the tabbed mapping UI until the owner finishes
@@ -1517,54 +1444,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                         size="small"
                         kind="secondary"
                       />
-                    </div>
-                  </div>
-                  {/*
-                    round342 (owner-reported: "הלוחות לא נוצרו בתוך תיקייה") — an EXPLICIT
-                    action to move the four mapped boards into "בסיס מידע".
-
-                    Provisioning only ever puts boards it CREATES into the folder, and it
-                    reuses an already-mapped board rather than re-creating it. So an instance
-                    whose boards predate the folder feature can never get them there by
-                    re-running the wizard — this button is the only route, and it is a button
-                    rather than an automatic step because moving a board someone placed on
-                    purpose should be their decision.
-                  */}
-                  <div className={styles.prefRow}>
-                    <div className={styles.prefLabel}>
-                      <Text type={"text2"}>{`ריכוז הלוחות בתיקיית "${PROVISION_FOLDER_NAME}"`}</Text>
-                    </div>
-                    <div className={styles.prefControl}>
-                      <Button
-                        kind="secondary"
-                        size="small"
-                        loading={folderMove === 'running'}
-                        disabled={folderMove === 'running'}
-                        onClick={async () => {
-                          /*
-                           * round343 (review finding) — this reads the ON-SCREEN draft
-                           * (`boards`), NOT the persisted `settings.boards`.
-                           *
-                           * The two disagree exactly when it matters: an owner who remaps a
-                           * board in the מיפוי tab and presses this before saving would
-                           * otherwise move the boards they just replaced, and resolve the
-                           * workspace from the OLD discussions board. Cancelling the modal
-                           * cannot undo a relocation, so acting on the stale copy is
-                           * unrecoverable.
-                           */
-                          if (!hasBoardsToRelocate(boards)) {
-                            setFolderMove(NO_BOARDS_TO_RELOCATE);
-                            return;
-                          }
-                          setFolderMove('running');
-                          setFolderMove(await relocateBoardsToFolder(boards));
-                        }}
-                      >
-                        העברת הלוחות לתיקייה
-                      </Button>
-                      {folderMove !== 'idle' && folderMove !== 'running' && (
-                        <Text type={"text3"} color="secondary">{folderMove}</Text>
-                      )}
                     </div>
                   </div>
                   {/* Item 18 — global default decider: every NEW decision's מחליט
