@@ -17,6 +17,7 @@ set -u
 HOOK="$(cd "$(dirname "$0")/.." && pwd)/stop-gate.sh"
 [ -f "$HOOK" ] || { echo "cannot find stop-gate.sh next to $0" >&2; exit 2; }
 REDGREEN="$(cd "$(dirname "$0")/../../scripts" && pwd)/redgreen.sh"
+BASH_BIN="$(command -v bash)"; [ -n "$BASH_BIN" ] || BASH_BIN=/bin/bash
 
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS + 1)); printf 'ok   — %s\n' "$1"; }
@@ -144,6 +145,44 @@ if grep -rlF "$GONE" "$ROOT" --include=test.path >/dev/null 2>&1; then
 else bad "G: no state dir recorded the waived path"; fi
 case "$WOUT" in *"does not exist on disk"*) ok "G: output flags the absent path" ;;
                 *) bad "G: output did not flag the absent path: $WOUT" ;; esac
+
+# --------------------------- H: the no-jq fallback still emits parseable JSON
+# The hook has two output paths (jq, and a hand-rolled printf + json_escape). Most
+# machines have jq, so the fallback is the one that rots unnoticed — and it is the
+# one that has to escape by hand. Exercised here with jq REMOVED from PATH (a bin
+# dir holding symlinks to just the externals the hook uses) and a path containing a
+# double quote AND a backslash, so a broken escaper produces unparseable JSON
+# instead of merely ugly text. A missing symlink shows up as a failed assertion
+# below, never as a silent pass.
+new_case "H no-jq fallback" h
+BIN="$TMP/h/bin"; mkdir -p "$BIN"
+for t in cat tr sed awk grep sort head mkdir; do
+  p="$(command -v "$t")" && ln -sf "$p" "$BIN/$t"
+done
+mkdir -p "$WORK/src"
+WEIRD='weird"quote\back.mjs'
+printf 'export const x = 1;\n' > "$WORK/src/$WEIRD"
+touch_path "$WORK/src/$WEIRD"
+# Absolute interpreter path on purpose: with PATH reduced to $BIN, a bare `bash`
+# would itself be unfindable (exit 127) and the case would "fail" for the wrong reason.
+OUT="$(printf '%s' "{\"session_id\":\"$SID\",\"cwd\":\"$WORK\"}" \
+  | PATH="$BIN" REDGREEN_STATE_ROOT="$ROOT" TEST_GUARD_APPS_ROOT="$WORK/" \
+    "$BASH_BIN" "$HOOK" 2>/dev/null)"
+RC=$?
+assert_rc0
+if blocked; then ok "H: no-jq fallback still blocks an uncovered module"
+else bad "H: no-jq fallback did not block: $OUT"; fi
+if command -v jq >/dev/null 2>&1; then
+  # Parse with the REAL jq (from this script's PATH, not the hook's sandbox).
+  if printf '%s' "$OUT" | jq -e '.decision == "block"' >/dev/null 2>&1; then
+    ok "H: fallback output is valid JSON with decision=block"
+  else bad "H: fallback emitted unparseable JSON: $OUT"; fi
+  if printf '%s' "$OUT" | jq -r '.reason' 2>/dev/null | grep -qF "$WEIRD"; then
+    ok "H: quote+backslash in the path survives the hand-rolled escaper"
+  else bad "H: escaper mangled the path — reason did not round-trip $WEIRD"; fi
+else
+  printf 'skip — H: jq unavailable, cannot validate the fallback JSON\n'
+fi
 
 # --------------------------------------------------------------------- summary
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
