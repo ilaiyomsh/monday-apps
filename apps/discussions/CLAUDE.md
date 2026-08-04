@@ -238,6 +238,25 @@ touch it.
 There is **no settings button** for this any more (round345 removed the round342 one) — if you are
 tempted to add one, make provisioning do it instead.
 
+### An install seeds ONE discussion type + its template (round347)
+
+`src/utils/defaultTypeTemplate.js` holds the shipped starting point — type **"דיון כללי"**
+with a three-topic agenda — and `SetupWizard.handleCreate` seeds it right after
+`updateSettings`. A type exists only when TWO stores agree: the **label** on the managed
+"סוג דיון" dropdown (what a discussion stores) and the **type template** in `monday.storage`
+(agenda + roles, keyed by the label TEXT). The installing user goes into BOTH `lead` and
+`coordinator` — the two roles carrying the discussion-tier permissions.
+
+Two rules that are easy to break:
+- **Order:** the label add must run AFTER `updateSettings`, because `addDropdownLabel` resolves
+  the board/column from the ACTIVE settings store, which `updateSettings` publishes.
+- **Seed, never migrate:** `seedDefaultTypeTemplate` writes ONLY into an empty type-template
+  store (a legacy bare-array store counts as non-empty), so a top-up run can never overwrite
+  the types an account built itself.
+
+Both steps are fail-soft and reported — the install has already succeeded by then, and a type
+can be added by hand in תבניות.
+
 ### Two `monday.storage`-only subsystems — no board backing
 monday's public API has no item-position mutation and no place to hang reusable presets, so two
 features live entirely in `monday.storage` (each mirrors `SettingsContext`'s pattern: JSON value,

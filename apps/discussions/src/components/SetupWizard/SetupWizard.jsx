@@ -3,6 +3,8 @@ import { Button, Heading, Text, Flex, Loader, Dropdown, RadioButton } from '@vib
 import { PartyProgress } from '@generated/components/PartyProgress';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
+import { addDropdownLabel } from '@generated/hooks/useDropdownOptions.js';
+import { DEFAULT_DISCUSSION_TYPE, seedDefaultTypeTemplate } from '@generated/utils/defaultTypeTemplate.js';
 import { provisionAllBoards } from '../../utils/mondayApi/provisionBoards.js';
 import { withSeededAccessRoles } from '../../utils/mondayApi/boards.config.js';
 import { api } from '../../utils/mondayApi/monday-client.js';
@@ -70,7 +72,7 @@ function optionsForField(field, boardColumns) {
  */
 export function SetupWizard({ onManual, existingConfig = null, onDone = null, title }) {
   const { settings, updateSettings } = useSettings();
-  const { context } = useMondayContext();
+  const { context, currentUser } = useMondayContext();
 
   // TOP-UP derivations (all inert on first-run, where existingConfig is null).
   const isTopUp = Boolean(existingConfig);
@@ -193,6 +195,26 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
     };
   }, [tasksMode, tasksBoardId]);
 
+  /*
+   * round347 — seed the single default type + its template. Two stores must agree: the LABEL
+   * on the managed "סוג דיון" dropdown (what a discussion stores) and the TYPE TEMPLATE in
+   * monday.storage (the agenda + roles, keyed by that label's text).
+   */
+  const seedDefaultDiscussionType = useCallback(async () => {
+    try {
+      await addDropdownLabel({
+        boardKey: 'discussions',
+        alias: 'discussionTypeID',
+        title: DEFAULT_DISCUSSION_TYPE,
+      });
+    } catch (err) {
+      // Reported, not thrown: without the label the template is unreachable, but the install
+      // is complete and the owner can add the type from תבניות.
+      logger.error('SetupWizard', `יצירת סוג הדיון "${DEFAULT_DISCUSSION_TYPE}" נכשלה — ניתן להוסיף אותו בתבניות`, err);
+    }
+    await seedDefaultTypeTemplate(context, currentUser);
+  }, [context, currentUser]);
+
   const handleCreate = useCallback(async () => {
     setPhase('running');
     setErrorMsg('');
@@ -217,6 +239,18 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
        * lets a TOP-UP run this too without overriding a choice the owner made.
        */
       await updateSettings({ ...config, preferences: withSeededAccessRoles(settings?.preferences) });
+      /*
+       * round347 (owner spec) — an install ships WITH a usable starting point: one discussion
+       * type, "דיון כללי", and its agenda template, with the installing user as both מנהל
+       * and מרכז הדיון. Until now a new account landed on an empty type list and an empty
+       * template list and had to invent both before the app did anything.
+       *
+       * AFTER updateSettings on purpose: `addDropdownLabel` resolves the board + column from
+       * the ACTIVE settings store, which `updateSettings` is what publishes. Both steps are
+       * fail-soft and reported rather than thrown — the install itself succeeded, and the
+       * owner can build a type by hand in תבניות.
+       */
+      await seedDefaultDiscussionType();
       // TOP-UP: the caller closes the panel (settings already refreshed). FIRST-RUN:
       // isConfigured now true → SettingsGate re-renders children, unmounting us.
       if (onDone) onDone();
@@ -225,7 +259,7 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
       setErrorMsg(err?.message || 'אירעה שגיאה בהקמת הלוחות');
       setPhase('error');
     }
-  }, [context, settings, updateSettings, tasksMode, tasksBoardId, columnMap, existingConfig, onDone]);
+  }, [context, settings, updateSettings, tasksMode, tasksBoardId, columnMap, existingConfig, onDone, seedDefaultDiscussionType]);
 
   return (
     <div dir="rtl" className={isTopUp ? styles.rootEmbedded : styles.root}>
