@@ -11,6 +11,7 @@ import {
   DEFAULT_PERMISSION_SEED,
   DEFAULT_PERMISSIONS,
   PERMISSION_ROLE_SOURCES,
+  TIER_EXTRA_ROLE_SOURCES,
   backfillSeedCapabilities,
 } from '../../utils/mondayApi/boards.config.js';
 import {
@@ -96,6 +97,36 @@ const SUPER_MEMBER_CAPS = new Set(['addDiscussionTypes', 'manageTemplates']);
 function isPeopleType(type) {
   const t = String(type || '').toLowerCase();
   return t === 'people' || t === 'person' || t === 'multiple_person';
+}
+
+/**
+ * round341 (owner request) — the extra role COLUMNS a tier borrows from another board.
+ *
+ * The decisions card shows יוצר דיון / מוביל דיון / מרכז דיון beside the decision's own
+ * roles, because a decision belongs to a discussion and the people running it are as
+ * entitled to act on it as the decider. Their people columns live on the DISCUSSIONS
+ * board, so they are built from that board's config and keep `discussions:<alias>` keys —
+ * one role, one stored capabilities map, shared with its discussion-tier grants.
+ *
+ * Titles prefer the LIVE discussions column title (what the owner renamed it to), then
+ * the stored mapping title, then the schema fallback — same precedence as the main path.
+ */
+function buildBorrowedRoles(itemBoardKey, columns) {
+  const aliases = TIER_EXTRA_ROLE_SOURCES[itemBoardKey] || [];
+  if (!aliases.length) return [];
+  const cfg = columns?.discussions || {};
+  const liveById = Object.fromEntries(getPeopleColumns('discussions').map((c) => [String(c.id), c.title]));
+  return aliases
+    // Only offer a role the owner has actually mapped — an unmapped column has no people
+    // to hold it, so its row would be a checkbox that can never apply to anybody.
+    .filter((alias) => isPeopleType(cfg[alias]?.type) && cfg[alias]?.id)
+    .map((alias) => ({
+      key: `discussions:${alias}`,
+      boardKey: 'discussions',
+      alias,
+      title: liveById[String(cfg[alias].id)] || cfg[alias]?.title || alias,
+      borrowed: true,
+    }));
 }
 
 /**
@@ -193,7 +224,10 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
     const map = {};
     for (const tier of TIERS) {
       const boardKey = TIER_BOARD_KEY[tier.id];
-      map[tier.id] = buildTierRoles(boardKey, columns);
+      // round341 — the borrowed cross-board roles come AFTER the tier's own, so the
+      // decision's own roles keep the leading columns and the discussion's managers read
+      // as the addition they are.
+      map[tier.id] = [...buildTierRoles(boardKey, columns), ...buildBorrowedRoles(boardKey, columns)];
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -97,21 +97,28 @@ export function TaskTable({
 }) {
   const { isMobile } = useViewport();
 
-  // Visible columns in DEFAULT order. 'sel' is a pinned, fixed leading track
-  // (the selection checkbox), present only when the table is selectable.
-  // Default LTR order: name · priority · assignee · deadline · status · source.
-  // (Users can drag to reorder; this is just the starting order.) 'source' is the
-  // הנחיות-קודמות-only "דיון מקור" column.
-  // round306 (owner request) — שותפים sits right after אחראי and behaves exactly
-  // like it (resize / drag-reorder / hide / rename). Rendered only when the
-  // partnersID alias is mapped, like every optional column.
+  /*
+   * Visible columns in DEFAULT order. 'sel' is a pinned, fixed leading track (the
+   * selection checkbox), present only when the table is selectable. 'source' is the
+   * דיונים-קודמים-only "דיון מקור" column.
+   *
+   * round341 (owner request, from screenshots of the משימות and דיונים קודמים tabs) —
+   * the starting order is now:
+   *   name · אחראי · שותפים · עדיפות · דד ליין · סטאטוס · דיון מקור
+   * i.e. עדיפות moved from second place to AFTER the two people columns, so the two
+   * "who" columns sit together and the state columns follow them.
+   *
+   * STARTING order only: useColumnOrder keeps whatever an instance already dragged
+   * (utils/columnOrder.js merges stored-and-still-visible keys first), so this changes
+   * fresh installs, not existing ones.
+   */
   const showPartners = !!(getColumns('tasks') || {}).partnersID?.id;
   const baseKeys = [
     ...(selectable ? ['sel'] : []),
     'name',
-    ...(showPriority ? ['priority'] : []),
     'assignee',
     ...(showPartners ? ['partners'] : []),
+    ...(showPriority ? ['priority'] : []),
     'deadline', 'status',
     ...(showSourceDiscussion ? ['source'] : []),
   ];

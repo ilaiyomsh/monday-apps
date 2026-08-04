@@ -81,14 +81,20 @@ export function MyTasksTable({
   const showAssigneeCol = !!cols.responsibilityID?.id;
 
   // Visible columns in DEFAULT order, each carrying its width params.
+  /*
+   * round341 (owner request, from the screenshot of המשימות שלי) — הערות now sits
+   * BEFORE סטאטוס, so the free-text note is adjacent to the deadline/priority context
+   * it usually explains, and סטאטוס lands next to דיון at the end of the row.
+   * Starting order only; a dragged order is kept.
+   */
   const baseDefs = [
     { key: 'name', ...W.name },
     showAssigneeCol && { key: 'assignee', ...W.assignee },
     showPartners && { key: 'partners', ...W.partners },
     showDeadline && { key: 'deadline', ...W.deadline },
     showPriority && { key: 'priority', ...W.priority },
-    { key: 'status', ...W.status },
     showNotes && { key: 'notes', ...W.notes },
+    { key: 'status', ...W.status },
     { key: 'discussion', ...W.discussion },
   ].filter(Boolean);
 

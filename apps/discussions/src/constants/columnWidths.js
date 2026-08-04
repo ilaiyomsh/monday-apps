@@ -16,17 +16,28 @@ export const COLUMN_ORDER_STORAGE_KEY = 'discussions_column_order';
 
 // "My Tasks" table — name is the FROZEN column (min kept high so its inline
 // controls + sticky origin never collapse — per the owner decision).
+/*
+ * round341 (owner request) — the DEFAULT widths below are measured off the owner's
+ * screenshots of each screen. Unlike the column ORDER, which the screenshots state
+ * exactly, the widths are read off pixels and are accurate to roughly ±15px; they are a
+ * starting point the owner can drag, not a spec. The consistent shape across all four
+ * tables: a much wider name column, the people columns narrowed to about an avatar's
+ * worth, and the state columns just wide enough for their longest label.
+ *
+ * `min` is NOT relaxed anywhere — every new default stays above the existing floor, so a
+ * narrower default can never be un-draggable back to something usable.
+ */
 export const MY_TASKS_COLUMN_WIDTHS = {
-  name: { default: 400, min: 200, max: 760 },
-  deadline: { default: 120, min: 90, max: 260 },
-  priority: { default: 130, min: 90, max: 280 },
-  status: { default: 160, min: 100, max: 320 },
-  notes: { default: 200, min: 120, max: 640 },
+  name: { default: 445, min: 200, max: 760 },
+  deadline: { default: 115, min: 90, max: 260 },
+  priority: { default: 115, min: 90, max: 280 },
+  status: { default: 140, min: 100, max: 320 },
+  notes: { default: 150, min: 120, max: 640 },
   // round305 — the two people columns of the personal table: שותפים (always, when
   // mapped) and אחראי (the "בדיונים שהובלתי" scope only).
-  assignee: { default: 160, min: 110, max: 340 },
-  partners: { default: 180, min: 110, max: 380 },
-  discussion: { default: 180, min: 140, max: 420 },
+  assignee: { default: 115, min: 110, max: 340 },
+  partners: { default: 115, min: 110, max: 380 },
+  discussion: { default: 170, min: 140, max: 420 },
 };
 
 // On phones the fixed desktop widths (esp. name 400px) would let a single column
@@ -52,14 +63,15 @@ export const MY_TASKS_MOBILE_WIDTHS = {
 // shared TaskTable). ONE tableId ('tasks') for all three tabs, so a drag in any
 // tab applies everywhere. Defaults mirror the previous fixed CSS tracks.
 export const TASKS_COLUMN_WIDTHS = {
-  name: { default: 320, min: 180, max: 760 },
-  priority: { default: 170, min: 110, max: 320 },
-  assignee: { default: 140, min: 100, max: 260 },
-  // round306 — שותפים, beside אחראי and slightly wider (it holds several people).
-  partners: { default: 170, min: 100, max: 320 },
-  deadline: { default: 150, min: 100, max: 280 },
-  status: { default: 170, min: 110, max: 320 },
-  source: { default: 260, min: 160, max: 520 },
+  name: { default: 380, min: 180, max: 760 },
+  priority: { default: 125, min: 110, max: 320 },
+  assignee: { default: 115, min: 100, max: 260 },
+  // round306 — שותפים, beside אחראי. round341 gave both the same width: the screenshot
+  // shows two equally-narrow avatar columns, not one wider than the other.
+  partners: { default: 115, min: 100, max: 320 },
+  deadline: { default: 110, min: 100, max: 280 },
+  status: { default: 125, min: 110, max: 320 },
+  source: { default: 250, min: 160, max: 520 },
 };
 
 // Topics tab points table (one setting shared by every topic group, under the
@@ -89,10 +101,10 @@ export const TOPICS_COLUMN_WIDTHS = {
 // store/pattern as the other tables). The עדיפות column was removed from the
 // decisions table (product decision), so it has no width entry.
 export const DECISIONS_COLUMN_WIDTHS = {
-  name: { default: 300, min: 200, max: 900 },
-  decider: { default: 130, min: 90, max: 260 },
-  affected: { default: 150, min: 100, max: 320 },
-  status: { default: 170, min: 110, max: 340 },
-  tracking: { default: 180, min: 120, max: 360 },
-  date: { default: 120, min: 90, max: 240 },
+  name: { default: 440, min: 200, max: 900 },
+  decider: { default: 120, min: 90, max: 260 },
+  affected: { default: 130, min: 100, max: 320 },
+  status: { default: 125, min: 110, max: 340 },
+  tracking: { default: 130, min: 120, max: 360 },
+  date: { default: 110, min: 90, max: 240 },
 };

@@ -217,6 +217,19 @@ start empty when storage is unavailable (local dev):
   `applyOrder()` on every read. Defensive: saved ids first, unknown ids keep API order at the end,
   deleted ids drop out.
 
+### Cross-board permission roles (round341)
+A decision's entitled managers (יוצר / מוביל / מרכז דיון) hold people columns on the
+**discussions** board, but both the permissions matrix (`buildTierRoles`) and the resolver
+(`boardRoleEntries`) are single-board by construction. **`TIER_EXTRA_ROLE_SOURCES`** in
+`boards.config.js` is the declared exception: keyed by the ITEM board, listing
+discussion-board aliases whose role keys stay `discussions:<alias>` — so one role has ONE
+stored capabilities map, shared with its discussion-tier grants. The resolver reads those
+people off `ctx.discussion` in the in-discussion tab and off the row's `__discussionRoles`
+stamp in the personal views (`useMyDecisions.stampDiscussionRoles`, one query per page,
+fail-soft). It is part of the role-scan UNION, not an early `return true` — that is what
+makes an unchecked matrix box actually revoke. It replaced a hardcoded override that no
+checkbox could revoke; **don't reintroduce one** — add to this map instead.
+
 ### Observability — one funnel, do not bypass it
 Every error converges on **`logger.emit`** (`src/utils/logger.js`), which stamps `__loggedId` for
 dedup and fans out to sinks. `useUiErrorSink` (mounted once) registers a sink that turns every
