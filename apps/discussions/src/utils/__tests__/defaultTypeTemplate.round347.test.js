@@ -25,6 +25,8 @@ import {
   DEFAULT_TYPE_TEMPLATE_TOPICS,
   buildDefaultTypeTemplate,
   seedDefaultTypeTemplate,
+  hasDefaultTypeTemplate,
+  readStoredTypeTemplates,
 } from '../defaultTypeTemplate.js';
 
 const ME = { id: '7', name: 'עידו' };
@@ -171,5 +173,87 @@ describe('round347 — seeding only ever fills an EMPTY store', () => {
     storage.getItem.mockResolvedValue({ data: { value: null } });
     await seedDefaultTypeTemplate(null, ME);
     expect(storage.setItem.mock.calls[0][0]).toBe('discussions_type_templates_default');
+  });
+});
+
+/*
+ * round348 (review finding) — `skipped-existing` used to cover two very different states, and
+ * conflating them stranded an install: if the LABEL mutation failed once after the template was
+ * written, every later wizard run read "skipped" and never retried the label, leaving an agenda
+ * with no selectable type until someone recreated the label by hand with the exact same name.
+ *
+ * They are now distinct answers: OUR default already present ⇒ `already-default` (the label is
+ * worth reconciling), the account's OWN types with ours absent ⇒ `skipped-existing` (leave the
+ * established installation alone).
+ */
+describe('round348 — "our default is already there" is not "this account has its own types"', () => {
+  it('answers already-default when the seeded type is in the store', async () => {
+    storage.getItem.mockResolvedValue({
+      data: { value: JSON.stringify({ templates: [{ id: 'x', discussionType: DEFAULT_DISCUSSION_TYPE, topics: [] }] }) },
+    });
+    expect(await seedDefaultTypeTemplate(CTX, ME)).toBe('already-default');
+    // ...and still writes nothing: the template exists, only the label may be missing.
+    expect(storage.setItem).not.toHaveBeenCalled();
+  });
+
+  it('still answers skipped-existing for an account with only its OWN types', async () => {
+    storage.getItem.mockResolvedValue({
+      data: { value: JSON.stringify({ templates: [{ id: 'x', discussionType: 'הנהלה', topics: [] }] }) },
+    });
+    expect(await seedDefaultTypeTemplate(CTX, ME)).toBe('skipped-existing');
+  });
+
+  // Mixed store: ours among others still means "reconcile the label", not "leave it alone".
+  it('finds our default among other types', async () => {
+    storage.getItem.mockResolvedValue({
+      data: { value: JSON.stringify({ templates: [
+        { id: 'a', discussionType: 'הנהלה', topics: [] },
+        { id: 'b', discussionType: DEFAULT_DISCUSSION_TYPE, topics: [] },
+      ] }) },
+    });
+    expect(await seedDefaultTypeTemplate(CTX, ME)).toBe('already-default');
+  });
+
+  it('hasDefaultTypeTemplate matches on the trimmed label text only', () => {
+    expect(hasDefaultTypeTemplate([{ discussionType: `  ${DEFAULT_DISCUSSION_TYPE}  ` }])).toBe(true);
+    expect(hasDefaultTypeTemplate([{ discussionType: 'דיון' }])).toBe(false);
+    expect(hasDefaultTypeTemplate(null)).toBe(false);
+    expect(hasDefaultTypeTemplate([{}, null])).toBe(false);
+  });
+});
+
+/*
+ * round349 (review finding) — "the list is empty" and "we could not read the list" must never be
+ * the same answer. This is the shared primitive that keeps them apart, so neither seeding path can
+ * mistake a timeout for an empty store and overwrite an account's real types.
+ */
+describe('round349 — readStoredTypeTemplates reports whether the READ succeeded', () => {
+  it('ok with the stored list', async () => {
+    storage.getItem.mockImplementation(async () => ({
+      data: { value: JSON.stringify({ templates: [{ id: 'x', discussionType: 'הנהלה' }] }) },
+    }));
+    expect(await readStoredTypeTemplates(CTX)).toEqual({ ok: true, list: [{ id: 'x', discussionType: 'הנהלה' }] });
+  });
+
+  it('ok with an EMPTY list when there is genuinely nothing stored', async () => {
+    expect(await readStoredTypeTemplates(CTX)).toEqual({ ok: true, list: [] });
+  });
+
+  // The distinction that matters: a failure is ok:false, never an empty ok:true.
+  it('NOT ok when the read throws', async () => {
+    storage.getItem.mockRejectedValue(new Error('storage down'));
+    expect(await readStoredTypeTemplates(CTX)).toEqual({ ok: false, list: [] });
+  });
+
+  it('NOT ok on malformed stored JSON', async () => {
+    storage.getItem.mockImplementation(async () => ({ data: { value: '{not json' } }));
+    expect((await readStoredTypeTemplates(CTX)).ok).toBe(false);
+  });
+
+  // And the seed refuses to write on an unprovable read.
+  it('seedDefaultTypeTemplate writes nothing when the read is unprovable', async () => {
+    storage.getItem.mockRejectedValue(new Error('storage down'));
+    expect(await seedDefaultTypeTemplate(CTX, ME)).toBe('failed');
+    expect(storage.setItem).not.toHaveBeenCalled();
   });
 });

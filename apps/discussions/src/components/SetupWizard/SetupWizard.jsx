@@ -1,10 +1,17 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { Button, Heading, Text, Flex, Loader, Dropdown, RadioButton } from '@vibe/core';
 import { PartyProgress } from '@generated/components/PartyProgress';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
 import { addDropdownLabel } from '@generated/hooks/useDropdownOptions.js';
-import { DEFAULT_DISCUSSION_TYPE, seedDefaultTypeTemplate } from '@generated/utils/defaultTypeTemplate.js';
+import {
+  DEFAULT_DISCUSSION_TYPE,
+  seedDefaultTypeTemplate,
+  buildDefaultTypeTemplate,
+  hasDefaultTypeTemplate,
+  readStoredTypeTemplates,
+} from '@generated/utils/defaultTypeTemplate.js';
+import { TemplatesContext } from '@generated/contexts/TemplatesContext.jsx';
 import { provisionAllBoards } from '../../utils/mondayApi/provisionBoards.js';
 import { withSeededAccessRoles } from '../../utils/mondayApi/boards.config.js';
 import { api } from '../../utils/mondayApi/monday-client.js';
@@ -73,6 +80,19 @@ function optionsForField(field, boardColumns) {
 export function SetupWizard({ onManual, existingConfig = null, onDone = null, title }) {
   const { settings, updateSettings } = useSettings();
   const { context, currentUser } = useMondayContext();
+  /*
+   * round348 (review finding) — read the templates CONTEXT, not the hook.
+   *
+   * This wizard runs in two worlds: on FIRST RUN it is mounted by SettingsGate ABOVE
+   * TemplatesProvider, and in TOP-UP mode it renders inside the Settings modal, i.e. INSIDE
+   * that provider. `useTemplates()` hides the difference (it returns a no-op empty store when
+   * unprovided), and the difference is exactly what matters here: in top-up the provider is
+   * already mounted and has loaded the type templates ONCE, so a direct storage write leaves
+   * its in-memory list stale — the type looks selectable but a discussion created in that
+   * session gets no agenda until the app is reloaded. `null` here means "no provider" (first
+   * run), where the direct write is correct because the provider mounts afterwards and reads.
+   */
+  const templatesCtx = useContext(TemplatesContext);
 
   // TOP-UP derivations (all inert on first-run, where existingConfig is null).
   const isTopUp = Boolean(existingConfig);
@@ -201,6 +221,60 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
    * is storage-only and is written BEFORE the settings save, while the label needs the settings
    * already published — `addDropdownLabel` resolves the board + column from the ACTIVE store.
    */
+  /*
+   * round348 — seed the type template through whichever path keeps the app CONSISTENT:
+   * the mounted provider in top-up (so its state updates), a direct storage write on first run
+   * (where no provider exists yet). Returns the same verdicts as `seedDefaultTypeTemplate` so
+   * the caller's label decision is unchanged.
+   */
+  const seedTypeTemplate = useCallback(async () => {
+    /*
+     * round348 (review finding) — a MOUNTED provider is not a LOADED provider. Its
+     * `typeTemplates` starts as `[]` while four sequential storage reads run, so treating that
+     * as "an empty store" during the load window would persist our singleton default OVER an
+     * account's real types. While `loading` is true the DURABLE store is the only honest
+     * source, so we go through it — the in-memory list may then be stale until a reload, which
+     * is the pre-round348 behaviour and infinitely preferable to losing someone's types.
+     */
+    if (!templatesCtx?.upsertTypeTemplate || templatesCtx.loading) {
+      return seedDefaultTypeTemplate(context, currentUser);
+    }
+    try {
+      // A NON-EMPTY provider list is proof: those types were really read.
+      const list = templatesCtx.typeTemplates || [];
+      if (list.length) return hasDefaultTypeTemplate(list) ? 'already-default' : 'skipped-existing';
+      /*
+       * An EMPTY one proves nothing (round349 review finding): `TemplatesProvider.load` catches a
+       * failed read, commits `[]` and then clears `loading`, so "empty after load" also describes
+       * a timeout. Confirm against the DURABLE store before writing — otherwise one transient
+       * read failure turns this seed into an overwrite of the account's real types.
+       */
+      const durable = await readStoredTypeTemplates(context);
+      if (!durable.ok) return 'failed';
+      if (durable.list.length) {
+        /*
+         * The provider and the store DISAGREE — its read failed. Hydrate it before returning
+         * (round349 review finding): otherwise we report `already-default`, the label gets
+         * retried, and this session still holds `typeTemplates = []`, so picking "דיון כללי"
+         * creates a discussion with no agenda until a reload. Bringing the provider in line is
+         * the whole point of having found the disagreement.
+         */
+        await templatesCtx.reloadTypeTemplates?.();
+        return hasDefaultTypeTemplate(durable.list) ? 'already-default' : 'skipped-existing';
+      }
+      /*
+       * `strict: true` (review finding) — without it `persistTypes` logs a storage failure and
+       * resolves anyway, so we would report "seeded" for a write that never landed and then add
+       * the dropdown label: a selectable type with no agenda after the next reload.
+       */
+      await templatesCtx.upsertTypeTemplate(buildDefaultTypeTemplate(currentUser), { strict: true });
+      return 'seeded';
+    } catch (err) {
+      logger.warn('SetupWizard', 'זריעת תבנית סוג הדיון נכשלה — ניתן ליצור אותה ידנית בתבניות', err);
+      return 'failed';
+    }
+  }, [templatesCtx, context, currentUser]);
+
   const addDefaultTypeLabel = useCallback(async () => {
     try {
       await addDropdownLabel({
@@ -254,10 +328,16 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
        * Its RESULT then decides the label: adding a selectable type whose agenda was skipped
        * (a populated top-up) would leave an empty type behind on an established install.
        */
-      const seedResult = await seedDefaultTypeTemplate(context, currentUser);
+      const seedResult = await seedTypeTemplate();
       await updateSettings({ ...config, preferences: withSeededAccessRoles(settings?.preferences) });
-      // The label needs the settings PUBLISHED — it resolves board+column from the active store.
-      if (seedResult === 'seeded') await addDefaultTypeLabel();
+      /*
+       * The label needs the settings PUBLISHED — it resolves board+column from the active store.
+       * `already-default` counts (round348 review finding): if the label mutation failed once
+       * after the template was written, every later run read "skipped" and never retried,
+       * leaving an orphaned agenda with no selectable type. `addDropdownLabel` is idempotent —
+       * an existing label returns its id without a write — so retrying costs one read.
+       */
+      if (seedResult === 'seeded' || seedResult === 'already-default') await addDefaultTypeLabel();
       // TOP-UP: the caller closes the panel (settings already refreshed). FIRST-RUN:
       // isConfigured now true → SettingsGate re-renders children, unmounting us.
       if (onDone) onDone();
@@ -266,7 +346,7 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
       setErrorMsg(err?.message || 'אירעה שגיאה בהקמת הלוחות');
       setPhase('error');
     }
-  }, [context, settings, updateSettings, tasksMode, tasksBoardId, columnMap, existingConfig, onDone, currentUser, addDefaultTypeLabel]);
+  }, [context, settings, updateSettings, tasksMode, tasksBoardId, columnMap, existingConfig, onDone, seedTypeTemplate, addDefaultTypeLabel]);
 
   return (
     <div dir="rtl" className={isTopUp ? styles.rootEmbedded : styles.root}>
