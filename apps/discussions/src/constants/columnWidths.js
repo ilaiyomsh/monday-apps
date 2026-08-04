@@ -83,6 +83,17 @@ export const TASKS_COLUMN_WIDTHS = {
 // TaskTable's `.taskTable`) instead of a fill track, so dragging name's border
 // actually resizes it (a minmax(w,1fr) fill track snapped back to fill and made
 // name feel non-resizable).
+/*
+ * ⚠️ round341 — THIS MAP IS DEAD. Nothing imports it (verified by grep across the repo),
+ * there is no 'topics' tableId in either the widths or the order store, and TopicsTab
+ * contains no useColumnWidths / gridTemplate at all: the ניהול-דיון restructure replaced
+ * that table with the agenda ribbon + triple box, laid out by flex in the CSS module.
+ *
+ * The note is here because round341 retuned every OTHER map in this file, which makes
+ * this one a trap — editing these numbers looks like it should move the topics table and
+ * changes nothing. Left in place rather than deleted (a deletion is a separate decision,
+ * and the values document the table's last intended proportions).
+ */
 export const TOPICS_COLUMN_WIDTHS = {
   name: { default: 360, min: 160, max: 1200 },
   check: { default: 66, min: 52, max: 160 },
