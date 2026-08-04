@@ -2,6 +2,76 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.13.0 — 2026-08-04 — the email updates the board as you go: no send button, a form per row
+
+Two changes in one round, both to the body of the digest mail.
+
+**1. A text field must be filled before its row's status can be picked.** In a
+cluster that maps a text column, the status tag now ships `disabled` and carries
+`[disabled]="dd.n<id> == ''"`, so the dropdown does not open at all until the
+field holds text. The empty note used to be caught one step later, at the submit
+gate; locking the control makes the order of operations impossible to get wrong.
+The static attribute is not redundant with the binding — **amp-bind does not
+evaluate bindings on load**, so a trigger carrying only `[disabled]` would be
+tappable until the reader's first state change, which is exactly the window this
+closes. `pointer-events` is outside the strict amp4email CSS set, so `disabled`
+is the only lever available.
+
+**2. The single send button is gone. Picking a status writes that task
+immediately, with a loader and a ✓ on that row.**
+
+**Why the table had to become a card per row.** amp-form looks for its
+`submitting` / `submit-success` / `submit-error` blocks among the form's own
+children. One form per message can therefore only ever show ONE loader, and a
+`<form>` cannot span two `<td>`s — so per-row feedback forces one form per row,
+and one form per row forces the row out of the table. Cards also stack on a
+phone, which the fixed-width table never did.
+
+**The two mechanics that look like details and are not.**
+- **The selection rides a radio, not an amp-bind-bound hidden input.**
+  `AMP.setState(...)` followed by `form.submit` in one action chain is a race:
+  amp-bind applies DOM mutations on the next vsync frame and the submit does not
+  wait, so the POST would carry the PREVIOUS value. A checked radio is
+  serialized by the form itself. The `setState` still in that chain is cosmetic
+  — close the menu, repaint the trigger — and cannot lose a selection.
+- **The submit fires on `tap` on the radio, not `change`.** A radio's
+  checkedness is set in the pre-click activation step, so a tap handler already
+  sees it checked; and unlike `change`, tap fires again when the reader taps the
+  SAME option, which is the only thing that makes retrying a failed row
+  possible.
+
+**Signed per row.** Each form carries a manifest covering its own task only, so
+a leaked form authorizes one item, and the document is smaller than it would be
+repeating the message-wide manifest N times. `/amp/confirm` needed no change: it
+verifies whatever manifest arrives and checks every pair against it.
+
+**What the new request shape forced on the server.** Same tasks, same writes,
+same monday complexity budget — but one POST per task instead of one per
+message. Bucket B (per `accountId:ip`) was 30/min, which would have started
+answering `[E9]` partway down a large digest with the earlier rows already
+written; it is now 120, matching bucket A, and both capacities are named
+constants next to the limiter instead of numbers buried in `index.js`. The reply
+also stopped being phrased for a batch: a one-task submission answers "עודכן" /
+"היה מעודכן כבר" instead of counting, which also kills "משימה אחת היו מעודכנות
+כבר" — plural verb on a singular subject, which a per-row digest would have
+shown on every already-done row. A body that really carries several items keeps
+counting, mixed outcomes included.
+
+**Dropped with the bulk form:** the hidden `item_<id>` inputs, the `dd.v<id>`
+state, the ORed `[disabled]` submit gate, the marked-but-empty note highlight
+(the trigger lock makes that state unreachable) and the cross-cluster de-dup —
+each form submits alone, so each carries its own named note field.
+
+⚠️ **Two amp4email behaviours are still unverified in Gmail, and they gate the
+release:** the `form.submit` action (without it nothing is ever written) and
+`change` on a text input (without it mapped rows stay locked — `input-throttled`
+was already measured dead there). One real send through the `send-raw` debug lane
+answers both. If `submit` turns out to be unsupported, the fallback is a small
+per-row confirm button — one extra tap, still not one button per message. Also
+still open from 0.12.0: `npm run validate:amp` could not run in the cloud session
+(`cdn.ampproject.org` is not reachable from it), so the new markup — label-wrapped
+radios, a form inside each card — has not been through the official validator.
+
 ## 0.12.0 — 2026-08-03 — a required text field per task, mapped to a board text column
 
 *(0.12.0 addendum, 2026-08-04 — the same version also shipped, in one round:

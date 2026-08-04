@@ -100,9 +100,18 @@ and the slot. **Counts and addresses only — no task content and no signatures.
 A "resend today" action re-runs the send for **all** recipients using the current
 slot. Selective resend is out of scope for this round.
 
-### D9 — Email redesign: multi-button table, one global submit. **IMPLEMENTED
+### D9 — Email redesign: multi-button rows. **IMPLEMENTED
 (T15 → LabelPicker 0.8.3–0.8.4 → cluster tables + multi-button 0.9.0 →
-`<select>` 0.9.1 → amp-bind colored dropdown 0.9.2).**
+`<select>` 0.9.1 → amp-bind colored dropdown 0.9.2 → per-row cards + immediate
+write 0.13.0).**
+
+> **SUPERSEDED IN PART (owner decision 2026-08-04).** "One table + one global
+> submit" is dead: every ROW is now its own form, a status pick writes that item
+> immediately, and the reader gets a loader + confirmation on that row. The
+> table became a card per row. See "Per-row immediate write" below — the briefs
+> and rejected alternatives from 2026-07-27 are kept because they explain the
+> parts that did NOT change (colored closed trigger, popup options, per-cluster
+> grouping, that cluster's date only).
 
 Owner briefs:
 - (2026-07-27) one table + **one** approve button — not one form per section.
@@ -123,13 +132,48 @@ Owner briefs:
   popup of colored options; overlay closes; wire via hidden `[value]` binding.
   Same item across clusters shares one state key + one hidden field.
 
-Behaviour:
+Behaviour (0.9.2 — superseded by "Per-row immediate write"):
 - One AMP form. Populated sections → separate tables (title + date + dropdown).
 - Options = section `buttonIds` (fallback `[buttonId]`). Wire `item_<id>=btnId`.
 - **One global submit** (`אשר את המסומנות`) applies every chosen status.
 - Tasks with no new status chosen (empty `item_<id>`) are unchanged.
 
 Admin: multi-select "כפתורי פעולה"; primary (first) drives status filter column.
+
+#### Per-row immediate write (owner decision 2026-08-04, 0.13.0)
+
+- **No global submit button.** Picking a status in a row submits THAT row.
+- **One `<form>` per row**, rendered as a card under its cluster title. This is
+  forced, not stylistic: amp-form looks for `submitting` / `submit-success` /
+  `submit-error` among the form's own children, so per-row feedback is
+  impossible with one form per message — and a `<form>` cannot span two `<td>`s.
+  Cards also stack on a phone, which the fixed-width table did not.
+- **The selection rides a radio** (`<input type="radio" name="item_<id>"
+  value="<btnId>">` inside a colored `<label>`), NOT an amp-bind-bound hidden
+  input. `AMP.setState(...)` followed by `form.submit` in one action chain is a
+  race: amp-bind mutates the DOM on the next vsync frame and the submit does not
+  wait, so the POST would carry the previous value. The setState in that chain is
+  cosmetic (close the menu, repaint the trigger) and cannot lose a selection.
+- **The submit fires on `tap` on the radio, not `change`.** A radio's
+  checkedness is set in the pre-click activation step, so a tap handler already
+  sees it checked; and tap fires again on a second tap of the same option, which
+  is what makes retrying a failed row possible.
+- **A status cannot be picked before a mapped text field is filled** — the
+  trigger carries `disabled` + `[disabled]="dd.n<id> == ''"` (owner decision
+  2026-08-04, same day, shipped first). The static attribute IS the initial
+  state: amp-bind does not evaluate bindings on load.
+- **Signature per ROW**, over that row's pairs only (refines D10 for the
+  rendered email: still one signature per form, now one form per row). Least
+  privilege — a leaked form authorizes one item — and smaller than repeating the
+  message-wide manifest N times. `/amp/confirm` needed no change: it verifies
+  whatever manifest arrives and checks every pair against it.
+- **Rate limits re-tuned:** one POST per task instead of one per message, so
+  bucket B (per `accountId:ip`) went 30 → 120/min to match bucket A. The monday
+  workload is unchanged — same tasks, same writes, same complexity budget.
+- **UNVERIFIED IN GMAIL:** the `form.submit` action, and (from the note lock) the
+  `change` event on a text input. Both need one real send before release; the
+  fallback if `submit` is unsupported is a small per-row confirm button — one
+  extra tap, still not one button per message.
 
 ### D10 — One signature per message, over a signed manifest.
 

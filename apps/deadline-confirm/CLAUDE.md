@@ -8,7 +8,7 @@ Operator setup lives in `README.md`.
 ## What this is
 
 One-click status actions from email (monday code server + admin view), **V6 —
-AMP-only with per-message signed manifest**.
+AMP-only with a signed manifest per FORM, and since 0.13.0 one form per ROW**.
 The digest is sent as `multipart/alternative` with **three** parts, in the order
 `text/plain` → `text/x-amp-html` → `text/html` (0.10.3): a non-actionable plain
 fallback (task list only, no links/credentials), the part Gmail renders as
@@ -19,10 +19,12 @@ NOT the `INTERNAL_ERROR` fix**: that hypothesis, and the base64-CTE one, were bo
 disproven by live sends on 2026-08-03. Read
 **`docs/amp-email-verified-findings.md`** before any AMP work; it is the measured
 account of what actually blocks rendering (the Gmail API strips the AMP part; SPF
-must pass on its own; a self-send can never render). The AMP form posts to **`POST /amp/confirm`**
-— the app's **only** public write endpoint. Each message carries one HMAC
-signature over an explicit manifest of authorized (task × button) pairs; the
-base link secret never leaves the server (D3).
+must pass on its own; a self-send can never render). The AMP forms post to **`POST /amp/confirm`**
+— the app's **only** public write endpoint. Each FORM carries one HMAC signature
+over an explicit manifest of authorized (task × button) pairs; since 0.13.0 that
+is one form (and one signature) per row, covering that row's task only, and a
+status pick submits it immediately. The base link secret never leaves the server
+(D3).
 
 Multi-tenant: every account's config/secret/token live under `${accountId}:`
 SecureStorage keys. App ID **11704868**, dev-center slug
@@ -33,8 +35,10 @@ SecureStorage keys. App ID **11704868**, dev-center slug
   (D1/D2). Since 0.10.3 an INERT `text/html` fallback IS shipped — derived from
   the plain part, no anchors/forms/scripts/remote images, asserted in
   `tests/digest-html-fallback.test.js`. D1/D2 bans actionable HTML, not HTML.
-- One signature per message over a signed manifest; slot derived from scheduled
-  send hour (`digest.sendHour`, default 8, Asia/Jerusalem) (D5/D6/D10).
+- One signature per FORM over a signed manifest — per row since 0.13.0, which
+  refines D10's "per message" for the rendered email (the route is unchanged and
+  still accepts a multi-item manifest); slot derived from scheduled send hour
+  (`digest.sendHour`, default 8, Asia/Jerusalem) (D5/D6/D10).
 - Link secret is write-only — never returned by any endpoint; rotation is the
   kill switch (D3/D4).
 - No clicker identity — AMP carries no verified user; D11 compares signed
@@ -63,7 +67,8 @@ src/
 ├── index.js                  # env + wiring + listen (nothing testable here)
 ├── app.js                    # createApp factory — DI for tests (trust proxy, routers, /admin static)
 ├── routes/
-│   ├── amp.js                # POST/OPTIONS /amp/confirm — V6 signed-manifest bulk confirm (ONLY write path)
+│   ├── amp.js                # POST/OPTIONS /amp/confirm — V6 signed-manifest confirm, ONLY write path
+│   │                         # (rendered mail posts ONE row per request; the bulk path stays for hand-built bodies)
 │   ├── oauth.js              # /oauth/start + /oauth/callback (§8)
 │   ├── oauth-google.js       # /oauth/google/start|callback — connect the tenant's Gmail mailbox (T9b/T9c)
 │   └── admin-api.js          # /api/state|config|secret/rotate + /api/digest/preview|send
@@ -116,26 +121,58 @@ src/
   arrows are the whole priority UI; no priority field exists. A rendered email
   can therefore never produce `conflict_item` — that guard remains for
   hand-crafted POSTs only.
+- **ONE FORM PER ROW — a status pick writes that item immediately (0.13.0, owner
+  decision 2026-08-04).** There is NO global submit button. Every task is a card
+  that is its own `<form>`; the loader, the ✓ and any error come from that form's
+  own `submitting` / `submit-success` / `submit-error` children, which is the
+  whole reason the layout had to leave the table (those blocks must be children
+  of the form, and a `<form>` cannot span two `<td>`s). Three things here are
+  load-bearing and must not be "simplified":
+  1. **The selection rides a radio**, not an amp-bind-bound hidden input.
+     `AMP.setState(...)` then `form.submit` in one chain is a RACE — amp-bind
+     mutates on the next vsync frame, the submit does not wait — so the POST
+     would carry the previous value. The setState in that chain is cosmetic
+     (close menu, repaint trigger).
+  2. **The submit fires on `tap` on the radio, not `change`:** checkedness is set
+     in the pre-click activation step, so tap already sees it checked, and tap
+     fires again on a repeat tap of the same option — the only way to retry a
+     row whose request failed.
+  3. **Each form is signed over ITS OWN pairs** (one item), so a leaked form
+     authorizes one task. `/amp/confirm` is unchanged — it verifies whatever
+     manifest arrives.
+  Consequence for the wire: one POST per task. `perAccount` capacity is 120/min
+  for that reason (`helpers/rate-limit.js` — the constants live there because
+  `index.js` binds a port on import), and a one-selection reply says "עודכן" /
+  "היה מעודכן כבר" instead of counting.
 - **Per-task required note (0.12.0):** a digest section MAY map
   `noteColumnId` + `noteColumnTitle` (a TEXT column on the TASKS board). When it
-  does, every row of that cluster gets a text field in the AMP table and the task
-  **cannot be marked without it**. Enforcement is in four places and all four
-  matter: **`disabled` + `[disabled]="dd.n<id> == ''"` on the row's status
-  trigger** (owner decision 2026-08-04 — the dropdown does not open at all until
-  the field holds text; the STATIC attribute is the initial state, because
+  does, every row of that cluster gets a text field **inside that row's form**
+  and the task **cannot be marked without it**. Enforcement is in three places
+  and all three matter: **`disabled` + `[disabled]="dd.n<id> == ''"` on the row's
+  status trigger** (owner decision 2026-08-04 — the dropdown does not open at all
+  until the field holds text; the STATIC attribute is the initial state, because
   amp-bind does not evaluate bindings on load, and `pointer-events` is outside
-  the strict CSS set so `disabled` is the only lever), `[disabled]` on the submit
-  (both UX only — AMP runs in the reader's client), `routes/amp.js` per-item
-  refusal (the authority), and a final guard inside `performAction`. Clearing the
-  field after picking a status is deliberately NOT handled: the selection stays
-  and the submit gate blocks it (owner: ignore).
+  the strict CSS set so `disabled` is the only lever; UX only — AMP runs in the
+  reader's client), `routes/amp.js` per-item refusal (the authority), and a final
+  guard inside `performAction`. Clearing the field after picking a status is
+  deliberately NOT handled (owner: ignore) — by then the write already happened.
   **The lock lives or dies by the `n<id>` state**, which the text input feeds via
   `on="change:…;input-throttled:…"` — `input-throttled` was measured dead in
-  Gmail (see `renderNoteCell`), so `change` (fires on leaving the field) is what
+  Gmail (see `renderNoteField`), so `change` (fires on leaving the field) is what
   is expected to carry it. If BOTH ever fail in a client, that client's mapped
   rows are locked shut — verify with a real send (`send-raw` lane) after any
   change here, and note the wrinkle: the tap that blurs the field only unlocks
-  the trigger, so the reader's first tap may need a second. Status + note go out in ONE `change_multiple_column_values`
+  the trigger, so the reader's first tap may need a second.
+- **TWO amp4email behaviours are still UNVERIFIED in Gmail** and gate the 0.13.0
+  release: the `form.submit` action (nothing writes without it) and `change` on a
+  text input (mapped rows stay locked without it). One real send through the
+  `send-raw` lane answers both. Fallback if `submit` is unsupported: a small
+  per-row confirm button — one extra tap, still not one button per message.
+- A task listed in TWO clusters (hand-built; the section-priority dedup stops
+  buildDigest producing it) now renders TWO independent forms — two ids, two
+  signatures, two POSTs. They still share the display state (`l`/`c`) and the
+  note key `n<id>`, because it is one task: typing in either field unlocks both
+  triggers. Status + note go out in ONE `change_multiple_column_values`
   write, so a marked task can never lack its note; the value **overwrites** the
   column. Target column resolves from the SELECTED BUTTON's section (the wire
   carries no cluster identity) — a button shared by two mapped clusters takes the
