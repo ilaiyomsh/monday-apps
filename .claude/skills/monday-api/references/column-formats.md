@@ -374,9 +374,17 @@ query ($ws: [ID]) { folders(workspace_ids: $ws, limit: 100) { id name children {
   with it really is returned as a `child` of that folder — confirmed by reading the folder back.
 - **`Folder.children` is `[Board]!` and EXCLUDES sub-folders and dashboards** (per the schema
   description). Do not use it to enumerate a folder tree.
-- `folders(workspace_ids:)` takes `[ID]` (nullable elements): **pass `null` as an element to mean
-  the Main Workspace**. `limit` defaults to 25 — pass it explicitly when scanning for a folder by
-  name, or an account with many folders silently misses the match.
+- `folders(workspace_ids:)` takes `[ID]` (nullable elements), and **`[null]` does NOT mean "the
+  Main Workspace"** — an earlier note here said it did; a live read on 2026-08-04 disproved it.
+  `folders(workspace_ids: [null], limit: 5)` came back with folders belonging to an unrelated
+  named workspace, i.e. the filter is effectively ignored rather than scoped. Treat an unknown
+  workspace as **unknown**: do not query or create a folder until you have a real workspace id
+  (read it off a board — `boards(ids:){ workspace { id } }`), or `create_folder` with a null
+  `workspace_id` drops the folder somewhere your own code will never find again. `limit` defaults
+  to 25 — pass it explicitly when scanning for a folder by name, or an account with many folders
+  silently misses the match.
+- `boards(ids: [...])` answers a **deleted or inaccessible** board id with an **empty list, not an
+  error** — so `data.boards[0]` being absent is a failure to handle, never "the board has no X".
 - There is no "create folder if absent" upsert: read `folders` and match by name yourself, or a
   re-run creates a duplicate folder with the same name (monday allows duplicates).
 - `delete_folder(folder_id:)` exists and deleting the folder does NOT delete boards implicitly in

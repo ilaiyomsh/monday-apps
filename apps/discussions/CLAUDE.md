@@ -200,6 +200,33 @@ view only shows tasks assigned to me — reproduces the old ungated behavior. No
 matrix capability). Deadline is a `DatePickerPopover` cell; rename is a hover-pencil (name click still
 opens the item card).
 
+### Provisioning puts every board in one folder — "בסיס מידע" (round345)
+
+`provisionAllBoards` (`utils/mondayApi/provisionBoards.js`) creates the folder **before** the
+boards and ends with every board inside it. The order is load-bearing, not incidental:
+
+1. workspace from the caller (`context.workspaceId`), else read off the host board;
+2. folder created **first** when the workspace is already known — the discussions board of a
+   custom-object install is then created inside it;
+3. when the workspace is NOT known (custom object with no `workspaceId` in context, and no host
+   board) the discussions board is created first and the workspace is read **off it** — the only
+   reliable source in that install;
+4. the remaining boards are created with `folder_id`;
+5. anything that could not be born inside the folder — a board-view host board, a board reused
+   from an existing mapping, a connected tasks board, or the board from step 3 — is **moved** in
+   with `update_board_hierarchy` (`moveBoardsIntoFolder`). This is also what puts a pre-folder
+   installation's boards in place: re-running the wizard is enough, since provisioning reuses a
+   mapped board and never re-creates it.
+
+**`ensureProvisionFolder(null)` refuses to do anything** — verified live: `folders(workspace_ids:
+[null])` is not "the main workspace", it returns folders from an unrelated workspace, so the old
+code searched the wrong place and then created "בסיס מידע" somewhere the app never looks. No
+workspace ⇒ no folder, boards at the root, warning logged. Every step is fail-soft: folder
+placement is cosmetic, the returned mapping is not, so nothing here may abort an install.
+
+There is **no settings button** for this any more (round345 removed the round342 one) — if you are
+tempted to add one, make provisioning do it instead.
+
 ### Two `monday.storage`-only subsystems — no board backing
 monday's public API has no item-position mutation and no place to hang reusable presets, so two
 features live entirely in `monday.storage` (each mirrors `SettingsContext`'s pattern: JSON value,
