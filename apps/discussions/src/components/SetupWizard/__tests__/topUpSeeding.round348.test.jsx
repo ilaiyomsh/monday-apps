@@ -29,6 +29,7 @@ const storage = { getItem: vi.fn(async () => ({ data: { value: null } })), setIt
 const provisionAllBoards = vi.fn(async () => PROVISIONED);
 const addDropdownLabel = vi.fn(async () => ({ id: 1 }));
 const upsertTypeTemplate = vi.fn(async (t) => t);
+const reloadTypeTemplates = vi.fn(async () => []);
 
 vi.mock('../../../utils/mondayApi/provisionBoards.js', () => ({
   provisionAllBoards: (...a) => provisionAllBoards(...a),
@@ -58,7 +59,7 @@ import { TemplatesContext } from '../../../contexts/TemplatesContext.jsx';
 
 // A MOUNTED, LOADED provider — the top-up world. `typeTemplates` is what it has already read.
 const withProvider = (typeTemplates, loading = false) => render(
-  <TemplatesContext.Provider value={{ typeTemplates, upsertTypeTemplate, loading }}>
+  <TemplatesContext.Provider value={{ typeTemplates, upsertTypeTemplate, reloadTypeTemplates, loading }}>
     <SetupWizard onManual={() => {}} />
   </TemplatesContext.Provider>
 );
@@ -74,6 +75,7 @@ beforeEach(() => {
   storage.setItem.mockImplementation(async () => ({}));
   addDropdownLabel.mockImplementation(async () => ({ id: 1 }));
   upsertTypeTemplate.mockImplementation(async (t) => t);
+  reloadTypeTemplates.mockImplementation(async () => []);
 });
 
 describe('round348 — top-up seeds through the mounted provider', () => {
@@ -185,6 +187,33 @@ describe('round348 — top-up seeds through the mounted provider', () => {
     expect(upsertTypeTemplate).not.toHaveBeenCalled();
     expect(storage.setItem).not.toHaveBeenCalled();
     expect(addDropdownLabel).not.toHaveBeenCalled();
+  });
+
+  /*
+   * round349 (review finding) — when the provider and the store disagree, the provider's read
+   * failed, so it must be HYDRATED before we return. Otherwise we report `already-default`, the
+   * label is retried, and this session still holds `typeTemplates = []`: picking "דיון כללי"
+   * creates a discussion with no agenda until a reload — the very symptom this feature keeps
+   * circling back to.
+   */
+  it('hydrates the provider when the store disagrees with it', async () => {
+    storage.getItem.mockImplementation(async () => ({
+      data: { value: JSON.stringify({ templates: [{ id: 'seed-default-type', discussionType: 'דיון כללי', topics: [] }] }) },
+    }));
+    withProvider([]);
+    await clickCreate();
+    await waitFor(() => expect(reloadTypeTemplates).toHaveBeenCalled());
+    // ...and the label is still reconciled, because the template really is there.
+    expect(addDropdownLabel).toHaveBeenCalled();
+    expect(upsertTypeTemplate).not.toHaveBeenCalled();
+  });
+
+  // No disagreement, no reload: an agreeing provider must not pay for a second read.
+  it('does not reload when the provider and the store agree', async () => {
+    withProvider([]);
+    await clickCreate();
+    await waitFor(() => expect(upsertTypeTemplate).toHaveBeenCalled());
+    expect(reloadTypeTemplates).not.toHaveBeenCalled();
   });
 
   // A read we could not complete is UNKNOWN, not empty: do nothing at all.

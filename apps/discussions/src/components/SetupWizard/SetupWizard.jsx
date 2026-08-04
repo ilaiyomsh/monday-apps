@@ -252,6 +252,14 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
       const durable = await readStoredTypeTemplates(context);
       if (!durable.ok) return 'failed';
       if (durable.list.length) {
+        /*
+         * The provider and the store DISAGREE — its read failed. Hydrate it before returning
+         * (round349 review finding): otherwise we report `already-default`, the label gets
+         * retried, and this session still holds `typeTemplates = []`, so picking "דיון כללי"
+         * creates a discussion with no agenda until a reload. Bringing the provider in line is
+         * the whole point of having found the disagreement.
+         */
+        await templatesCtx.reloadTypeTemplates?.();
         return hasDefaultTypeTemplate(durable.list) ? 'already-default' : 'skipped-existing';
       }
       /*
