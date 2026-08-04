@@ -5,6 +5,13 @@ import { validateSettings } from '../../domain/settingsSchema';
 import { isSupportedFormColumnType } from '../../domain/columnFields';
 import { RESERVED_EMPTY_LABEL_ID, pickColorForNewLabel, resolveStatusColorHex } from '../../domain/statusColors';
 import {
+  addOwner,
+  bootstrapOwners,
+  normalizeOwners,
+  removeOwner,
+  setPrimaryOwner,
+} from '../../domain/columnOwners';
+import {
   buildCreateLabelPayload,
   buildStatusLabelsUpdatePayload,
   buildUpdateStatusColumnMutation,
@@ -22,7 +29,9 @@ import {
   GET_BOARD_SETTINGS_METADATA,
   GET_STATUS_COLUMN_REVISION,
 } from '../../services/graphqlQueries';
+import { enrollColumnGuard } from '../../services/guardEnroll';
 import mondayService from '../../services/mondayService';
+import BypassMonitor from './BypassMonitor';
 import { loadAccountTeams } from '../../services/teamsAccess';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
@@ -547,6 +556,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
   const isOverlay = variant === 'overlay';
   const boardId = context?.boardId;
   const columnId = context?.columnId;
+  const currentUserId = context?.user?.id;
   const {
     settings: loadedSettings,
     loading: settingsLoading,
@@ -597,12 +607,15 @@ function ColumnSettings({ context, variant = 'overlay' }) {
   useEffect(() => {
     if (settingsLoading || metaLoading) return;
     if (draft) return;
-    setDraft(loadedSettings ?? {
-      version: 1,
-      hiddenLabelIds: [],
-      labels: {},
-    });
-  }, [settingsLoading, metaLoading, loadedSettings, draft]);
+    const base = loadedSettings ?? { version: 1, hiddenLabelIds: [], labels: {} };
+    // round322: the person configuring an UNADOPTED column becomes its first owner
+    // AND primary (the revert identity) the moment the screen opens — so the owners
+    // editor never renders empty, and a save always persists a non-empty owner list.
+    // An already-adopted column keeps its stored owners untouched.
+    const owners = normalizeOwners(base.owners)
+      ?? (currentUserId != null ? bootstrapOwners(currentUserId) : null);
+    setDraft(owners ? { ...base, owners } : base);
+  }, [settingsLoading, metaLoading, loadedSettings, draft, currentUserId]);
 
   const statusColumn = useMemo(
     () => metadata?.columns.find((column) => column.id === columnId) ?? null,
@@ -653,6 +666,30 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       return { ...current, hiddenLabelIds: [...hidden] };
     });
   };
+
+  // round322 — owner-list edits go through the pure domain mutations, which hold
+  // the invariants (always one primary, never owner-less, crown moves only here).
+  const draftOwners = normalizeOwners(draft?.owners);
+
+  // round323 — id→name maps the bypass monitor resolves its records against.
+  const labelsById = useMemo(() => {
+    const map = {};
+    (labelsDraft ?? []).forEach((label) => { map[String(label.id)] = label.label; });
+    return map;
+  }, [labelsDraft]);
+  const columnsById = useMemo(() => {
+    const map = {};
+    (metadata?.columns ?? []).forEach((column) => { map[String(column.id)] = column.title; });
+    return map;
+  }, [metadata]);
+  const usersById = useMemo(() => {
+    const map = {};
+    (metadata?.users ?? []).forEach((user) => { map[String(user.id)] = user.name; });
+    return map;
+  }, [metadata]);
+  const addOwnerId = (userId) => setDraft((current) => ({ ...current, owners: addOwner(current.owners, userId) }));
+  const removeOwnerId = (userId) => setDraft((current) => ({ ...current, owners: removeOwner(current.owners, userId) }));
+  const makePrimaryOwner = (userId) => setDraft((current) => ({ ...current, owners: setPrimaryOwner(current.owners, userId) }));
 
   const changeRule = (labelId, patch) => {
     setDraft((current) => {
@@ -867,7 +904,17 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         setLabelsBaseline(reseeded);
       }
 
-      const next = pruneSettingsForActiveLabels(draft, activeLabelIds);
+      // prune rebuilds the labels/hidden shape; re-attach the owner list (round322)
+      // so the stored blob keeps who may configure and who reverts are written as.
+      const pruned = pruneSettingsForActiveLabels(draft, activeLabelIds);
+      const savedOwners = normalizeOwners(draft.owners);
+      const next = {
+        ...pruned,
+        ...(savedOwners ? { owners: savedOwners } : {}),
+        // round323 — auto-revert is a per-column setting the guard reads; carry
+        // it only when true so a monitoring-only column keeps its lean blob.
+        ...(draft.autoRevert === true ? { autoRevert: true } : {}),
+      };
       const { ok, problems } = validateSettings(next, metadata.columns);
       if (!ok) {
         logger.warn('ColumnSettings', 'Settings failed validation', { problems });
@@ -884,6 +931,11 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         return;
       }
       await mondayService.setColumnConfig(boardId, columnId, next);
+
+      // round322: best-effort guard enrollment — registers the server watchdog's
+      // webhook on this column. Fire-and-forget BY CONTRACT: enrollColumnGuard
+      // returns a status and never throws, and the save must not wait on it.
+      void enrollColumnGuard({ boardId, columnId });
 
       mondayService.showNotice('ההגדרות נשמרו');
       await dismiss({ saved: true });
@@ -966,6 +1018,88 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         {!metadata.teamsAvailable && (
           <AttentionBox type="warning" text={TEAMS_SCOPE_HINT} />
         )}
+
+        <section className="twyst-owners" aria-label="בעלי העמודה">
+          <div className="twyst-settings-toolbar-title">
+            <span className="twyst-settings-section-title">בעלי העמודה</span>
+            <span className="twyst-settings-count">{draftOwners?.ownerIds.length ?? 0}</span>
+          </div>
+          <p className="twyst-owners-note">
+            רק בעלי העמודה רואים ומנהלים את ההגדרות. הבעל הראשי הוא מי שעל שמו יירשם
+            ביטול אוטומטי של שינוי שאינו עומד בהגדרות.
+          </p>
+          <div className="twyst-field twyst-field-actors">
+            <span className="twyst-field-label">הוספת בעלים</span>
+            <PersonPicker
+              selected={(draftOwners?.ownerIds ?? []).map((id) => ({ kind: 'person', id }))}
+              users={metadata.users}
+              teams={[]}
+              bordered
+              onChange={(actors) => {
+                const nextIds = new Set(
+                  (actors || []).filter((actor) => actor.kind !== 'team').map((actor) => String(actor.id)),
+                );
+                const currentIds = draftOwners?.ownerIds ?? [];
+                nextIds.forEach((id) => { if (!currentIds.includes(id)) addOwnerId(id); });
+                currentIds.forEach((id) => { if (!nextIds.has(id)) removeOwnerId(id); });
+              }}
+            />
+          </div>
+          <ul className="twyst-owners-list" aria-label="רשימת בעלי העמודה">
+            {(draftOwners?.ownerIds ?? []).map((ownerId) => {
+              const owner = metadata.users.find((user) => String(user.id) === ownerId);
+              const isPrimary = draftOwners?.primaryOwnerId === ownerId;
+              const isLast = (draftOwners?.ownerIds.length ?? 0) <= 1;
+              return (
+                <li key={ownerId} className="twyst-owner-row">
+                  <span className="twyst-owner-name">{owner?.name ?? `משתמש ${ownerId}`}</span>
+                  <label className="twyst-owner-primary">
+                    <input
+                      type="radio"
+                      name="twyst-primary-owner"
+                      checked={isPrimary}
+                      disabled={saving}
+                      onChange={() => makePrimaryOwner(ownerId)}
+                      aria-label={`הגדר כבעלים ראשי: ${owner?.name ?? ownerId}`}
+                    />
+                    בעלים ראשי
+                  </label>
+                  <button
+                    type="button"
+                    className="twyst-owner-remove"
+                    disabled={saving || isLast}
+                    onClick={() => removeOwnerId(ownerId)}
+                    aria-label={`הסרת בעלים: ${owner?.name ?? ownerId}`}
+                    title={isLast ? 'חייב להישאר לפחות בעלים אחד' : 'הסרת בעלים'}
+                  >
+                    הסרה
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          <label className="twyst-autorevert">
+            <input
+              type="checkbox"
+              checked={draft?.autoRevert === true}
+              disabled={saving}
+              onChange={(event) => setDraft((current) => ({ ...current, autoRevert: event.target.checked }))}
+            />
+            <span className="twyst-autorevert-text">
+              <b>החזרה אוטומטית של עקיפות</b>
+              <span>כשדלוק, שינוי סטטוס שעוקף את ההגדרות (מהנייד או בטעינת הלוח) יוחזר תוך שניות על שם הבעלים הראשי, והמשתמש יקבל הודעה. כשכבוי — העקיפות רק נספרות בניטור שלמטה.</span>
+            </span>
+          </label>
+        </section>
+
+        <BypassMonitor
+          boardId={boardId}
+          columnId={columnId}
+          labelsById={labelsById}
+          columnsById={columnsById}
+          usersById={usersById}
+        />
 
         <div className="twyst-settings-toolbar">
           <div className="twyst-settings-toolbar-title">

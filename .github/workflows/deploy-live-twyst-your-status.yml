@@ -45,6 +45,10 @@ jobs:
           VITE_AXIOM_DATASET: app-errors
           VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
           VITE_AXIOM_APP: twyst-your-status
+          # round322: the guard server's public URL — enables best-effort webhook
+          # enrollment on settings save. Secret absent → empty → the client skips
+          # enrollment entirely (fail-soft by contract in guardEnroll.js).
+          VITE_TWYST_GUARD_URL: ${{ secrets.TWYST_GUARD_URL }}
         run: pnpm --filter "./apps/twyst-your-status" build
 
       - name: Archive sourcemaps as build artifact (for stack symbolication)

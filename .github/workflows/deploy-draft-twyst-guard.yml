@@ -1,0 +1,66 @@
+name: Deploy Draft - twyst-guard
+
+# round322: the twyst-your-status GUARD server (monday-code component of the
+# SAME app — App ID secret APP_TWYST_YOUR_STATUS_ID). Spec section 7.1: merges
+# into develop auto-deploy to the app's LATEST DRAFT version; the CLI resolves
+# the version itself. Server-side push (no -c). The pushed directory is
+# apps/twyst-your-status/server — its .mappsignore ships the CI-built
+# dist/index.js bundle (which inlines ../src/domain — the client's own rule
+# modules), never the raw src/ that reaches outside the archive.
+
+on:
+  workflow_dispatch: {}   # manual re-deploy of the draft; live stays merge-triggered
+  push:
+    branches:
+      - develop
+    paths:
+      - "apps/twyst-your-status/server/**"
+      - "apps/twyst-your-status/src/domain/**"   # bundled INTO the guard — a rules change redeploys it
+
+jobs:
+  deploy-draft:
+    name: Build and push twyst-guard to draft
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-draft-twyst-guard
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bundle the guard (inlines the client domain modules)
+        run: pnpm --filter "./apps/twyst-your-status/server" build
+
+      - name: Install monday.com apps CLI
+        run: npm install -g @mondaycom/apps-cli
+
+      - name: Authenticate mapps CLI (non-interactive)
+        run: mapps init -t "$MONDAY_TOKEN"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
+
+      # Server-side push: no -c flag. --verbose is LOAD-BEARING (mapps cli.md):
+      # without it a failed server push exits 1 with the reason swallowed.
+      - name: Push to latest DRAFT version
+        run: >
+          mapps code:push
+          -d apps/twyst-your-status/server
+          -a "$APP_ID"
+          --verbose
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
+          APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}

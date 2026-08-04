@@ -65,6 +65,7 @@ import * as telemetrySink from '../../../apps/telemetry-dashboard/src/client/uti
 import * as syncCalServer from '../../../apps/axis/sync-calender/src/services/axiomServerSink.js';
 import * as deadlineServer from '../../../apps/deadline-confirm/src/helpers/axiomServerSink.js';
 import * as telemetryServer from '../../../apps/telemetry-dashboard/src/helpers/axiomServerSink.js';
+import * as twystGuardServer from '../../../apps/twyst-your-status/server/src/helpers/axiomServerSink.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../../..');
@@ -291,6 +292,7 @@ const SERVER_SURFACES: Array<{ name: string; mod: ServerSink; srcPath: string }>
   { name: 'sync-calender', mod: syncCalServer as unknown as ServerSink, srcPath: 'apps/axis/sync-calender/src/services/axiomServerSink.js' },
   { name: 'deadline-confirm', mod: deadlineServer as unknown as ServerSink, srcPath: 'apps/deadline-confirm/src/helpers/axiomServerSink.js' },
   { name: 'telemetry-dashboard', mod: telemetryServer as unknown as ServerSink, srcPath: 'apps/telemetry-dashboard/src/helpers/axiomServerSink.js' },
+  { name: 'twyst-your-status guard', mod: twystGuardServer as unknown as ServerSink, srcPath: 'apps/twyst-your-status/server/src/helpers/axiomServerSink.js' },
 ];
 
 describe('drift — vendored SERVER sinks conform to the sink contract', () => {
