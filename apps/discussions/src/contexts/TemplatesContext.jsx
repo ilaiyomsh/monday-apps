@@ -34,7 +34,13 @@ const TYPE_STORAGE_KEY_BASE = 'discussions_type_templates';
 const TYPE_COLORS_STORAGE_KEY_BASE = 'discussions_type_colors';
 const TIMEOUT_MS = 5000;
 
-const TemplatesContext = createContext(null);
+/*
+ * round348 — EXPORTED so a component can distinguish "provider mounted" from the
+ * empty-store fallback `useTemplates()` returns. `SetupWizard` runs in both worlds: first-run
+ * it is mounted by SettingsGate ABOVE this provider, and in top-up mode it is inside it, where
+ * seeding must go THROUGH the provider or its in-memory state never learns about the write.
+ */
+export const TemplatesContext = createContext(null);
 let missingProviderWarned = false;
 
 function genId() {
@@ -315,8 +321,16 @@ export function TemplatesProvider({ children }) {
 
   // Upsert by discussionType — there is at most ONE type template per type, so
   // saving replaces any existing entry for that type (keeping its id) or appends.
+  /*
+   * round348 (review finding) — `opts.strict` is forwarded to persistTypes, which otherwise
+   * LOGS a storage failure and resolves anyway. A caller that acts on the result (the install
+   * wizard adds the type's dropdown label only if the template was really saved) would
+   * otherwise be told "saved" for a write that never landed, leaving a selectable type with no
+   * agenda after the next reload. Default stays non-strict: the UI callers show their own
+   * toast and prefer the optimistic in-memory update over an exception.
+   */
   const upsertTypeTemplate = useCallback(
-    async (template) => {
+    async (template, opts = {}) => {
       const clean = sanitizeTypeTemplate(template, template?.id || genId());
       if (!clean) return null; // missing/invalid discussionType
       const existing = typeTemplatesRef.current.find((t) => t.discussionType === clean.discussionType);
@@ -324,7 +338,7 @@ export function TemplatesProvider({ children }) {
       const next = existing
         ? typeTemplatesRef.current.map((t) => (t.discussionType === clean.discussionType ? withId : t))
         : [...typeTemplatesRef.current, withId];
-      await persistTypes(next);
+      await persistTypes(next, opts);
       return withId;
     },
     [persistTypes]
