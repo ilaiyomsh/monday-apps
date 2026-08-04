@@ -199,14 +199,17 @@ describe('moveBoardsIntoFolder', () => {
  * workspace is noise in someone's account.
  */
 describe('ensureProvisionFolder without a workspace', () => {
-  it('returns null and touches no folder API when the workspace is unknown', async () => {
-    expect(await ensureProvisionFolder(null)).toBeNull();
-    expect(await ensureProvisionFolder('')).toBeNull();
+  it('returns no folder — with a reason — and touches no folder API when the workspace is unknown', async () => {
+    const out = await ensureProvisionFolder(null);
+    expect(out.folderId).toBeNull();
+    // round346: the reason is what the install shows the owner instead of failing silently.
+    expect(out.reason).toMatch(/מרחב העבודה/);
+    expect((await ensureProvisionFolder('')).folderId).toBeNull();
     expect(state.calls).toEqual([]);
   });
 
   it('still creates the folder when a workspace IS known', async () => {
-    expect(await ensureProvisionFolder('999')).toBe('F1');
+    expect(await ensureProvisionFolder('999')).toEqual({ folderId: 'F1', reason: null });
     expect(state.calls.filter((c) => c.q.includes('create_folder'))).toHaveLength(1);
   });
 });

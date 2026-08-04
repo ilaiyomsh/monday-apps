@@ -140,8 +140,20 @@ describe('round339 — provisioned boards land in one "בסיס מידע" folder
     expect(cfg?.boards?.topics?.id).toBeTruthy();
   });
 
-  it('ensureProvisionFolder returns null (not a throw) when the API fails', async () => {
+  /*
+   * round346 — it still does not throw, and it now says WHY. The reason is what the install
+   * surfaces to the owner; returning a bare null is how "the folder still isn't there"
+   * survived three rounds of fixes.
+   */
+  it('ensureProvisionFolder returns a REASON (not a throw) when the API fails', async () => {
     state.folderFails = true;
-    await expect(ensureProvisionFolder('77')).resolves.toBeNull();
+    const out = await ensureProvisionFolder('77');
+    expect(out.folderId).toBeNull();
+    expect(out.reason).toBeTruthy();
+  });
+
+  it('returns the folder id with no reason on success', async () => {
+    const out = await ensureProvisionFolder('77');
+    expect(out).toEqual({ folderId: '5001', reason: null });
   });
 });
