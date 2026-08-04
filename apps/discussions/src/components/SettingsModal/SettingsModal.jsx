@@ -70,6 +70,7 @@ export function toggleAccessRoleSource(preferences, accessAlias, roleAlias) {
 }
 import { api } from '../../utils/mondayApi/monday-client.js';
 import { detectManagedColumnId } from '../../utils/mondayApi/managedColumns.js';
+import { moveBoardsIntoProvisionFolder, resolveWorkspaceId, PROVISION_FOLDER_NAME } from '../../utils/mondayApi/provisionBoards.js';
 import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js';
 import { fileToLogoDataUrl, LOGO_MAX_PX } from '../../utils/imageLogo.js';
 import SearchablePicker from './SearchablePicker';
@@ -382,6 +383,8 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   const [columnsByBoardId, setColumnsByBoardId] = useState({});
   const [loadingColumnsByBoardId, setLoadingColumnsByBoardId] = useState({});
   const [subitemsBoardByBoard, setSubitemsBoardByBoard] = useState({});
+  // round342 — the "move the boards into בסיס מידע" action: 'idle' | 'running' | a result string.
+  const [folderMove, setFolderMove] = useState('idle');
   const [importMsg, setImportMsg] = useState(null);
   // TOP-UP wizard (post-install "add/complete boards & columns"): when true the
   // reusable SetupWizard replaces the tabbed mapping UI until the owner finishes
@@ -1444,6 +1447,56 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                         size="small"
                         kind="secondary"
                       />
+                    </div>
+                  </div>
+                  {/*
+                    round342 (owner-reported: "הלוחות לא נוצרו בתוך תיקייה") — an EXPLICIT
+                    action to move the four mapped boards into "בסיס מידע".
+
+                    Provisioning only ever puts boards it CREATES into the folder, and it
+                    reuses an already-mapped board rather than re-creating it. So an instance
+                    whose boards predate the folder feature can never get them there by
+                    re-running the wizard — this button is the only route, and it is a button
+                    rather than an automatic step because moving a board someone placed on
+                    purpose should be their decision.
+                  */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>{`ריכוז הלוחות בתיקיית "${PROVISION_FOLDER_NAME}"`}</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <Button
+                        kind="secondary"
+                        size="small"
+                        loading={folderMove === 'running'}
+                        disabled={folderMove === 'running'}
+                        onClick={async () => {
+                          setFolderMove('running');
+                          try {
+                            const wsId = await resolveWorkspaceId(settings?.boards?.discussions?.id, null);
+                            const { folderId, moved, failed } = await moveBoardsIntoProvisionFolder(settings?.boards, wsId);
+                            if (!folderId) {
+                              setFolderMove('יצירת התיקייה נכשלה — נסו שוב');
+                            } else {
+                              // Report the real counts: claiming "done" when one board refused
+                              // would send the owner looking for a folder that is half-full.
+                              setFolderMove(
+                                failed.length
+                                  ? `${moved.length} לוחות הועברו, ${failed.length} נכשלו`
+                                  : `${moved.length} לוחות הועברו לתיקייה`
+                              );
+                            }
+                          } catch (err) {
+                            logger.error('SettingsModal', 'ריכוז הלוחות בתיקייה נכשל', err);
+                            setFolderMove('ההעברה נכשלה');
+                          }
+                        }}
+                      >
+                        העברת הלוחות לתיקייה
+                      </Button>
+                      {folderMove !== 'idle' && folderMove !== 'running' && (
+                        <Text type={"text3"} color="secondary">{folderMove}</Text>
+                      )}
                     </div>
                   </div>
                   {/* Item 18 — global default decider: every NEW decision's מחליט
