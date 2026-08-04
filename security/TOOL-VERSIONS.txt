@@ -8,3 +8,7 @@ gitleaks: 8.30.1
 osv-scanner: osv-scanner version: 2.4.0 osv-scalibr version: 0.4.5 
 node: v20.20.2
 pnpm: 10.28.0
+
+codeql: CodeQL command-line toolchain release 2.26.1.
+codeql query packs: javascript-queries 2.4.2, javascript-all 2.8.2, threat-models 1.0.54
+codeql suite: javascript-security-extended.qls (105 queries, 103 rules)

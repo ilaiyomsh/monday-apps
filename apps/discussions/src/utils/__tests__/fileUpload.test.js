@@ -5,7 +5,11 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 const apiMock = vi.hoisted(() => vi.fn());
 vi.mock('../mondayApi/monday-client.js', () => ({ api: apiMock }));
 
-import { uploadFileToColumn, clearFileColumn } from '../mondayApi/fileUpload.js';
+import {
+  uploadFileToColumn,
+  uploadFileToColumnSeamless,
+  clearFileColumn,
+} from '../mondayApi/fileUpload.js';
 
 describe('uploadFileToColumn', () => {
   afterEach(() => { vi.restoreAllMocks(); });
@@ -52,6 +56,63 @@ describe('uploadFileToColumn', () => {
     await expect(
       uploadFileToColumn({ itemId: '1', columnId: 'files', blob: new Blob(['x']), token: 'tok' })
     ).rejects.toThrow(/invalid column/);
+  });
+});
+
+// F-1 (security scan 2026-08-04, docs/SECURITY-SCAN-REPORT.md): `columnId` used to be
+// interpolated into the mutation DOCUMENT TEXT. These lock the typed-variable form — the
+// document must be a constant, with every id travelling as data.
+describe('uploadFileToColumnSeamless — no interpolation into the query document', () => {
+  afterEach(() => { apiMock.mockReset(); });
+
+  it('passes item and column as typed GraphQL variables, not as document text', async () => {
+    apiMock.mockResolvedValue({ add_file_to_column: { id: '7', name: 'a.docx' } });
+    const file = new Blob(['x']);
+
+    const r = await uploadFileToColumnSeamless({ itemId: 123, columnId: 'files', file });
+
+    expect(r).toEqual({ id: '7', name: 'a.docx' });
+    const [query, vars] = apiMock.mock.calls[0];
+    expect(query).toContain('$col: String!');
+    expect(query).toContain('column_id: $col');
+    expect(query).toContain('item_id: $item');
+    // the two interpolation sinks must be gone
+    expect(query).not.toContain('column_id: "');
+    expect(query).not.toContain('123');
+    expect(vars).toMatchObject({ item: '123', col: 'files', file });
+  });
+
+  it('a columnId carrying GraphQL syntax cannot alter the document', async () => {
+    apiMock.mockResolvedValue({ add_file_to_column: { id: '7' } });
+    // a break-out attempt: close the arg list, smuggle a second mutation field
+    const malicious = 'files", file: $file) { id } evil: create_item (board_id: 1, item_name: "x';
+
+    await uploadFileToColumnSeamless({ itemId: 1, columnId: malicious, file: new Blob(['x']) });
+
+    const [query, vars] = apiMock.mock.calls[0];
+    expect(query).not.toContain('create_item');
+    expect(query).not.toContain('evil');
+    expect(query).not.toContain(malicious);
+    // it still reaches the server, but as a value the parser can never execute
+    expect(vars.col).toBe(malicious);
+  });
+});
+
+describe('uploadFileToColumn — legacy multipart path, column id format guard', () => {
+  it('rejects a columnId that is not a monday column identifier', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      uploadFileToColumn({
+        itemId: '1',
+        columnId: 'files", file: $file) { id } evil: x(',
+        blob: new Blob(['x']),
+        token: 'tok',
+      })
+    ).rejects.toThrow(/columnId/i);
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

@@ -29,6 +29,8 @@ Raw tool output is committed under [`security/`](../security/) for reproducibili
 | File | Contents |
 |---|---|
 | `TOOL-VERSIONS.txt` | tool versions + commit, machine-generated |
+| `codeql-discussions.sarif` | full CodeQL results (SARIF 2.1.0), 105-query security-extended suite |
+| `codeql-run-log.txt` | CodeQL evaluation log — every query, with timings |
 | `semgrep-discussions.sarif` / `.json` | full Semgrep results (SARIF 2.1.0 + JSON) |
 | `semgrep-readable.txt` | human-readable Semgrep pass |
 | `gitleaks.json` | full-history secret scan, redacted |
@@ -36,6 +38,13 @@ Raw tool output is committed under [`security/`](../security/) for reproducibili
 | `osv.json` / `osv-readable.txt` | OSV-Scanner SCA results |
 | `pnpm-audit.json` | independent SCA cross-check with per-workspace attribution |
 | `discussions-dep-closure.json` | computed prod/dev dependency closure of `apps/discussions` |
+| `codeql-discussions-postfix.sarif` | CodeQL re-run **after** remediation (§10.5) |
+| `xss-corpus-results.txt` | adversarial XSS corpus run output (§9) |
+
+**Scan commit vs remediation commit.** Everything in §4–§9 was measured at `b35e233`. The
+findings were then **fixed on this same branch**, and both SAST tools were **re-run against
+the fixed code** — recorded in §10, with the post-fix CodeQL SARIF committed alongside the
+original. The §4–§9 baseline deliberately stays at `b35e233` so the two are not conflated.
 
 ---
 
@@ -43,18 +52,34 @@ Raw tool output is committed under [`security/`](../security/) for reproducibili
 
 | Tool | Version | Class | Rulesets / mode |
 |---|---|---|---|
-| **Semgrep OSS** | **1.170.0** | SAST | `p/javascript`, `p/react`, `p/owasp-top-ten`, `p/xss`, `p/secrets` |
+| **CodeQL** | **2.26.1** | SAST — interprocedural taint analysis | `javascript-security-extended.qls` — **105 queries**, 103 rules. Packs: `codeql/javascript-queries` 2.4.2, `codeql/javascript-all` 2.8.2, `codeql/threat-models` 1.0.54 |
+| **Semgrep OSS** | **1.170.0** | SAST — pattern/dataflow | `p/javascript`, `p/react`, `p/owasp-top-ten`, `p/xss`, `p/secrets` |
 | **Gitleaks** | **8.30.1** | secret detection | `detect` — full git history (816 commits, 41.38 MB), `--redact` |
 | **OSV-Scanner** | **2.4.0** (osv-scalibr 0.4.5) | SCA | `--lockfile=pnpm-lock.yaml` against the OSV database |
 | **pnpm audit** | pnpm **10.28.0** | SCA cross-check | GitHub Advisory DB, per-importer attribution |
+| **XSS payload corpus** | in-repo, 55 payloads | dynamic (adversarial) | live payloads through the real sanitiser — see §9 |
 
 Toolchain: **Node 20.20.2**, **pnpm 10.28.0** (matches the CI pin).
+
+**CodeQL is the headline result**, because it is the one tool here that performs true
+interprocedural taint tracking with path enumeration — the class of analysis manual review
+cannot guarantee, and the one a consultant asking "at what level?" is really asking about.
+It is what GitHub Advanced Security runs, and it is free for public repositories.
 
 Semgrep coverage detail: 598 rules were loaded from the five registry rulesets;
 **112** were applicable to the languages present and actually executed across 585
 files, at ~100% parse rate. Registry reachability (`semgrep.dev`) was verified before
 starting — HTTP 200 — because a previous attempt in a cloud VM was blocked by egress
 policy and produced no SAST coverage at all.
+
+CodeQL coverage detail: the database was built from `apps/discussions` as source root and
+extracted **486 `.js`/`.jsx` source files** plus `vite.config.js` and `eslint.config.js` —
+i.e. the whole app including tests. `node_modules` is excluded by the extractor. The
+database also contains CodeQL's own bundled ECMAScript externs (type stubs under
+`/opt/homebrew/Caskroom/codeql`), which is normal extractor behaviour and produced no
+results. **A first database build accidentally ingested the app's own `build/` output;
+it was discarded and rebuilt clean.** No result in the final run originates outside
+`apps/discussions/src` — verified programmatically against the SARIF.
 
 ---
 
@@ -100,11 +125,17 @@ These five are exactly what the findings, false positives, and dependency sectio
 ## 4. Findings
 
 **Two findings, both low or below. No high or critical finding in scope.**
-Ordered most severe first.
+Ordered most severe first. **All three (including 2b) have since been fixed — see §10.**
+
+CodeQL's 105-query security-extended suite, with full interprocedural taint analysis,
+returned **4 results, all one rule (`js/incomplete-multi-character-sanitization`), all
+false positives** (§5.4). Critically, it found **zero** taint-reachable XSS, zero
+injection, zero open redirect, zero prototype pollution, zero SSRF, and zero cleartext
+logging. It did **not** flag the F-1 GraphQL interpolation either — a gap discussed in §8.
 
 ---
 
-### Finding 1 — GraphQL document injection surface (LOW)
+### Finding 1 — GraphQL document injection surface (LOW) — ✅ FIXED
 
 *Corresponds to the previously known **F-1**. Confirmed, and narrowed.*
 
@@ -166,10 +197,11 @@ lines 47 and 97, as equivalent. That is not accurate:
   no-credential threat model in §3.
 
 **Recommendation.** Promote `columnId` to a typed GraphQL variable (`$col: String!`),
-exactly as `clearFileColumn` in the same file already does (`fileUpload.js:38-42`) —
-a two-line change. Separately, consider deleting the unreachable
-`uploadFileToColumn()` and its token parameter, or marking it explicitly as a
-test-only legacy path. **Not fixed in this change**, per the report-only mandate.
+exactly as `clearFileColumn` in the same file already does (`fileUpload.js:38-42`).
+
+**✅ Fixed** (see §10.1). Both `item_id` and `column_id` are now typed variables, so the
+mutation document is a constant with no interpolation at all; the legacy multipart path
+gained a column-id format guard. Locked by 3 tests and 2 killed mutations.
 
 ---
 
@@ -243,6 +275,10 @@ incident override (read from `localStorage`) can lower the shipping threshold to
 DEBUG; that increases record *volume* but, because of the same allowlist, still does
 not ship variables.
 
+**✅ Mitigated** (see §10.2). The allowlist is now pinned by 4 regression tests in
+`packages/error-kit/test/axiomSink.test.ts`, proven by 2 killed mutations. Widening the
+mapper now breaks the build.
+
 ---
 
 ### Finding 2b — Stale activation documentation (INFORMATIONAL, process)
@@ -257,6 +293,10 @@ caused the prior manual review to classify a live telemetry path as dormant, and
 would mislead the next reviewer the same way. **Recommendation:** update that section
 to reflect actual secret state, and treat "is the sink live?" as a checked fact rather
 than a documented assumption.
+
+**✅ Fixed** (see §10.3). That section now records the secret as set on 2026-07-22 with the
+gate open, carries the commands to re-verify from the source of truth, and warns against
+trusting it without re-checking.
 
 ---
 
@@ -324,7 +364,30 @@ None of the 9 hits are in `apps/discussions`. For completeness, the five that ar
 
 The remaining 4 hits are **true positives** and are escalated in Appendix A.
 
-### 5.4 OSV — 4 packages in the `discussions` production closure that do **not** ship
+### 5.4 CodeQL — 4 results, all `js/incomplete-multi-character-sanitization`, all false positives
+
+This was CodeQL's **only** rule to fire across 105 security queries. Rule metadata:
+CWE-020/080/116, security-severity **7.8**, description *"A sanitizer that removes a
+sequence of characters may reintroduce the dangerous sequence."*
+
+The concern is legitimate in general: a single-pass `String.replace` that strips tag-like
+sequences can reassemble a dangerous one (`<scr<x>ipt>` → `<script>`). All four hits are
+that pattern. All four are false positives for the same structural reason: **the stripped
+string is never used as HTML.**
+
+| # | Location | Traced verdict |
+|---|---|---|
+| 1 | `src/utils/summaryHtml.js:183` | Inside `isSummaryHtmlEmpty()`. The chain `html.replace(/<[^>]+>/g,'').replace(/&nbsp;/gi,' ')…trim()` feeds exactly one expression: `return text.length === 0`. The stripped text is a local, measured for length, then discarded — it is an **emptiness heuristic, not a sanitiser**. Its three callers (`docxExport.js:883`, `:892`, `:901`) use only the returned boolean, to decide whether to insert a placeholder paragraph ("אין סיכום."). No HTML sink exists on this path. |
+| 2 | `src/utils/__tests__/participantsExportLines.test.js:21` | Test helper extracting text from generated Word XML (`<w:t>` elements) for assertions. |
+| 3 | `src/utils/__tests__/peopleFormatShared.test.js:39` | Same helper shape: `decode(t.replace(/<[^>]+>/g,''))` over `word/document.xml`, to read paragraph text. |
+| 4 | `src/utils/__tests__/peopleMetaExport.test.js:33` | Same helper shape. |
+
+**Dismissed** — no HTML sink on any of the four paths, and (2)–(4) are test-only. Worth
+noting what CodeQL got *right*: it did **not** flag the real sanitiser
+(`sanitizeSummaryHtml`), whose DOMParser + allowlist design it correctly did not treat as
+a naive string-replace sanitiser. That is a meaningful signal from a taint-aware tool.
+
+### 5.5 OSV — 4 packages in the `discussions` production closure that do **not** ship
 
 Resolved in §6. Summarised here because each would otherwise read as a finding:
 `brace-expansion@1.1.15`, `fast-uri@3.1.3`, `postcss@8.4.31`/`8.5.16`, and
@@ -460,15 +523,27 @@ Stated plainly, because the value of the report depends on it.
    §5.1 is a concrete, measured instance: Semgrep's OSS rules did **not** flag a raw
    `element.innerHTML =` write that a human reviewer does consider security-relevant.
    **A 0-finding Semgrep run is not proof of absence of XSS.**
-2. **No CodeQL run.** CodeQL performs true taint tracking with path enumeration and is
-   what GitHub Advanced Security uses; it is free for public repositories. This is the
-   single highest-value addition available and is **recommended** — it covers exactly
-   the class of gap named in point 1.
-3. **No DAST.** Nothing was executed and attacked at runtime. The app was built but
-   never driven in a browser, and never exercised inside a real monday iframe.
-4. **No penetration test.** No manual adversarial testing, no authorisation-boundary
-   probing against the monday platform, no attempt to bypass the sanitiser with crafted
-   payloads. The sanitiser was reviewed by reading, not by fuzzing.
+2. **Even CodeQL is not a proof of absence — and this scan measured that too.** CodeQL
+   did not flag F-1, the one real finding in this report. The reason is instructive: its
+   taint analysis needs a recognised *source*, and F-1's input arrives from the app's own
+   persisted settings, which no default threat model treats as attacker-controlled. So the
+   two SAST tools missed the finding that manual review found, and manual review got F-2's
+   impact backwards where tracing the code corrected it. **No single method here was
+   sufficient; the agreement between them is what carries weight.**
+3. **No true DAST — and very little surface for it.** DAST attacks a running HTTP
+   endpoint. This app owns none: no server, no API, no database (§3). Scanning the Vite
+   dev server would characterise *Vite's* headers, not this app's, and production is served
+   from monday's CDN. What was done instead is the honest substitute: live adversarial
+   payload testing against the one real attack surface, the sanitiser (§9). **What that
+   does not cover:** the app was never driven end-to-end inside a real monday iframe, so
+   no runtime interaction with the monday platform, the `postMessage` bridge, or CSP-in-situ
+   was exercised.
+4. **No penetration test.** No human adversarial engagement, and specifically **no probing
+   of the monday.com platform**, which is where this app's real authN/authZ boundary lives
+   (§3). Testing it would mean attacking a third party's production system, which requires
+   monday's own written authorisation — not the app owner's. A pentest of the authorisation
+   boundary is therefore a procurement decision with a signed scope, and is the main
+   assurance gap that remains. The sanitiser *was* fuzzed (§9); nothing else was attacked.
 5. **Gitleaks is regex + entropy based.** It reliably finds high-entropy and
    well-known-format secrets. A low-entropy secret (a short password, a human-memorable
    passphrase) can pass undetected. "0 secrets in `apps/discussions` history" means
@@ -496,29 +571,175 @@ Stated plainly, because the value of the report depends on it.
 
 ### Recommended next steps, in priority order
 
-1. **Rotate the credentials in Appendix A** — the only item requiring urgent action.
-2. **Enable CodeQL** on the repository (`.github/workflows/codeql.yml`) — closes
-   limitation 1/2, and gives a standing gate rather than a one-off scan.
+1. **Rotate the credentials in Appendix A** — the only item requiring urgent action, and
+   the only one still outstanding. Owner-only; agents cannot do it.
+2. **Add CodeQL as a standing CI gate** (`.github/workflows/codeql.yml`). It has now been
+   run once, locally, at a known commit — that is a point-in-time result, not a gate. Free
+   for public repos.
 3. **Add `eslint-plugin-no-unsanitized`** (Mozilla) and **`eslint-plugin-security`** to
    `apps/discussions/eslint.config.js` — cheap, and directly covers the raw-`innerHTML`
    class Semgrep's OSS rules miss.
-4. Apply the Finding 1 two-line fix (`$col: String!`).
-5. Add the Finding 2 regression test pinning the `mapRecordToEvent` allowlist.
-6. Correct the stale activation status in `docs/ERROR-AXIOM-STANDARD.md` (Finding 2b).
+4. Consider deleting the unreachable `uploadFileToColumn()` and its `token` parameter, or
+   marking it explicitly test-only. It is now injection-guarded, but dead code with a
+   credential parameter is a liability. Deliberately **not** removed here — deletion is a
+   product decision, not a security fix.
+5. If the consultant wants assurance on the authorisation boundary, scope a **penetration
+   test with monday.com's authorisation** (limitation 4).
+
+Items 4–6 of the original list — the F-1 fix, the F-2 allowlist regression test, and the
+stale activation docs — are **done**; see §10.
 
 ---
 
-## 9. OWASP Top 10 (2021) coverage matrix
+## 9. Dynamic testing — adversarial XSS corpus against the sanitiser
 
-Added at the owner's request. `p/owasp-top-ten` was one of the five Semgrep rulesets
-executed (0 findings). Automated rule coverage alone is not an answer, so each category
-is assessed against this app's actual architecture.
+Classic DAST was not applicable (limitation 3). The substitute performed here is real
+dynamic testing of the one component that genuinely processes untrusted input.
+
+**What was done.** A corpus of **55 XSS payloads** — OWASP XSS Filter Evasion Cheat Sheet
+and PortSwigger classes, plus mutation-XSS and parser-confusion shapes — is executed
+through **both** public entry points on the editor → monday save boundary
+(`sanitizeSummaryHtml` and `toMondayHtml`) in a real DOM, and the output is checked against
+**17 executable-residue detectors** (script/iframe/object/embed/link/meta/style/base/form
+tags, `on*` handlers, `javascript:`/`vbscript:`/`data:text/html` URLs, CSS `expression()`
+and `url()`, `srcdoc`, `formaction`).
+
+Payload classes covered: direct and obfuscated script tags (`<scr<script>ipt>`,
+`<script/xss>`), event handlers on allowlisted tags including case and whitespace evasion
+(`OnClIcK`, `on\tclick`), image/media `onerror`, entity-encoded and tab-split protocol
+evasion (`java&#09;script:`, `&#106;avascript:`, leading-space `" javascript:"`), style-based
+`url()`/`expression()`/`behavior:`, frames and `srcdoc`, document-level `meta refresh` and
+`base`, form/interactive autofocus payloads, mutation-XSS via
+`noscript`/`template`/`math`/`xmp`, comment and CDATA smuggling, and attribute smuggling
+alongside a legitimate `href`.
+
+**Result: 0 survivors.** Every payload was neutralised by both entry points.
+
+**The result is only meaningful because the harness can fail.** Two things establish that:
+
+1. A **positive control** asserts the detectors fire on raw unsanitised HTML — without it,
+   a broken detector set would make all 55 cases pass vacuously.
+2. **Two deliberate mutations of the sanitiser were both killed** by this corpus:
+   disabling the strip-all-attributes pass in `scrubAttributes` (caught by 5 payloads), and
+   adding `javascript:` to the anchor `href` allowlist (caught by 5 payloads). The sanitiser
+   source was restored byte-identical afterwards, verified by an empty `git diff`.
+
+This corpus is committed as a **permanent CI gate**, not a one-off script:
+`apps/discussions/src/utils/__tests__/summaryHtml.xssCorpus.test.js`. It runs in the normal
+suite, so a future weakening of the sanitiser fails the build. Reproduce with:
+
+```bash
+cd apps/discussions && npx vitest run src/utils/__tests__/summaryHtml.xssCorpus.test.js
+```
+
+**Scope limit, stated plainly:** this tests the sanitiser as a unit, in jsdom. It is not a
+browser test, not a test of monday's rendering of the saved HTML, and not a test of the
+`.docx` export path. It establishes that the save-boundary sanitiser resists a recognised
+payload corpus — nothing broader.
+
+---
+
+## 10. Remediation — what was changed after the scan
+
+All three findings were fixed on branch `claude/code-scan-security-wx0cgv` after the scan
+baseline was recorded. **No application behaviour changed** beyond the security fix itself,
+and no lint rule, test, or repo hook was weakened or disabled to obtain a clean run.
+
+### 10.1 Finding 1 (F-1) — GraphQL interpolation removed
+
+`apps/discussions/src/utils/mondayApi/fileUpload.js`
+
+- `ADD_FILE_MUTATION` is now a **constant document** with typed variables:
+  `mutation ($item: ID!, $col: String!, $file: File!)`, and
+  `add_file_to_column (item_id: $item, column_id: $col, file: $file)`. Both interpolation
+  sinks are gone — not just the unescaped `columnId`, but the `Number(itemId)` one too.
+- Validated against the **live monday schema** via the repo's sanctioned API wrapper before
+  the change: `add_file_to_column(column_id: String!, file: File!, item_id: ID!)`. The
+  variable types match the schema exactly.
+- The legacy multipart path (`uploadFileToColumn`, test-only) cannot use a GraphQL variable
+  because it inlines the mutation into a form field, so it gained `assertColumnId()` — a
+  format guard (`/^[A-Za-z0-9_]+$/`) that rejects anything that is not a monday column id
+  before any request is made.
+
+**Verification:** 3 new tests, driven red→green (the red run is recorded, listing the exact
+failing assertions). One test asserts the typed-variable form; one fires a GraphQL break-out
+payload (`files", file: $file) { id } evil: create_item (…`) and asserts the document is
+unchanged while the payload travels as a *value*; one asserts the multipart guard rejects a
+malformed id without calling `fetch`. Then **2 mutations, both killed**: reintroducing the
+literal interpolation, and disabling the format guard.
+
+### 10.2 Finding 2 (F-2) — the telemetry egress boundary is now pinned
+
+`packages/error-kit/test/axiomSink.test.ts`
+
+4 regression tests lock `mapRecordToEvent()`'s allowlist: `context.query` /
+`context.variables` / `context.rawResponse` are dropped while an allowlisted sibling on the
+same object (`duration`) still maps (proving the context was read, not ignored); no business
+substring appears anywhere in the serialised event; `record.data` is ignored wholesale; and
+the emitted key set is diffed against the known 14-key allowlist so **any new key fails the
+test and forces a review**.
+
+**Verification: 2 mutations, both killed** — leaking `context.variables` (caught by 4 tests)
+and leaking `context.query` (caught by 3). Source restored, empty diff, suite green.
+
+*Note:* this file is in `packages/error-kit`, whose workflow path triggers redeploy the five
+apps that import it. This is a test-only change — no runtime code was touched — so those are
+rebuilds of unchanged source.
+
+### 10.3 Finding 2b — activation documentation corrected
+
+`docs/ERROR-AXIOM-STANDARD.md` §"Activation status" now records `AXIOM_INGEST_TOKEN` as
+**set on 2026-07-22** with the client gate **open**, carries the two commands to re-verify
+from the source of truth (`gh secret list`, `gh run list`), and explicitly warns against
+trusting the section without re-checking — since that drift is what caused a live telemetry
+path to be reviewed as dormant. It also names the allowlist as the security boundary and
+points at the tests from §10.2.
+
+### 10.4 Knowledge capture
+
+`.claude/skills/error-guard/references/telemetry-egress-boundary.md` records the egress
+contract, the level-policy subtlety (`emit()` dispatches to sinks at *every* level; the
+filtering lives in the sink, so a sink written without its own level check receives
+everything), and the "verify the secret, don't trust the doc" rule.
+
+### 10.5 Post-fix verification
+
+Both SAST tools were **re-run against the fixed code** to confirm the remediation introduced
+nothing new (raw output: `security/codeql-discussions-postfix.sarif`):
+
+| Post-fix scan | Result |
+|---|---|
+| CodeQL 2.26.1, security-extended (105 queries) | **4 results — byte-identical to the pre-fix set**: the same 4 known false positives (§5.4), no new finding, nothing at the changed lines. 291 files scanned (+1: the new corpus test). |
+| Semgrep 1.170.0, same 5 rulesets | **0 findings**, 112 rules over 586 files (+1: the new corpus test). |
+
+| Check | Result |
+|---|---|
+| `apps/discussions` full suite | **230 files, 1864 tests, all pass** |
+| `packages/error-kit` suite | **189 tests, all pass** |
+| `packages/error-kit` type-check | clean |
+| ESLint on every changed file | clean, no rule suppressed |
+| `apps/discussions` production build | succeeds |
+| test-guard verdict, `fileUpload.test.js` | **DONE (TDD path)** — red recorded, green gate passed, 2/2 mutations killed |
+| test-guard verdict, `summaryHtml.xssCorpus.test.js` | **DONE (retrofit path)** — 2/2 mutations killed |
+
+Nothing in the remediation changed the tool findings: F-1's sink no longer exists, and the
+other two were process/assurance items.
+
+---
+
+## 11. OWASP Top 10 (2021) coverage matrix
+
+Added at the owner's request. Two tools contribute rule coverage here: Semgrep's
+`p/owasp-top-ten` ruleset (0 findings) and CodeQL's `javascript-security-extended` suite,
+whose 105 queries are CWE-tagged and map across the Top 10 (4 findings, all false
+positives — §5.4). Automated rule coverage alone is not an answer, so each category is also
+assessed against this app's actual architecture.
 
 | # | Category | Applicability | Result |
 |---|---|---|---|
 | **A01** | Broken Access Control | **Out of scope by architecture.** The app enforces no authorisation; monday executes every API call under the logged-in user's own session and permissions (§3). The app cannot obtain data the user could not already read. | No finding. Not assessable in this app — belongs to a monday platform review. |
 | **A02** | Cryptographic Failures | **Limited.** The app performs no cryptography and stores no secrets. All transport is HTTPS (monday API, Axiom ingest). `localStorage`/`sessionStorage` hold UI preferences and a view cache only — no sensitive data. | No finding. Related disclosure: the ingest token is public by design (§7.1). |
-| **A03** | Injection | **Applies — primary focus.** Two sub-classes assessed. **XSS:** 0 `eval` / `new Function` / `document.write` / `dangerouslySetInnerHTML`; all production `innerHTML` writes confined to the allowlist sanitiser (§5.1). **GraphQL injection:** one unescaped interpolation sink found. | **Finding 1 (Low).** SQL/NoSQL/command/LDAP injection have no surface (no server, no shell, no database). |
+| **A03** | Injection | **Applies — primary focus.** **XSS:** 0 `eval` / `new Function` / `document.write` / `dangerouslySetInnerHTML`; all production `innerHTML` writes confined to the allowlist sanitiser (§5.1); CodeQL's taint analysis found **0** reachable XSS (`js/xss`, `js/xss-through-dom`, `js/unsafe-jquery-plugin`, `js/exception-xss` all clean); and the sanitiser survived **55 live payloads × 2 entry points with 0 survivors** (§9). **GraphQL injection:** one unescaped interpolation sink found by manual trace — missed by both SAST tools (§8.2). | **Finding 1 (Low), now fixed (§10.1).** SQL/NoSQL/command/LDAP injection have no surface (no server, no shell, no database). |
 | **A04** | Insecure Design | **Partially applies.** The seamless-API design is a deliberate security *strength*: no token in the client, no app-owned auth to get wrong. Weak point identified: the telemetry allowlist is a single undefended boundary (§Finding 2). | No finding. One hardening recommendation (regression-test the allowlist). |
 | **A05** | Security Misconfiguration | **Applies to the pipeline, not the app.** Sourcemaps are `hidden`, archived, and hard-deleted from the publish directory with a failing check. Deploys run only on GitHub Actions runners. Gap found: documentation drift on activation state. | **Finding 2b (Informational).** Also §7.1 (token in bundle, accepted). |
 | **A06** | Vulnerable and Outdated Components | **Applies — assessed in depth (§6).** 38 OSV advisories workspace-wide; 0 attributable to `apps/discussions` by `pnpm audit`; 0 present in the shipped bundle by direct inspection. | No finding for this app. Advisories in other workspace apps are out of scope per owner instruction. |
@@ -530,7 +751,13 @@ is assessed against this app's actual architecture.
 **Summary:** of the ten categories, **four (A01, A07, A10, and the server half of A03)
 have no attack surface in this architecture**; five were assessed and produced no
 finding; and **A03 produced the single low-severity finding** in this report, with
-A05 and A09 producing informational process notes.
+A05 and A09 producing informational process notes. All three are now fixed (§10).
+
+**What a defensible one-line summary looks like:** *"CodeQL (security-extended, 105
+queries), Semgrep (incl. OWASP Top 10 rules), Gitleaks over full history, and OSV-Scanner
+were run on commit `b35e233`; one low-severity finding and two informational items, all
+remediated and locked by tests; no DAST or penetration test was performed."* Anything
+stronger than that — in particular "the app is secure" — is not supported by this work.
 
 ---
 
@@ -577,5 +804,8 @@ Owner action required; agents do not hold or rotate these credentials.
 
 ---
 
-*Report generated 2026-08-04 against commit `b35e233c248bffe693b2b163895450d3000295b8`.
+*Scan performed 2026-08-04 against commit `b35e233c248bffe693b2b163895450d3000295b8`.
+Findings remediated the same day on branch `claude/code-scan-security-wx0cgv` (§10).
 Raw tool output: [`security/`](../security/).*
+
+*One item remains open and is owner-only: the credential rotation in Appendix A.*

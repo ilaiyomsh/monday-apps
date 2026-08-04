@@ -1,0 +1,29 @@
+# Adversarial XSS corpus — run output
+# reproduce: cd apps/discussions && npx vitest run src/utils/__tests__/summaryHtml.xssCorpus.test.js
+# commit: 86c528d5159893549247e6ccaa2945ff834125b6
+
+ DEPRECATED  'basic' reporter is deprecated and will be removed in Vitest v3.
+Remove 'basic' from 'reporters' option. To match 'basic' reporter 100%, use configuration:
+{
+  "test": {
+    "reporters": [
+      [
+        "default",
+        {
+          "summary": false
+        }
+      ]
+    ]
+  }
+}
+stdout | src/utils/__tests__/summaryHtml.xssCorpus.test.js
+[13:11:47] [INIT 1/9] ✓ Bundle loaded +33ms
+
+ ✓ src/utils/__tests__/summaryHtml.xssCorpus.test.js (111 tests) 133ms
+
+
+ Test Files  1 passed (1)
+      Tests  111 passed (111)
+   Start at  13:11:46
+   Duration  1.41s (transform 104ms, setup 197ms, collect 15ms, tests 133ms, environment 579ms, prepare 148ms)
+
