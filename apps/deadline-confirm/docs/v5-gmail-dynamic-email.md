@@ -119,6 +119,10 @@ and published as a DNS TXT record before registration can pass.
 > Google OAuth in the send path at all. See
 > **`docs/amp-email-verified-findings.md`** §2 and §5. The paragraph below is kept
 > for history; do not implement it.
+>
+> **The channel that WAS implemented (2026-08-04, testing phase):** SMTP XOAUTH2
+> with the broad `https://mail.google.com/` scope — `src/services/smtp-sender.js`
+> (owner decision suspending D12's no-mail-read rule; production channel still open).
 
 Gmail's compose UI cannot attach an AMP MIME part; sending must be
 programmatic. Chosen direction: a **dedicated Google Workspace mailbox** (e.g.

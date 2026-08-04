@@ -48,6 +48,13 @@ SecureStorage keys. App ID **11704868**, dev-center slug
   with the `From` domain, which Gmail requires before rendering the AMP part.
   D13's operator-only gate on the connect flow is retired with it — a tenant can
   only ever rebind its own sender.
+- **Send channel is SMTP XOAUTH2 with scope `https://mail.google.com/`, testing
+  phase** (owner decision 2026-08-04 — suspends D12's no-mail-read-scope rule;
+  supersession trail: D12/D13 single vendor mailbox → per-org sender 2026-07-29
+  → SMTP XOAUTH2 + broad scope 2026-08-04). Forced by measurement, findings §2 +
+  §5: the Gmail API strips the AMP part, and SMTP AUTH rejects `gmail.send`.
+  Pre-change grants report `broken` in `/api/state` until re-consent; the
+  production channel is STILL an open owner decision (findings §5 table).
 
 ## Module layout
 
@@ -68,10 +75,14 @@ src/
 │   ├── manifest-signature.js # build/parse/sign/verify manifest + currentSlot (pure, no I/O)
 │   ├── storage.js            # SecureStorage wrapper + 60s read cache + nonce lifecycle
 │   ├── secret.js             # generate / constant-time compare / mask
-│   ├── gmail-sender.js       # THE send funnel (emailSender seam): RFC822 + users.messages.send
+│   ├── smtp-sender.js        # THE send funnel (emailSender seam): SMTP XOAUTH2 → smtp.gmail.com:465
+│   │                         # (the Gmail API strips the AMP part — findings §2); scope pre-flight
+│   ├── google-token.js       # Google token lifecycle: per-account memo, 60s cushion, invalid_grant kill switch
+│   ├── gmail-sender.js       # SUPERSEDED by smtp-sender (2026-08-04) — kept for reference/rollback, nothing constructs it
 │   └── providers/google/oauth.js  # Google token transport (exchange / refresh / auth URL)
 ├── helpers/                  # pages (oauth only), rate-limit, digest-plain, digest-amp,
 │                             # digest-html-fallback (inert text/html part), mime-alternative,
+│                             # rfc822 (RFC822 assembly + header-injection refusal, optional Date header),
 │                             # digest-email (legacy send path until Gmail T9), amp-cors, logger, environment
 ├── storage/                  # secure-storage-backend (prod) / memory-backend (dev+tests)
 └── client/admin/             # React 19 + Vite 7 + @vibe/core SPA → public/admin/
@@ -138,9 +149,12 @@ empty = default-deny: nobody admitted, nobody sent)**, `BASE_URL`, `PORT`,
 to `/amp/confirm`), `OPERATOR_EMAIL` (optional; D8 summary destination),
 **`GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET`** (T9b; absent → no
 sender is constructed and `/api/digest/send` answers 409 `email_not_configured`).
-Gmail sending is WIRED as of 0.10.0 — a tenant must still connect a mailbox via
-`/oauth/google/start` before anything sends. Per-org setup:
-`docs/google-setup-guide.md`.
+Sending is WIRED (0.10.0, channel swapped to SMTP XOAUTH2 in 0.12.x) — a tenant
+must still connect a mailbox via `/oauth/google/start` before anything sends,
+with the broad scope (a pre-2026-08-04 grant reports `broken` until re-consent).
+Per-org setup: `docs/google-setup-guide.md`. Post-merge manual verification
+(sandbox probe, two-mailbox send, scheduler round, the outbound-465 risk):
+`docs/manual-verification-checklist.md`.
 
 Deploys ONLY via the pipeline (root CLAUDE.md): merge to `develop` → draft,
 merge to `main` → live. Server-type app: workflow pushes app root; CI runs

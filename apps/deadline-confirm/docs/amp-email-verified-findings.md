@@ -169,7 +169,8 @@ It cannot carry AMP at all (§2).
 
 ## 7. Still open
 
-- **`src/helpers/digest-amp.js` carries 10 strict-CSS violations** that amp4email
+- **RESOLVED (commit `a197bf9`, 2026-08-04)** — ~~`src/helpers/digest-amp.js`
+  carries 10 strict-CSS violations~~ that amp4email
   rejects: `border-inline-end` ×4, `padding-inline-start`, `inset-inline-end`
   (logical properties — natural in an RTL-first app, but not allowed), plus
   `pointer-events`, `transition: filter`, `cursor: progress`, `filter: none`.
@@ -179,7 +180,20 @@ It cannot carry AMP at all (§2).
   ```bash
   npx amphtml-validator --html_format=AMP4EMAIL <file>
   ```
-- **Migrating `gmail-sender.js` off the Gmail API** (§2, §5) — owner decision.
+  → `data-css-strict` added and every violation fixed (physical properties are
+  exact stand-ins since `dir=rtl` is fixed in the document); `npm run
+  validate:amp` runs the strict validation in CI.
+- **RESOLVED (commits `c67b669` + `82c7694`, 2026-08-04)** — ~~Migrating
+  `gmail-sender.js` off the Gmail API~~ (§2, §5) — owner decision, taken
+  2026-08-04: for the **testing phase** the channel is SMTP XOAUTH2 with the
+  broad `https://mail.google.com/` scope (Internal consent screen, so no CASA —
+  §5's classification note). `c67b669` broadens the scope + persists the granted
+  scope; `82c7694` ships `src/services/smtp-sender.js` (nodemailer, 465,
+  scope pre-flight, one-refresh retry). `gmail-sender.js` is kept for
+  reference/rollback only. The §5 table's no-OAuth channels remain the candidates
+  for the **production** decision, which is still open. Post-merge live
+  verification: `docs/manual-verification-checklist.md` (incl. the unproven
+  outbound-465 risk from monday-code).
 - **AMP sender registration** with `ampforemail.whitelisting@gmail.com`
   (~5 working days, per sender address) for recipients outside the org.
 
