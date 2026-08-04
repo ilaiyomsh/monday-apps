@@ -1012,6 +1012,22 @@ function ColumnSettings({ context, variant = 'overlay' }) {
             לייבלים, הרשאות ומעברים של עמודת הסטטוס
           </span>
         </div>
+        {/* A second Save, pinned to the top — the settings screen is long, and the
+            footer Save scrolls out of reach. Same handler and saving state as the
+            footer button, so the two are interchangeable. */}
+        <div className="twyst-settings-header-actions">
+          {/* Distinct accessible name (still contains the visible "שמור" — WCAG 2.5.3)
+              so it is unambiguous alongside the footer Save for AT and tests alike. */}
+          <Button
+            kind="primary"
+            size="small"
+            ariaLabel="שמור בראש הטופס"
+            disabled={saving}
+            onClick={handleSave}
+          >
+            {saving ? 'שומר…' : 'שמור'}
+          </Button>
+        </div>
       </header>
 
       <div className="twyst-settings-body">
