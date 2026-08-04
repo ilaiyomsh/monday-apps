@@ -151,11 +151,17 @@
 .twyst-autorevert-text b { font-size: 13px; font-weight: 600; color: var(--tw-text); }
 .twyst-autorevert-text span { font-size: 12px; color: var(--tw-text-mute); line-height: 1.5; }
 
-.twyst-guard-authorize {
-  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-  margin-top: 10px; padding-right: 30px;
+.twyst-guard-conn {
+  margin-top: 8px; padding: 8px 10px; margin-right: 30px;
+  font-size: 12px; line-height: 1.5; border-radius: 6px;
 }
-.twyst-guard-authorize-text { font-size: 12px; color: var(--tw-text-mute); line-height: 1.5; flex: 1 1 220px; }
+.twyst-guard-conn--ok { color: var(--tw-text-mute); background: rgba(0, 200, 117, 0.10); }
+.twyst-guard-conn--need { color: var(--tw-text); background: rgba(253, 171, 61, 0.14); }
+.twyst-linkish {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--tw-primary, #0073ea); font: inherit; font-weight: 600; text-decoration: underline;
+}
+.twyst-linkish:disabled { cursor: default; opacity: 0.6; }
 
 /* ------------------------------------------------------ bypass monitor */
 
