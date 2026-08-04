@@ -99,21 +99,55 @@ export function buildDefaultTypeTemplate(installer, id = 'seed-default-type') {
 }
 
 /**
+ * Read the stored type templates, reporting whether the read itself SUCCEEDED.
+ *
+ * round349 (review finding) — this exists because "the list is empty" and "we could not read the
+ * list" must never look the same. `TemplatesProvider.load` catches a failed read, commits
+ * `typeTemplates = []` and then clears `loading`, so an empty in-memory list is NOT proof of an
+ * empty store — and seeding on that assumption overwrites an account's real types after one
+ * transient timeout. `ok: false` means "unknown": callers must do nothing.
+ *
+ * @returns {Promise<{ok: boolean, list: object[]}>}
+ */
+export async function readStoredTypeTemplates(context) {
+  try {
+    const res = await withTimeout(monday.storage.getItem(typeStorageKey(context)));
+    if (!res?.data?.value) return { ok: true, list: [] };
+    const saved = JSON.parse(res.data.value);
+    return { ok: true, list: Array.isArray(saved) ? saved : saved?.templates || [] };
+  } catch (err) {
+    logger.warn(MODULE, 'קריאת תבניות סוגי הדיון נכשלה — לא ניתן לקבוע אם החנות ריקה', err);
+    return { ok: false, list: [] };
+  }
+}
+
+/** Does this stored list already contain OUR default type? Matched by the label TEXT — that is
+ * the key a type template is stored under. */
+export function hasDefaultTypeTemplate(list) {
+  return (Array.isArray(list) ? list : [])
+    .some((t) => String(t?.discussionType || '').trim() === DEFAULT_DISCUSSION_TYPE);
+}
+
+/**
  * Write the seed template — ONLY into an empty store.
  *
- * @returns {Promise<'seeded'|'skipped-existing'|'failed'>} what happened, so the caller can
- *   report honestly instead of assuming (the folder saga is what taught us that lesson).
+ * @returns {Promise<'seeded'|'already-default'|'skipped-existing'|'failed'>} what happened.
+ *   The caller needs all four apart (round348 review finding): `already-default` means the
+ *   template is there but the LABEL may still be missing — if the label mutation failed once,
+ *   every later run used to read `skipped-existing` and never retry, leaving an orphaned agenda
+ *   with no selectable type. `skipped-existing` (the account's OWN types, ours absent) must
+ *   still leave an established installation alone.
  */
 export async function seedDefaultTypeTemplate(context, installer) {
   const key = typeStorageKey(context);
+  const read = await readStoredTypeTemplates(context);
+  // A read we could not complete is NOT an empty store (round349) — do nothing rather than risk
+  // writing our singleton over types we simply failed to see.
+  if (!read.ok) return 'failed';
+  // Any existing type template means this account already has types — never clobber. But OUR
+  // default being among them is a different answer: see the return contract above.
+  if (read.list.length) return hasDefaultTypeTemplate(read.list) ? 'already-default' : 'skipped-existing';
   try {
-    const res = await withTimeout(monday.storage.getItem(key));
-    if (res?.data?.value) {
-      const saved = JSON.parse(res.data.value);
-      const list = Array.isArray(saved) ? saved : saved?.templates || [];
-      // Any existing type template means this account already has its own — never clobber.
-      if (list.length) return 'skipped-existing';
-    }
     const template = buildDefaultTypeTemplate(installer);
     await withTimeout(monday.storage.setItem(key, JSON.stringify({ templates: [template] })));
     logger.info(MODULE, 'נזרעה תבנית סוג הדיון "דיון כללי"', {
