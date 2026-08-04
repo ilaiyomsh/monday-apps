@@ -202,7 +202,15 @@ export async function relocateBoardsToFolder(boards) {
    */
   if (!Object.keys(mapped).length) return NO_BOARDS_TO_RELOCATE;
   try {
-    const wsId = await resolveWorkspaceId(mapped.discussions?.id, null);
+    /*
+     * The workspace is read off the discussions board when there is one, and otherwise off
+     * whichever board IS mapped (review finding): passing `undefined` here resolves to null,
+     * i.e. "main workspace" — so a partially-configured instance whose only mapped board
+     * lives elsewhere would have had its folder created in the wrong workspace, and the
+     * relocation would drag that board out of the workspace it belongs to.
+     */
+    const hostBoardId = mapped.discussions?.id || Object.values(mapped).find((b) => b?.id)?.id;
+    const wsId = await resolveWorkspaceId(hostBoardId, null);
     const { folderId, moved, failed } = await moveBoardsIntoProvisionFolder(mapped, wsId);
     if (!folderId) return 'יצירת התיקייה נכשלה — נסו שוב';
     // Report the real counts: claiming "done" when one board refused would send the

@@ -139,6 +139,23 @@ describe('round343 — relocateBoardsToFolder', () => {
     expect(moveBoardsIntoProvisionFolder).toHaveBeenCalledWith({ discussions: { id: 'D' }, tasks: { id: 'K' } }, '999');
   });
 
+  /*
+   * Second review finding: the workspace was read off `mapped.discussions` only, so a
+   * partially-configured instance with no discussions board passed `undefined` →
+   * resolveWorkspaceId → null → "main workspace". The folder would then be created in the
+   * wrong workspace and the relocation would drag the mapped board out of its own.
+   */
+  it('resolves the workspace off a mapped board when discussions is absent', async () => {
+    await relocateBoardsToFolder({ discussions: { id: '' }, tasks: { id: 'K' }, decisions: { id: 'C' } });
+    expect(resolveWorkspaceId).toHaveBeenCalledWith('K', null);
+  });
+
+  // ...and prefers the discussions board when there IS one, since that is the host.
+  it('still prefers the discussions board', async () => {
+    await relocateBoardsToFolder({ topics: { id: 'T' }, discussions: { id: 'D' } });
+    expect(resolveWorkspaceId).toHaveBeenCalledWith('D', null);
+  });
+
   it('reports the real counts, including a partial failure', async () => {
     moveBoardsIntoProvisionFolder.mockResolvedValueOnce({ folderId: 'F1', moved: ['discussions', 'tasks'], failed: ['topics'] });
     expect(await relocateBoardsToFolder({ discussions: { id: 'D' } })).toBe('2 לוחות הועברו, 1 נכשלו');
