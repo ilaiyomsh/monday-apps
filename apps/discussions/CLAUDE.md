@@ -224,8 +224,38 @@ code searched the wrong place and then created "בסיס מידע" somewhere the
 workspace ⇒ no folder, boards at the root, warning logged. Every step is fail-soft: folder
 placement is cosmetic, the returned mapping is not, so nothing here may abort an install.
 
+**The folder needs an OAuth SCOPE the app must declare: `workspaces:write`.** `boards:write`
+does not cover `create_folder` — without it monday refuses every folder attempt, the fail-soft
+path leaves the boards at the workspace root, and nothing looks broken. That is exactly what
+happened across rounds 339/342/345, three "the folder still isn't there" reports against code
+that was already correct. A probe with a personal token CANNOT reproduce it (full permissions).
+round346 therefore makes the failure loud: `ensureProvisionFolder` returns
+`{ folderId, reason }`, and provisioning emits ONE `logger.error` — which the funnel turns into
+a Hebrew toast and ships to Axiom — naming `workspaces:write` when the platform answer looks
+like an authorization refusal. The scope itself is a Developer Center setting; agents never
+touch it.
+
 There is **no settings button** for this any more (round345 removed the round342 one) — if you are
 tempted to add one, make provisioning do it instead.
+
+### An install seeds ONE discussion type + its template (round347)
+
+`src/utils/defaultTypeTemplate.js` holds the shipped starting point — type **"דיון כללי"**
+with a three-topic agenda — and `SetupWizard.handleCreate` seeds it right after
+`updateSettings`. A type exists only when TWO stores agree: the **label** on the managed
+"סוג דיון" dropdown (what a discussion stores) and the **type template** in `monday.storage`
+(agenda + roles, keyed by the label TEXT). The installing user goes into BOTH `lead` and
+`coordinator` — the two roles carrying the discussion-tier permissions.
+
+Two rules that are easy to break:
+- **Order:** the label add must run AFTER `updateSettings`, because `addDropdownLabel` resolves
+  the board/column from the ACTIVE settings store, which `updateSettings` publishes.
+- **Seed, never migrate:** `seedDefaultTypeTemplate` writes ONLY into an empty type-template
+  store (a legacy bare-array store counts as non-empty), so a top-up run can never overwrite
+  the types an account built itself.
+
+Both steps are fail-soft and reported — the install has already succeeded by then, and a type
+can be added by hand in תבניות.
 
 ### Two `monday.storage`-only subsystems — no board backing
 monday's public API has no item-position mutation and no place to hang reusable presets, so two
