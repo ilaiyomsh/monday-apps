@@ -661,6 +661,30 @@ export const CAP_ITEM_SELF_ROLES = {
 };
 
 /*
+ * round341 (owner request) — ITEM-tier roles that live on a DIFFERENT board.
+ *
+ * "בשדות החלטה צריך להוסיף יוצר דיון, מרכז ומוביל דיון … ולתת לכולם וכן ליוצר ההחלטה
+ * ולמחליט את כל ההרשאות ולמושפעים אין שום הרשאה."
+ *
+ * A decision belongs to a discussion, so the people running that discussion are as
+ * entitled to act on it as the decider is — but their people columns are on the
+ * DISCUSSIONS board, and both the matrix (`buildTierRoles`) and the resolver
+ * (`boardRoleEntries`) are single-board by construction. This map is the declared
+ * exception: keyed by the ITEM board, listing discussion-board aliases whose role keys
+ * stay `discussions:<alias>` (so one role has ONE stored capabilities map, shared with
+ * its discussion-tier grants).
+ *
+ * The resolver reads these off `ctx.discussion` when there is one, and off the row's
+ * `__discussionRoles` stamp when there is not (the personal views). Being declarative
+ * matters: it replaced a hardcoded override that granted lead/coordinator every decision
+ * cap except delete, which no checkbox could revoke — the matrix said one thing and the
+ * code did another.
+ */
+export const TIER_EXTRA_ROLE_SOURCES = {
+  decisions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID'],
+};
+
+/*
  * The synthetic SYSTEM pseudo-role key. Unlike the people-column roles above,
  * this is a single GLOBAL role every user "holds" — its `capabilities` map (in
  * `settings.permissions.roles[SYSTEM_ROLE_KEY]`) drives the system-tier caps
@@ -700,6 +724,20 @@ export const DEFAULT_PERMISSION_SEED = {
       deleteTopicOrPointDiscussed: true,
       checkPoint: true,
       editResponses: true,
+      /*
+       * round341 (owner request) — the three discussion manager roles are equal in power
+       * to the decider on any decision of their discussion: "כל פעולה על כל החלטה".
+       * These live on the SAME role entry as the discussion-tier grants above, keyed
+       * `discussions:<alias>`; TIER_EXTRA_ROLE_SOURCES is what makes the decision tier
+       * scan them at all.
+       */
+      editDecisionStatus: true,
+      editDecisionTracking: true,
+      editDecisionPriority: true,
+      editDecisionDate: true,
+      editDecisionAffected: true,
+      editDecisionName: true,
+      deleteDecision: true,
     },
   },
   // discussion lead → ALL discussion caps true (full)
@@ -724,6 +762,20 @@ export const DEFAULT_PERMISSION_SEED = {
       deleteTopicOrPointDiscussed: true,
       checkPoint: true,
       editResponses: true,
+      /*
+       * round341 (owner request) — the three discussion manager roles are equal in power
+       * to the decider on any decision of their discussion: "כל פעולה על כל החלטה".
+       * These live on the SAME role entry as the discussion-tier grants above, keyed
+       * `discussions:<alias>`; TIER_EXTRA_ROLE_SOURCES is what makes the decision tier
+       * scan them at all.
+       */
+      editDecisionStatus: true,
+      editDecisionTracking: true,
+      editDecisionPriority: true,
+      editDecisionDate: true,
+      editDecisionAffected: true,
+      editDecisionName: true,
+      deleteDecision: true,
     },
   },
   // discussion coordinator (מרכז דיון) → ALL discussion caps true (edits like lead)
@@ -748,6 +800,20 @@ export const DEFAULT_PERMISSION_SEED = {
       deleteTopicOrPointDiscussed: true,
       checkPoint: true,
       editResponses: true,
+      /*
+       * round341 (owner request) — the three discussion manager roles are equal in power
+       * to the decider on any decision of their discussion: "כל פעולה על כל החלטה".
+       * These live on the SAME role entry as the discussion-tier grants above, keyed
+       * `discussions:<alias>`; TIER_EXTRA_ROLE_SOURCES is what makes the decision tier
+       * scan them at all.
+       */
+      editDecisionStatus: true,
+      editDecisionTracking: true,
+      editDecisionPriority: true,
+      editDecisionDate: true,
+      editDecisionAffected: true,
+      editDecisionName: true,
+      deleteDecision: true,
     },
   },
   /*

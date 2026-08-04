@@ -24,15 +24,18 @@ import styles from './MyDecisionsTable.module.css';
 // INCLUDING דיון מקור — is a fixed-px RESIZABLE track (the table fills width via
 // .taskTable min-width:100%), so the discussion column shrinks/reorders like the
 // rest (no fill track that would snap it back to the edge).
+// round341 (owner request) — defaults measured off the screenshot of ההחלטות שלי,
+// accurate to roughly ±15px. `min` is unchanged everywhere, so a narrowed default is
+// always still draggable back to something usable.
 const W = {
-  name: { default: 300, min: 160, max: 640 },
+  name: { default: 370, min: 160, max: 640 },
   decider: { default: 110, min: 80, max: 220 },
   affected: { default: 140, min: 100, max: 280 },
   priority: { default: 130, min: 90, max: 240 },
-  status: { default: 160, min: 100, max: 260 },
-  tracking: { default: 175, min: 110, max: 300 },
-  date: { default: 130, min: 100, max: 220 },
-  discussion: { default: 220, min: 120, max: 480 },
+  status: { default: 125, min: 100, max: 260 },
+  tracking: { default: 130, min: 110, max: 300 },
+  date: { default: 110, min: 100, max: 220 },
+  discussion: { default: 145, min: 120, max: 480 },
 };
 // Compact fixed widths for the mobile-app template.
 const M = {
@@ -103,16 +106,24 @@ export function MyDecisionsTable({
   const showDate = !!cols.decisionDateID?.id;
   const showDiscussion = !!cols.discussionLinkID?.id;
 
-  // Visible columns in DEFAULT order, each carrying its width params.
+  /*
+   * Visible columns in DEFAULT order, each carrying its width params.
+   *
+   * round341 (owner request, from the screenshot of ההחלטות שלי) — תאריך before
+   * סטאטוס, and מעקב החלטה moved to the END after דיון מקור. That deliberately does
+   * NOT match the in-discussion החלטות tab, where מעקב sits right after תאריך: in the
+   * personal view the follow-up state is the column you scan last, after you have
+   * placed the decision in its discussion. Starting order only; a dragged order is kept.
+   */
   const baseDefs = [
     { key: 'name', ...W.name },
     showDecider && { key: 'decider', ...W.decider },
     showAffected && { key: 'affected', ...W.affected },
     showPriority && { key: 'priority', ...W.priority },
-    { key: 'status', ...W.status },
-    showTracking && { key: 'tracking', ...W.tracking },
     showDate && { key: 'date', ...W.date },
+    { key: 'status', ...W.status },
     showDiscussion && { key: 'discussion', ...W.discussion },
+    showTracking && { key: 'tracking', ...W.tracking },
   ].filter(Boolean);
 
   // Apply the persisted column ORDER (name pinned first), then drive widths +

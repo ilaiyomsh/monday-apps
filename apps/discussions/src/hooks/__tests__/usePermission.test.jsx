@@ -18,11 +18,16 @@ const OTHER = '202';
 const person = (id) => ({ id });
 
 // A discussion whose people columns have LOADED (arrays present) → ready.
-function disc({ creator = [], lead = [], participants = [] } = {}) {
+// round341 — `coordinator` was missing from this fixture, so no test could exercise
+// מרכז דיון even though the resolver has always read it (isCreatorOrLead, and now the
+// decision-tier scan). Defaulting it to [] leaves every existing case unchanged:
+// inPeople(undefined) and inPeople([]) are both false.
+function disc({ creator = [], lead = [], coordinator = [], participants = [] } = {}) {
   return {
     id: 'D1',
     discussionCreatorID: creator,
     discussionLeadID: lead,
+    discussionCoordinatorID: coordinator,
     participantsID: participants,
   };
 }
@@ -32,6 +37,14 @@ const unloadedDisc = { id: 'D1' };
 function task({ creator = [], responsible = [] } = {}) {
   return { id: 'T1', taskCreatorID: creator, responsibilityID: responsible };
 }
+
+// Every decision-tier capability id, for the round341 "can do every action" assertions.
+// Spelled out rather than derived from CAPABILITIES so a catalog addition surfaces here
+// as a decision to make, not as a silently-widened expectation.
+const ALL_DECISION_CAPS = [
+  'editDecisionStatus', 'editDecisionTracking', 'editDecisionPriority',
+  'editDecisionDate', 'editDecisionAffected', 'editDecisionName', 'deleteDecision',
+];
 
 // A DECISION item whose role people columns (creator/decider/affected) have loaded.
 function decision({ creator = [], decider = [], affected = [] } = {}) {
@@ -262,14 +275,54 @@ describe('resolveCan — feature on, additive role union', () => {
     expect(resolveCan('editSummary', { discussion: disc({ lead: [person(ME)] }), currentUserId: ME }, grantedToLead)).toBe(true);
   });
 
-  it('item 21: the discussion lead/coordinator can EDIT any decision of their discussion — but not delete it', () => {
+  /*
+   * round341 (owner request) — item 21 GREW. The discussion's three manager roles are now
+   * equal in power to the decider on any decision of their discussion, delete included:
+   * "כשווי כוח למחליט וככאלה שיכולים לבצע כל פעולה על כל החלטה".
+   *
+   * The mechanism changed too, and that is the more important half: this used to be a
+   * hardcoded override that no checkbox could revoke (so the matrix's decision cells were
+   * partly decorative for these roles). It now runs through the ordinary role scan via
+   * TIER_EXTRA_ROLE_SOURCES + the seed, which is why the revoke case below is meaningful.
+   */
+  it('item 21 (round341): a discussion manager can do EVERY action on any decision of their discussion', () => {
+    for (const role of ['lead', 'coordinator', 'creator']) {
+      const ctx = {
+        item: decision({ creator: [person(OTHER)], decider: [person(OTHER)], affected: [] }),
+        discussion: disc({ [role]: [person(ME)] }),
+        currentUserId: ME,
+      };
+      for (const cap of ALL_DECISION_CAPS) {
+        expect(resolveCan(cap, ctx, opts)).toBe(true);
+      }
+    }
+  });
+
+  // …and the owner can take it back. Being part of the union rather than an early return
+  // is what makes an unchecked box actually revoke, in both directions.
+  it('item 21 (round341): an explicit false on the discussion role revokes it', () => {
+    const perms = {
+      enabled: true,
+      version: 1,
+      roles: { 'discussions:discussionLeadID': { capabilities: { deleteDecision: false } } },
+    };
     const ctx = {
       item: decision({ creator: [person(OTHER)], decider: [person(OTHER)], affected: [] }),
       discussion: disc({ lead: [person(ME)] }),
       currentUserId: ME,
     };
-    expect(resolveCan('editDecisionName', ctx, opts)).toBe(true);
-    expect(resolveCan('editDecisionAffected', ctx, opts)).toBe(true);
+    expect(resolveCan('deleteDecision', ctx, { permissions: perms, canManageSettings: false })).toBe(false);
+  });
+
+  // A stranger to BOTH the decision and the discussion still gets nothing — the new scan
+  // widened who is entitled, not whether entitlement is checked at all.
+  it('item 21 (round341): a user in no role of either board is still denied', () => {
+    const ctx = {
+      item: decision({ creator: [person(OTHER)], decider: [person(OTHER)], affected: [] }),
+      discussion: disc({ lead: [person(OTHER)] }),
+      currentUserId: ME,
+    };
+    expect(resolveCan('editDecisionName', ctx, opts)).toBe(false);
     expect(resolveCan('deleteDecision', ctx, opts)).toBe(false);
   });
 
@@ -808,14 +861,47 @@ describe('resolveCan — decision tier', () => {
     }
   });
 
-  it('feature on: the discussion creator/lead content override does NOT extend to decision caps (item tier excluded)', () => {
-    const ctx = {
+  /*
+   * round341 — the discussion CREATOR now DOES reach decision caps, which is a deliberate
+   * reversal of what this test used to pin. It is not the old content override leaking
+   * into the item tier, though: it arrives through the seeded
+   * `discussions:discussionCreatorID` role that TIER_EXTRA_ROLE_SOURCES makes the decision
+   * tier scan. The distinction is visible in the second half — a discussion role that is
+   * NOT declared as a decision role source (משתתפים) still gets nothing.
+   */
+  it('feature on: a discussion MANAGER reaches decision caps; a participant does not', () => {
+    const managerCtx = {
       discussion: disc({ creator: [person(ME)] }),
       item: decision({ creator: [person(OTHER)], decider: [person(OTHER)] }),
       currentUserId: ME,
     };
-    expect(resolveCan('editDecisionStatus', ctx, on)).toBe(false);
-    expect(resolveCan('deleteDecision', ctx, on)).toBe(false);
+    expect(resolveCan('editDecisionStatus', managerCtx, on)).toBe(true);
+    expect(resolveCan('deleteDecision', managerCtx, on)).toBe(true);
+
+    const participantCtx = {
+      discussion: disc({ participants: [person(ME)] }),
+      item: decision({ creator: [person(OTHER)], decider: [person(OTHER)] }),
+      currentUserId: ME,
+    };
+    expect(resolveCan('editDecisionStatus', participantCtx, on)).toBe(false);
+    expect(resolveCan('deleteDecision', participantCtx, on)).toBe(false);
+  });
+
+  /*
+   * The personal "ההחלטות שלי" surface has NO discussion in ctx, so the same grant has to
+   * come off the row's own `__discussionRoles` stamp. Asserting it here is what stops the
+   * two decision surfaces from disagreeing — a manager who can act in the החלטות tab and
+   * silently cannot in their personal list.
+   */
+  it('feature on: the manager grant also arrives via __discussionRoles (no discussion in ctx)', () => {
+    const row = {
+      ...decision({ creator: [person(OTHER)], decider: [person(OTHER)] }),
+      __discussionRoles: {
+        discussionCreatorID: [], discussionCoordinatorID: [], discussionLeadID: [person(ME)],
+      },
+    };
+    expect(resolveCan('editDecisionStatus', { item: row, currentUserId: ME }, on)).toBe(true);
+    expect(resolveCan('deleteDecision', { item: row, currentUserId: ME }, on)).toBe(true);
   });
 
   it('feature on: an explicit grant on one held decision role survives an explicit false on another (union)', () => {

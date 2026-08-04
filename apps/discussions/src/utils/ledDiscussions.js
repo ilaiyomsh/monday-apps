@@ -59,6 +59,39 @@ export function mapLedTaskDiscussionRoles(discussions, ledIds) {
   return out;
 }
 
+/**
+ * round341 — decisionId → the parent discussion's ROLE people (creator / lead /
+ * coordinator), for the personal "ההחלטות שלי" rows.
+ *
+ * The sibling of mapLedTaskDiscussionRoles, and it exists for the same reason: a personal
+ * row carries no discussion object, but TIER_EXTRA_ROLE_SOURCES grants every decision
+ * capability to the discussion's three manager roles, so the resolver needs those people
+ * on the row itself. Without this the grant applies in the in-discussion החלטות tab and
+ * silently does not in the personal list — two surfaces, one rule, different answers.
+ *
+ * Keyed off the DISCUSSION side (`decisionsBoardLinkID.ids`) rather than the decision's
+ * own `discussionLinkID`, because that is the relation the discussions query returns.
+ * First discussion wins for a decision linked to more than one.
+ *
+ * Pure.
+ * @returns {Map<string, {discussionCreatorID, discussionLeadID, discussionCoordinatorID}>}
+ */
+export function mapDecisionDiscussionRoles(discussions) {
+  const out = new Map();
+  (Array.isArray(discussions) ? discussions : []).forEach((d) => {
+    const roles = {
+      discussionCreatorID: Array.isArray(d?.discussionCreatorID) ? d.discussionCreatorID : [],
+      discussionLeadID: Array.isArray(d?.discussionLeadID) ? d.discussionLeadID : [],
+      discussionCoordinatorID: Array.isArray(d?.discussionCoordinatorID) ? d.discussionCoordinatorID : [],
+    };
+    (d?.decisionsBoardLinkID?.ids || []).forEach((did) => {
+      const key = String(did);
+      if (!out.has(key)) out.set(key, roles);
+    });
+  });
+  return out;
+}
+
 export function collectLedTaskIds(discussions, ledIds) {
   const led = new Set((ledIds || []).map(String));
   const out = [];
