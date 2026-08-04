@@ -324,19 +324,59 @@ describe('POST /api/guard/enroll', () => {
 describe('GET /api/guard/status', () => {
   const statusPath = '/api/guard/status?boardId=5098&columnId=status_col';
 
-  it('reports activated: true, enrolled: true when the account has a reader token and the column is enrolled', async () => {
+  /** rules blob whose PRIMARY owner is user 50 */
+  const rulesWithPrimary50 = () => ({
+    version: 1,
+    hiddenLabelIds: [],
+    labels: {},
+    owners: { ownerIds: ['41', '50'], primaryOwnerId: '50' },
+  });
+
+  it('reports enrolled + primaryAuthorized: true when the column is enrolled and the PRIMARY owner holds a token', async () => {
     const deps = makeDeps();
-    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '50' });
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '41' });
     deps.enrollmentStore.get.mockResolvedValue('55501');
+    deps.rulesStore.getRules.mockResolvedValue(rulesWithPrimary50());
+    deps.tokenStore.getOwnerToken.mockResolvedValue('tok50');
     const app = createApp(deps);
 
     const res = await request(app).get(statusPath).set('Authorization', sessionToken());
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ activated: true, enrolled: true });
+    expect(res.body).toEqual({ activated: true, enrolled: true, primaryAuthorized: true });
+    // The check must target the column's PRIMARY owner — not the reader's user.
+    expect(deps.tokenStore.getOwnerToken).toHaveBeenCalledWith('999', '50');
   });
 
-  it('reports activated: false, enrolled: false when the account has no reader token', async () => {
+  it('reports primaryAuthorized: false when the account is activated but the PRIMARY owner never authorized (round327 — the line must not say connected while reverts would be skipped)', async () => {
+    const deps = makeDeps();
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '41' });
+    deps.enrollmentStore.get.mockResolvedValue('55501');
+    deps.rulesStore.getRules.mockResolvedValue(rulesWithPrimary50());
+    deps.tokenStore.getOwnerToken.mockResolvedValue(null);
+    const app = createApp(deps);
+
+    const res = await request(app).get(statusPath).set('Authorization', sessionToken());
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ activated: true, enrolled: true, primaryAuthorized: false });
+  });
+
+  it('reports primaryAuthorized: null (unknowable) when the column has no rules/owners yet', async () => {
+    const deps = makeDeps();
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '41' });
+    deps.enrollmentStore.get.mockResolvedValue(null);
+    deps.rulesStore.getRules.mockResolvedValue(null);
+    const app = createApp(deps);
+
+    const res = await request(app).get(statusPath).set('Authorization', sessionToken());
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ activated: true, enrolled: false, primaryAuthorized: null });
+    expect(deps.tokenStore.getOwnerToken).not.toHaveBeenCalled();
+  });
+
+  it('reports activated: false, enrolled: false, primaryAuthorized: false when the account has no reader token', async () => {
     const deps = makeDeps();
     deps.tokenStore.getReaderToken.mockResolvedValue(null);
     deps.enrollmentStore.get.mockResolvedValue(null);
@@ -345,7 +385,7 @@ describe('GET /api/guard/status', () => {
     const res = await request(app).get(statusPath).set('Authorization', sessionToken());
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ activated: false, enrolled: false });
+    expect(res.body).toEqual({ activated: false, enrolled: false, primaryAuthorized: false });
   });
 
   it('rejects with 401 when no session token is presented', async () => {
