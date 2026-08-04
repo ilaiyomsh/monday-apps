@@ -52,9 +52,17 @@ vi.mock('../managedColumns.js', () => ({
 }));
 
 import logger from '../../logger.js';
+import { parseMondayError } from '../../errorHandler.js';
 import { provisionAllBoards, describeFolderFailure, PROVISION_FOLDER_NAME } from '../provisionBoards.js';
 
-const errorLines = () => logger.error.mock.calls.map((c) => c.join(' '));
+const errorLines = () => logger.error.mock.calls.map((c) => String(c[0]) + ' ' + String(c[1]));
+/*
+ * What the OWNER actually sees. `useUiErrorSink` builds the toast from
+ * `parseMondayError(record.error ?? record.data).userMessage`, so asserting the log arguments
+ * alone would pass while the toast said "אירעה שגיאה לא צפויה" — which is how the review
+ * caught this. Running the real parser over the real payload is the honest check.
+ */
+const toastTexts = () => logger.error.mock.calls.map((c) => parseMondayError(c[2] ?? null).userMessage);
 
 beforeEach(() => {
   state.boardSeq = 0;
@@ -76,6 +84,8 @@ describe('round346 — a folder that did not happen is reported, not swallowed',
     const said = errorLines().join('\n');
     expect(said).toContain('workspaces:write');
     expect(said).toContain(PROVISION_FOLDER_NAME);
+    // ...and it survives the trip to the toast, which is the only place it matters.
+    expect(toastTexts().join('\n')).toContain('workspaces:write');
   });
 
   // Any OTHER failure still gets reported — with its own message rather than a scope guess,
@@ -86,6 +96,7 @@ describe('round346 — a folder that did not happen is reported, not swallowed',
     const said = errorLines().join('\n');
     expect(said).toContain('complexity budget exhausted');
     expect(said).not.toContain('workspaces:write');
+    expect(toastTexts().join('\n')).toContain('complexity budget exhausted');
   });
 
   // The install must still SUCCEED — the mapping is valid, the boards are just not grouped.

@@ -525,6 +525,21 @@ export async function ensureProvisionFolder(workspaceId) {
  * A missing scope is not something the app can fix at runtime; it is a Developer Center
  * setting. So the one thing that helps is saying so, out loud, where the owner will see it.
  */
+/*
+ * round346 (review finding) — the text has to travel as the ERROR PAYLOAD, not just as the
+ * log message. `useUiErrorSink` builds the toast from `parseMondayError(record.error ??
+ * record.data)`, so a message-only `logger.error` shows the generic "אירעה שגיאה לא צפויה"
+ * and the actionable sentence never reaches the owner — the exact silence this round exists
+ * to end. A code-less Error surfaces its `message` verbatim as `userMessage`.
+ *
+ * A NEW Error rather than the original: the original is often an authorization error, which
+ * parseMondayError maps to its own generic permissions text and would hide the specific
+ * "workspaces:write" instruction. The original is already logged where it was caught.
+ */
+function reportFolderProblem(text) {
+  logger.error(MODULE, text, new Error(text));
+}
+
 export function describeFolderFailure(err) {
   const text = `${err?.message || ''} ${JSON.stringify(err?.response || '')}`.toLowerCase();
   if (/unauthorized|permission|forbidden|scope|not allowed/.test(text)) {
@@ -924,8 +939,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       logger.info(MODULE, 'ריכוז לוחות קיימים בתיקיית בסיס המידע', { moved, failed });
       if (failed.length) {
         // Same reasoning as the folder itself: say it, don't let it look like success.
-        logger.error(
-          MODULE,
+        reportFolderProblem(
           `הלוחות נוצרו, אך ${failed.length} מהם לא נכנסו לתיקייה "${PROVISION_FOLDER_NAME}". `
           + 'ייתכן שחסרה לאפליקציה הרשאה להעביר לוחות.'
         );
@@ -941,8 +955,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
    * the worse failure.
    */
   if (!folderId) {
-    logger.error(
-      MODULE,
+    reportFolderProblem(
       `הלוחות נוצרו, אבל לא בתוך תיקיית "${PROVISION_FOLDER_NAME}". ${folder.reason || ''}`.trim()
     );
   }
