@@ -84,6 +84,12 @@
   cursor: not-allowed;
 }
 
+.twyst-settings-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* ---------------------------------------------------------------- body */
 
 .twyst-settings-body {
