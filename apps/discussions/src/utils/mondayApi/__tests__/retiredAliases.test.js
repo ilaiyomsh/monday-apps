@@ -9,6 +9,9 @@ import {
   PREVIOUS_TASKS_MODES,
   resolvePreference,
   backfillSeedCapabilities,
+  RETIRED_CAPABILITIES,
+  CAPABILITIES,
+  CAPABILITY_DEFAULTS,
 } from '../boards.config.js';
 import { resolveCan } from '../../../hooks/usePermission.js';
 
@@ -288,5 +291,61 @@ describe('backfillSeedCapabilities', () => {
 
     const healed = { ...raw, roles: backfillSeedCapabilities(raw.roles) };
     expect(resolveCan('editDecisionTracking', ctx, { permissions: healed, canManageSettings: false })).toBe(false);
+  });
+});
+
+/*
+ * round343 (owner decision 2026-08-04) — retiring a CAPABILITY, one level down from a
+ * retired column alias and with the same merge-over-schema problem: a stored
+ * `capabilities` map wins over the catalog, so dropping the row from CAPABILITIES hides
+ * it while every instance keeps the boolean in storage forever.
+ *
+ * "עריכת התייחסויות לנקודות" is the one being retired: the Topics-table redesign removed
+ * the התייחסויות cell rounds ago, so the checkbox has gated nothing since.
+ */
+describe('round343 — retired capabilities', () => {
+  it('editResponses is gone from the catalog, the default buckets and every seed', () => {
+    expect(RETIRED_CAPABILITIES).toContain('editResponses');
+    expect(CAPABILITIES.some((c) => c.id === 'editResponses')).toBe(false);
+    expect('editResponses' in CAPABILITY_DEFAULTS).toBe(false);
+    for (const role of Object.values(DEFAULT_PERMISSION_SEED)) {
+      expect('editResponses' in (role.capabilities || {})).toBe(false);
+    }
+  });
+
+  // The purge itself: an instance that stored the grant loses it on load, on EVERY role
+  // that carried it — while the caps around it are left exactly as they were.
+  it('strips a retired capability out of every stored role', () => {
+    const stored = {
+      columns: {},
+      permissions: {
+        roles: {
+          'discussions:participantsID': { capabilities: { editResponses: true, checkPoint: true } },
+          'discussions:discussionLeadID': { hidden: false, capabilities: { editResponses: false, exportDocs: true } },
+          'tasks:taskCreatorID': { capabilities: { editTaskStatus: true } },
+        },
+      },
+    };
+    const out = pruneRetiredSettings(stored);
+    const roles = out.permissions.roles;
+    expect('editResponses' in roles['discussions:participantsID'].capabilities).toBe(false);
+    expect('editResponses' in roles['discussions:discussionLeadID'].capabilities).toBe(false);
+    expect(roles['discussions:participantsID'].capabilities.checkPoint).toBe(true);
+    expect(roles['discussions:discussionLeadID'].capabilities.exportDocs).toBe(true);
+    // non-capability role state survives the rewrite
+    expect(roles['discussions:discussionLeadID'].hidden).toBe(false);
+    expect(roles['tasks:taskCreatorID'].capabilities).toEqual({ editTaskStatus: true });
+    // and the input is untouched (purity — the load path re-persists the OUTPUT)
+    expect(stored.permissions.roles['discussions:participantsID'].capabilities.editResponses).toBe(true);
+  });
+
+  // Identity is the "is a re-persist worth an API call?" signal, so a settings blob with
+  // no retired capability must come back as the SAME object.
+  it('returns the same object when no role carries a retired capability', () => {
+    const clean = {
+      columns: {},
+      permissions: { roles: { 'discussions:participantsID': { capabilities: { checkPoint: true } } } },
+    };
+    expect(pruneRetiredSettings(clean)).toBe(clean);
   });
 });

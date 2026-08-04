@@ -287,12 +287,6 @@ export function DiscussionCard({
   const editTopicOrPointDiscussed = can('editTopicOrPointDiscussed');
   const deleteTopicOrPointDiscussed = can('deleteTopicOrPointDiscussed');
   const checkPoint = can('checkPoint');
-  // NOTE: `editResponses` is currently INERT — the Topics-table redesign removed
-  // the "התייחסויות" responses cell, so TopicPointRow renders no responses-edit
-  // control to gate (the cap/handler are still threaded through TopicsTab →
-  // TopicPointRow but unused at the leaf). Kept in the catalog deliberately (a
-  // product decision, not dead code) so a future responses cell can re-consume it.
-  const editResponses = can('editResponses');
   const editDiscussionFields = can('editDiscussionFields');
   // Hide/show a topic or point (owner decision 2026-07-14, item 10): ONLY the
   // discussion lead (מנהל דיון) or coordinator (מרכז דיון) — plus the board
@@ -1017,7 +1011,7 @@ export function DiscussionCard({
         {(showTopicsTables || showBackground || showReferences || showSummaryPane) && (
         <div className={activeTab === 'topics' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'topics' ? undefined : 'none' }}>
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} onLoadingChange={handleTopicsLoadingChange}
-            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} editTopicOrPointDiscussed={editTopicOrPointDiscussed} deleteTopicOrPointDiscussed={deleteTopicOrPointDiscussed} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditBackground={canEditBackgroundPane} canEditReferences={canEditReferencesPane} canEditSummary={canEditSummaryPane} canAttachDocuments={canEditTitle} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} editTopicOrPointDiscussed={editTopicOrPointDiscussed} deleteTopicOrPointDiscussed={deleteTopicOrPointDiscussed} checkPoint={checkPoint} canHide={canHideTopicOrPoint} canEditBackground={canEditBackgroundPane} canEditReferences={canEditReferencesPane} canEditSummary={canEditSummaryPane} canAttachDocuments={canEditTitle} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
             showTopics={showTopicsTables} showBackground={showBackground} showReferences={showReferences} showSummary={showSummaryPane}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
             decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus}
