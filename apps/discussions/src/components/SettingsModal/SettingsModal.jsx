@@ -170,6 +170,52 @@ function mergeBoardsWithSchema(stored) {
   return { ...buildEmptyConfig().boards, ...(stored || {}) };
 }
 
+/*
+ * round343 — the "ריכוז הלוחות בתיקייה" action, extracted out of the JSX so both
+ * halves of the review finding it fixes are directly testable: that it acts on the
+ * DRAFT mapping, and that an unmapped instance never reaches the API at all.
+ *
+ * Exported for the tests; the component is the only production caller.
+ */
+export const NO_BOARDS_TO_RELOCATE = 'אין לוחות ממופים להעברה — מפו ושמרו קודם';
+
+/** The subset of a boards draft that actually has an id — the only ones movable. */
+export function pickMappedBoards(boards) {
+  return Object.fromEntries(Object.entries(boards || {}).filter(([, b]) => b?.id));
+}
+
+export function hasBoardsToRelocate(boards) {
+  return Object.keys(pickMappedBoards(boards)).length > 0;
+}
+
+/**
+ * Move the mapped boards into the provisioning folder; returns the Hebrew status
+ * line to show. Never throws — a failed relocation is a message, not a crash.
+ */
+export async function relocateBoardsToFolder(boards) {
+  const mapped = pickMappedBoards(boards);
+  /*
+   * The empty guard is the first-run half of the finding: with nothing mapped there
+   * is nothing to move, and calling through would still MINT the folder — an empty
+   * "בסיס מידע" nobody asked for. Repeated here (the caller checks too) so the guard
+   * cannot be lost by a future call site.
+   */
+  if (!Object.keys(mapped).length) return NO_BOARDS_TO_RELOCATE;
+  try {
+    const wsId = await resolveWorkspaceId(mapped.discussions?.id, null);
+    const { folderId, moved, failed } = await moveBoardsIntoProvisionFolder(mapped, wsId);
+    if (!folderId) return 'יצירת התיקייה נכשלה — נסו שוב';
+    // Report the real counts: claiming "done" when one board refused would send the
+    // owner looking for a folder that is half-full.
+    return failed.length
+      ? `${moved.length} לוחות הועברו, ${failed.length} נכשלו`
+      : `${moved.length} לוחות הועברו לתיקייה`;
+  } catch (err) {
+    logger.error('SettingsModal', 'ריכוז הלוחות בתיקייה נכשל', err);
+    return 'ההעברה נכשלה';
+  }
+}
+
 // Merge the alias schema over the stored mapping so columns added to the schema
 // AFTER a user saved settings (summaryFileID, topicNotForDiscussionID,
 // pointNotForDiscussionID) still render in the modal — preserving any id/verified
@@ -1471,25 +1517,23 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                         loading={folderMove === 'running'}
                         disabled={folderMove === 'running'}
                         onClick={async () => {
-                          setFolderMove('running');
-                          try {
-                            const wsId = await resolveWorkspaceId(settings?.boards?.discussions?.id, null);
-                            const { folderId, moved, failed } = await moveBoardsIntoProvisionFolder(settings?.boards, wsId);
-                            if (!folderId) {
-                              setFolderMove('יצירת התיקייה נכשלה — נסו שוב');
-                            } else {
-                              // Report the real counts: claiming "done" when one board refused
-                              // would send the owner looking for a folder that is half-full.
-                              setFolderMove(
-                                failed.length
-                                  ? `${moved.length} לוחות הועברו, ${failed.length} נכשלו`
-                                  : `${moved.length} לוחות הועברו לתיקייה`
-                              );
-                            }
-                          } catch (err) {
-                            logger.error('SettingsModal', 'ריכוז הלוחות בתיקייה נכשל', err);
-                            setFolderMove('ההעברה נכשלה');
+                          /*
+                           * round343 (review finding) — this reads the ON-SCREEN draft
+                           * (`boards`), NOT the persisted `settings.boards`.
+                           *
+                           * The two disagree exactly when it matters: an owner who remaps a
+                           * board in the מיפוי tab and presses this before saving would
+                           * otherwise move the boards they just replaced, and resolve the
+                           * workspace from the OLD discussions board. Cancelling the modal
+                           * cannot undo a relocation, so acting on the stale copy is
+                           * unrecoverable.
+                           */
+                          if (!hasBoardsToRelocate(boards)) {
+                            setFolderMove(NO_BOARDS_TO_RELOCATE);
+                            return;
                           }
+                          setFolderMove('running');
+                          setFolderMove(await relocateBoardsToFolder(boards));
                         }}
                       >
                         העברת הלוחות לתיקייה

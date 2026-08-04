@@ -492,7 +492,6 @@ export const CAPABILITY_DEFAULTS = {
   editTopicOrPointDiscussed: 'creatorLeadOwner',
   deleteTopicOrPointDiscussed: 'creatorLeadOwner',
   checkPoint: 'creatorLeadOwner',
-  editResponses: 'creatorLeadOwner',
   // ---- task tier ----
   editTaskStatus: 'creatorLeadOwner',
   editTaskPriority: 'creatorLeadOwner',
@@ -564,8 +563,6 @@ export const CAPABILITIES = [
   { id: 'editTopicOrPointDiscussed', tier: 'disc', group: 'topics', label: 'עריכת נושא/נקודה אחרי שנידונה' },
   { id: 'deleteTopicOrPointDiscussed', tier: 'disc', group: 'topics', label: 'מחיקת נושא/נקודה אחרי שנידונה' },
   { id: 'checkPoint', tier: 'disc', group: 'topics', label: 'סימון נקודה כנידונה' },
-  // round212 — relabeled "לנקודות" so it can't be confused with the references BOX write.
-  { id: 'editResponses', tier: 'disc', group: 'topics', label: 'עריכת התייחסויות לנקודות' },
   // discussion-scoped "משימות" card (creating a task lives in the discussion)
   { id: 'createTask', tier: 'disc', group: 'tasks', label: 'יצירת משימה בדיון' },
   // discussion-scoped "החלטות" card (creating a decision lives in the discussion)
@@ -723,7 +720,6 @@ export const DEFAULT_PERMISSION_SEED = {
       editTopicOrPointDiscussed: true,
       deleteTopicOrPointDiscussed: true,
       checkPoint: true,
-      editResponses: true,
       /*
        * round341 (owner request) — the three discussion manager roles are equal in power
        * to the decider on any decision of their discussion: "כל פעולה על כל החלטה".
@@ -761,7 +757,6 @@ export const DEFAULT_PERMISSION_SEED = {
       editTopicOrPointDiscussed: true,
       deleteTopicOrPointDiscussed: true,
       checkPoint: true,
-      editResponses: true,
       /*
        * round341 (owner request) — the three discussion manager roles are equal in power
        * to the decider on any decision of their discussion: "כל פעולה על כל החלטה".
@@ -799,7 +794,6 @@ export const DEFAULT_PERMISSION_SEED = {
       editTopicOrPointDiscussed: true,
       deleteTopicOrPointDiscussed: true,
       checkPoint: true,
-      editResponses: true,
       /*
        * round341 (owner request) — the three discussion manager roles are equal in power
        * to the decider on any decision of their discussion: "כל פעולה על כל החלטה".
@@ -818,7 +812,7 @@ export const DEFAULT_PERMISSION_SEED = {
   },
   /*
    * participants → view + createTask + createDecision + addTopicOrPoint +
-   * checkPoint + editResponses ; NOT editDiscussionFields/editSummary/exportDocs.
+   * checkPoint ; NOT editDiscussionFields/editSummary/exportDocs.
    *
    * round340 (owner request), two changes:
    *   - `exportDocs: false` — exporting the whole discussion to a document is a
@@ -847,7 +841,6 @@ export const DEFAULT_PERMISSION_SEED = {
       editTopicOrPointDiscussed: false,
       deleteTopicOrPointDiscussed: false,
       checkPoint: true,
-      editResponses: true,
     },
   },
   // task creator → ALL task caps true (incl. editTaskDeadline, deleteTask)
@@ -1253,7 +1246,24 @@ export const RETIRED_COLUMN_ALIASES = {
 };
 
 /**
- * Strip every RETIRED_COLUMN_ALIASES trace out of a stored settings object.
+ * Capability ids that left the matrix and must be cleared out of stored grants.
+ *
+ * round343 (owner decision 2026-08-04) — same problem as a retired column alias, one
+ * level down: a stored `permissions.roles[key].capabilities` map is merged OVER the
+ * catalog, so dropping the id from CAPABILITIES hides the ROW but leaves the boolean
+ * in every instance's storage forever. It is inert while nothing reads it, and it is a
+ * trap the day someone reuses the id — the grant would silently come back pre-set.
+ */
+export const RETIRED_CAPABILITIES = [
+  // "עריכת התייחסויות לנקודות" — the Topics-table redesign removed the התייחסויות
+  // cell, so there has been no control to gate for several rounds. It was kept in the
+  // catalog "for a future responses cell"; the owner has now retired it outright.
+  'editResponses',
+];
+
+/**
+ * Strip every RETIRED_COLUMN_ALIASES / RETIRED_CAPABILITIES trace out of a stored
+ * settings object.
  *
  * Pure: returns a new object and never mutates the input, and returns the SAME
  * object when there is nothing to prune, so callers can use identity to decide
@@ -1283,6 +1293,20 @@ export function pruneRetiredSettings(settings) {
       if (alias in accessRoleSources) { delete accessRoleSources[alias]; touched = true; }
     }
   }
+
+  // Retired capabilities are cleared out of EVERY role's map — the id is gone from the
+  // product, so there is no role for which keeping it means anything.
+  for (const [roleKey, role] of Object.entries(roles)) {
+    const caps = role?.capabilities;
+    if (!caps) continue;
+    const retired = RETIRED_CAPABILITIES.filter((id) => id in caps);
+    if (!retired.length) continue;
+    const nextCaps = { ...caps };
+    for (const id of retired) delete nextCaps[id];
+    roles[roleKey] = { ...role, capabilities: nextCaps };
+    touched = true;
+  }
+
   if (!touched) return settings;
 
   const out = { ...settings, columns };

@@ -76,7 +76,11 @@ settings are merged OVER the schema, so add it to **`RETIRED_COLUMN_ALIASES`** a
 `pruneRetiredSettings` (called from `SettingsContext.load`, after the rename migration and
 before `reconcileColumns`) clears its three traces: the column mapping, the
 `permissions.roles['<board>:<alias>']` row, and the `preferences.accessRoleSources` key.
-It deliberately never touches the monday board column itself.
+It deliberately never touches the monday board column itself. Retiring a **capability**
+has the same trap one level down: dropping it from `CAPABILITIES` hides the matrix row but
+leaves the boolean in every instance's stored `capabilities` map, so list it in
+**`RETIRED_CAPABILITIES`** too — the same prune clears it from every role (round343 retired
+`editResponses` that way).
 Flow:
 - `boards.config.js` is the seed/default mapping. **To fix a wrong mapping, edit it HERE.**
 - `SettingsContext` loads a per-instance override from `monday.storage` (key
