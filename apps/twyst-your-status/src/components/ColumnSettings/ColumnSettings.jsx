@@ -31,6 +31,7 @@ import {
 } from '../../services/graphqlQueries';
 import { enrollColumnGuard } from '../../services/guardEnroll';
 import { startGuardAuthorization } from '../../services/guardAuthorize';
+import { getGuardStatus } from '../../services/guardStatus';
 import mondayService from '../../services/mondayService';
 import BypassMonitor from './BypassMonitor';
 import { loadAccountTeams } from '../../services/teamsAccess';
@@ -955,6 +956,25 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     }
   };
 
+  // round326 — the guard's connection state (account-level OAuth), so the one
+  // switch can show "מחובר ✓" vs "דרוש אישור". null = unknown/loading.
+  const [guardActivated, setGuardActivated] = useState(null);
+
+  const refreshGuardStatus = useCallback(async () => {
+    if (!boardId || !columnId) return;
+    const { activated } = await getGuardStatus({ boardId, columnId });
+    setGuardActivated(activated);
+  }, [boardId, columnId]);
+
+  // Read on open, and again when the tab regains focus — that is when the owner
+  // returns from the OAuth consent tab, so "מחובר ✓" appears without a reload.
+  useEffect(() => {
+    void refreshGuardStatus();
+    const onFocus = () => { void refreshGuardStatus(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refreshGuardStatus]);
+
   // round325 — one-time guard authorization (OAuth) for the signed-in owner.
   // Opens the guard's /oauth/start in a new tab; that page reports its own
   // success, so we only surface the pop-up-blocked case here. Never throws.
@@ -964,6 +984,18 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       mondayService.showNotice('הדפדפן חסם את חלון החיבור — אשרו חלונות קופצים ונסו שוב.', 'error');
     } else if (status === 'failed') {
       mondayService.showNotice('לא ניתן היה לפתוח את החיבור. נסו שוב.', 'error');
+    }
+  };
+
+  // round326 — one switch protects the column: it flips autoRevert (persisted on
+  // Save, which also enrolls the webhook) AND, when turning ON with no OAuth yet,
+  // opens the one-time owner consent immediately. Turning OFF only stops reverts;
+  // it does not revoke the account authorization (harmless to keep).
+  const handleGuardToggle = (event) => {
+    const on = event.target.checked;
+    setDraft((current) => ({ ...current, autoRevert: on }));
+    if (on && guardActivated !== true) {
+      void handleAuthorizeGuard();
     }
   };
 
@@ -1113,22 +1145,33 @@ function ColumnSettings({ context, variant = 'overlay' }) {
               type="checkbox"
               checked={draft?.autoRevert === true}
               disabled={saving}
-              onChange={(event) => setDraft((current) => ({ ...current, autoRevert: event.target.checked }))}
+              onChange={handleGuardToggle}
             />
             <span className="twyst-autorevert-text">
-              <b>החזרה אוטומטית של עקיפות</b>
-              <span>כשדלוק, שינוי סטטוס שעוקף את ההגדרות (מהנייד או בטעינת הלוח) יוחזר תוך שניות על שם הבעלים הראשי, והמשתמש יקבל הודעה. כשכבוי — העקיפות רק נספרות בניטור שלמטה.</span>
+              <b>שמירה אוטומטית על העמודה</b>
+              <span>כשדלוק, שינוי שעוקף את ההגדרות (מהנייד או בטעינת הלוח) יוחזר תוך שניות על שם הבעלים הראשי, והמשתמש יקבל הודעה. כשכבוי — העקיפות רק נספרות בניטור שלמטה.</span>
             </span>
           </label>
 
-          <div className="twyst-guard-authorize">
-            <Button kind="secondary" size="small" disabled={saving} onClick={handleAuthorizeGuard}>
-              חיבור הגרד (אישור בעלים)
-            </Button>
-            <span className="twyst-guard-authorize-text">
-              נדרש פעם אחת כדי שההחזרות ייכתבו על שמכם. נפתחת לשונית אישור מול monday; לאחר האישור אפשר לסגור אותה.
-            </span>
-          </div>
+          {draft?.autoRevert === true && (
+            <div className={`twyst-guard-conn twyst-guard-conn--${guardActivated === true ? 'ok' : 'need'}`}>
+              {guardActivated === true ? (
+                <span>
+                  ✓ הגרד מחובר — ההחזרות ייכתבו על שם הבעלים הראשי.{' '}
+                  <button type="button" className="twyst-linkish" disabled={saving} onClick={handleAuthorizeGuard}>
+                    חיבור מחדש
+                  </button>
+                </span>
+              ) : (
+                <span>
+                  דרוש אישור חד-פעמי כדי שההחזרות ייכתבו על שמכם.{' '}
+                  <button type="button" className="twyst-linkish" disabled={saving} onClick={handleAuthorizeGuard}>
+                    {guardActivated === false ? 'אישור עכשיו' : 'חיבור'}
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
         </section>
 
         <BypassMonitor
