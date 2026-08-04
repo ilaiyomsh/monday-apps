@@ -118,9 +118,13 @@ function snapshotTaskDates(task, dateColumns) {
  * @param {Array<object>} p.tasks - normalized items of the tasks board
  * @param {Array<object>} p.users - normalized items of the users board
  * @param {string} p.today - YYYY-MM-DD
+ * @param {Record<string, Record<string, string>>} [p.statusColumnColors] - real
+ *   board label colors ({ columnId → { labelId → hex } }) from
+ *   getBoardItems on the TASKS board; optional — absent keeps the renderers
+ *   on their config-color fallback exactly as before.
  * @returns {{ recipients: Array<object>, skippedUsers: Array<object> }}
  */
-export function buildDigest({ config, tasks, users, today }) {
+export function buildDigest({ config, tasks, users, today, statusColumnColors }) {
   const { digest } = config;
   const buttonsById = new Map((config.buttons ?? []).map((b) => [b.id, b]));
   const dateColumns = collectDigestDateColumns(digest);
@@ -168,6 +172,10 @@ export function buildDigest({ config, tasks, users, today }) {
         date,
         dates: snapshotTaskDates(task, dateColumns),
         statusText: col(task, button.statusColumnId).text ?? '',
+        // Real board color for the CURRENT label (section primary button's
+        // status column). Unknown label / missing settings → undefined, and
+        // the renderer falls back exactly as before.
+        statusColor: statusColumnColors?.[button.statusColumnId]?.[statusLabelId],
         personIds: col(task, config.peopleColumnId).personIds ?? [],
       });
     }
@@ -197,12 +205,13 @@ export function buildDigest({ config, tasks, users, today }) {
         noteColumnTitle: section.noteColumnTitle ?? '',
         buttonId: section.buttonId,
         buttonIds: sectionActionButtonIds(section),
-        tasks: mine.map(({ itemId, name, date, dates, statusText }) => ({
+        tasks: mine.map(({ itemId, name, date, dates, statusText, statusColor }) => ({
           itemId,
           name,
           date,
           dates,
           statusText,
+          statusColor,
         })),
       });
     }
@@ -213,6 +222,10 @@ export function buildDigest({ config, tasks, users, today }) {
       personId: r.personId,
       taskCount,
       dateColumns,
+      // Renderers resolve option-pill colors (button targetIndex on the
+      // button's own status column) from this map; undefined when the caller
+      // supplied none — the config-color fallback stays intact.
+      statusColumnColors,
       sections,
     });
   }

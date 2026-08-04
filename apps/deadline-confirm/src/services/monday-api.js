@@ -68,8 +68,13 @@ const ITEM_FIELDS = `id
           ... on PeopleValue { persons_and_teams { id kind } }
         }`;
 
+// columns { id type settings } rides the FIRST page only (one extra board
+// field, never per item). `settings` is the parsed settings object — status
+// columns carry labels[] with { id, hex } (probe-verified:
+// tests/fixtures/board-columns-settings.probe.json, API 2026-07).
 const BOARD_ITEMS_QUERY = `query GetBoardItems($boardId: [ID!], $columnIds: [String!], $limit: Int!) {
   boards(ids: $boardId) {
+    columns { id type settings }
     items_page(limit: $limit) {
       cursor
       items {
@@ -87,6 +92,34 @@ const NEXT_ITEMS_QUERY = `query NextBoardItems($cursor: String!, $columnIds: [St
     }
   }
 }`;
+
+/**
+ * Board status-column settings → { columnId → { labelId → hexColor } }.
+ * Shape probe-verified (tests/fixtures/board-columns-settings.probe.json):
+ * status columns carry settings.labels[] with { id, hex }; other column
+ * types (and status columns with unusable settings) contribute nothing.
+ * @param {Array<object>|undefined} columns raw boards[0].columns
+ * @returns {Record<string, Record<string, string>>}
+ */
+function parseStatusColumnColors(columns) {
+  /** @type {Record<string, Record<string, string>>} */
+  const map = {};
+  for (const column of columns ?? []) {
+    if (!column || column.type !== 'status') continue;
+    const labels = column.settings?.labels;
+    if (!Array.isArray(labels)) continue;
+    /** @type {Record<string, string>} */
+    const byLabelId = {};
+    for (const label of labels) {
+      // Label id 0 is valid — never truthy-check the id itself.
+      if (!label || !Number.isInteger(label.id)) continue;
+      if (typeof label.hex !== 'string' || label.hex.length === 0) continue;
+      byLabelId[label.id] = label.hex;
+    }
+    if (Object.keys(byLabelId).length > 0) map[column.id] = byLabelId;
+  }
+  return map;
+}
 
 /** Normalize one raw item to the app shape (never-set rules: see header). */
 function normalizeBoardItem(raw) {
@@ -273,12 +306,16 @@ export function createMondayApi({ fetchImpl, url = MONDAY_API_URL } = {}) {
      * v4 digest — read a whole board's items (cursor pagination via
      * items_page → next_items_page), normalized to the app's column shape:
      * { text, statusLabelId, date, personIds }. `truncated` reports a hit on
-     * the page cap (no silent truncation).
+     * the page cap (no silent truncation). `statusColumnColors` maps the
+     * board's status columns to their real label colors
+     * ({ columnId → { labelId → hex } }, from the first page's columns read;
+     * {} when the response carries none) — additive, callers may ignore it.
      * @param {{ token: string, boardId: string, columnIds: string[], pageSize?: number, maxPages?: number }} p
-     * @returns {Promise<{ items: Array<object>, truncated: boolean }>}
+     * @returns {Promise<{ items: Array<object>, truncated: boolean, statusColumnColors: Record<string, Record<string, string>> }>}
      */
     async getBoardItems({ token, boardId, columnIds, pageSize = 100, maxPages = 20 }) {
       const items = [];
+      let statusColumnColors = {};
       let cursor = null;
       let pages = 0;
 
@@ -294,6 +331,9 @@ export function createMondayApi({ fetchImpl, url = MONDAY_API_URL } = {}) {
               query: BOARD_ITEMS_QUERY,
               variables: { boardId: [boardId], columnIds, limit: pageSize },
             });
+        if (!cursor) {
+          statusColumnColors = parseStatusColumnColors(data.boards?.[0]?.columns);
+        }
         const page = cursor ? data.next_items_page : data.boards?.[0]?.items_page;
         if (!page) break;
         for (const raw of page.items ?? []) items.push(normalizeBoardItem(raw));
@@ -302,7 +342,7 @@ export function createMondayApi({ fetchImpl, url = MONDAY_API_URL } = {}) {
         if (!cursor) break;
       }
 
-      return { items, truncated: Boolean(cursor) };
+      return { items, truncated: Boolean(cursor), statusColumnColors };
     },
 
     /** OAuth identity + connection liveness probe (§8/§9). */

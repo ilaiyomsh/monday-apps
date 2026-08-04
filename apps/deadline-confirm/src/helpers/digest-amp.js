@@ -54,10 +54,14 @@ function escapeBindStr(raw) {
 /**
  * Action buttons offered for a section — multi-button (`buttons` / `buttonIds`)
  * with legacy fallback to singular `button` / `buttonId`.
+ * Pill color prefers the REAL board color of the button's target label
+ * (statusColumnColors[statusColumnId][targetIndex], sourced from the board's
+ * status column settings) over the configured button.style.color guess.
  * @param {object} section
+ * @param {Record<string, Record<string, string>>} [statusColumnColors]
  * @returns {Array<{ id: string, label: string, color: string }>}
  */
-export function resolveSectionButtons(section) {
+export function resolveSectionButtons(section, statusColumnColors) {
   /** @type {Array<{ id: string, label: string, color: string }>} */
   const out = [];
   const seen = new Set();
@@ -67,10 +71,15 @@ export function resolveSectionButtons(section) {
     const id = raw.id ?? '';
     if (!id || seen.has(id)) return;
     seen.add(id);
+    // targetIndex 0 is a valid label id — the lookup itself is the check.
+    const boardColor = statusColumnColors?.[raw.statusColumnId]?.[raw.targetIndex];
     out.push({
       id,
       label: raw.targetLabel || raw.name || 'עדכן',
-      color: raw.style?.color || NEUTRAL_STATUS,
+      color:
+        (typeof boardColor === 'string' && boardColor.length > 0 ? boardColor : '') ||
+        raw.style?.color ||
+        NEUTRAL_STATUS,
     });
   };
 
@@ -142,7 +151,7 @@ function allRecipientButtons(recipient) {
   const seen = new Set();
   for (const section of recipient.sections ?? []) {
     if (!section.tasks || section.tasks.length === 0) continue;
-    for (const button of resolveSectionButtons(section)) {
+    for (const button of resolveSectionButtons(section, recipient.statusColumnColors)) {
       if (seen.has(button.id)) continue;
       seen.add(button.id);
       out.push(button);
@@ -449,9 +458,10 @@ function renderNoteCell(task, includeHidden) {
  * @param {Array<{ id: string, label: string, color: string }>} palette
  * @param {number} clusterIndex
  * @param {Set<string>} emittedNotes item ids whose hidden note field already exists
+ * @param {Record<string, Record<string, string>>} [statusColumnColors] real board label colors
  */
-function renderClusterTable(section, emittedHidden, palette, clusterIndex, emittedNotes) {
-  const buttons = resolveSectionButtons(section);
+function renderClusterTable(section, emittedHidden, palette, clusterIndex, emittedNotes, statusColumnColors) {
+  const buttons = resolveSectionButtons(section, statusColumnColors);
   if (buttons.length === 0) return '';
 
   const dateHeader =
@@ -579,7 +589,14 @@ export function renderDigestAmp({
   const clusters = (recipient.sections ?? [])
     .filter((section) => section.tasks && section.tasks.length > 0)
     .map((section, clusterIndex) =>
-      renderClusterTable(section, emittedHidden, palette, clusterIndex, emittedNotes)
+      renderClusterTable(
+        section,
+        emittedHidden,
+        palette,
+        clusterIndex,
+        emittedNotes,
+        recipient.statusColumnColors
+      )
     )
     .filter((html) => html.length > 0)
     .join('\n');

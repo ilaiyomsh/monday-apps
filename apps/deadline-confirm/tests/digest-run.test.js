@@ -197,6 +197,36 @@ describe('runDigestForAccount', () => {
     expect(payload).not.toHaveProperty('html');
   });
 
+  it('threads real board label colors from the TASKS-board read into the rendered AMP', async () => {
+    const send = vi.fn().mockResolvedValue({ id: 'em_1' });
+    const inner = boardItemsDouble();
+    // Hex from tests/fixtures/board-columns-settings.probe.json (label 0 → #fdab3d);
+    // deliberately different from the config button's style.color (#0073ea).
+    const getBoardItems = vi.fn(async (args) =>
+      args.boardId === '111'
+        ? { ...(await inner(args)), statusColumnColors: { status_a: { 0: '#fdab3d' } } }
+        : inner(args)
+    );
+    const { storage } = await seeded({ emailSender: { send }, getBoardItems });
+    const out = await runDigestForAccount({
+      accountId: ACCOUNT_ID,
+      storage,
+      api: { getBoardItems },
+      baseUrl: 'https://app.example',
+      emailSender: { send },
+      todayIso: TODAY,
+      now: () => FIXED_NOW,
+    });
+    expect(out.sent).toBe(1);
+    const amp = send.mock.calls[0][0].amp;
+    // Option pill: real board color, not the configured guess.
+    expect(amp).toMatch(/class="dd-opt" style="background:#fdab3d"/);
+    expect(amp).not.toMatch(/class="dd-opt" style="background:#0073ea"/);
+    // Current-status chip: task 9001 carries label 0 → board color class.
+    expect(amp).toContain('"c9001":"bg_fdab3d"');
+    expect(amp).toContain('.dd-trig.bg_fdab3d { background:#fdab3d; }');
+  });
+
   it('one failing recipient → ok:false on that result; siblings still sent', async () => {
     const send = vi
       .fn()

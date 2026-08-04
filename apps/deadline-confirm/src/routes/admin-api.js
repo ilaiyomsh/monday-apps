@@ -274,6 +274,9 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
       tasks: tasksRead.items,
       users: usersRead.items,
       today,
+      // Real board label colors (tasks board read) — preview renders with the
+      // same colors the send path uses; absent on older doubles → fallback.
+      statusColumnColors: tasksRead.statusColumnColors,
     });
 
     const buttonsById = new Map(config.buttons.map((b) => [b.id, b]));

@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderDigestAmp } from '../src/helpers/digest-amp.js';
 import { buildManifest, signManifest, currentSlot } from '../src/services/manifest-signature.js';
+import settingsFixture from './fixtures/board-columns-settings.probe.json';
 
 const BASE = 'https://app.example';
 const SECRET = 'wJalrXUtnFEMIK7MDENGbPxRfiCY_EXAMPLEKEY-43x';
@@ -314,6 +315,59 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect((doc.match(/class="dd-trig /g) ?? []).length).toBe(2);
     expect(doc).toContain(`v9001:'${BTN_START.id}'`);
     expect(doc).toContain(`v9001:'${BTN_DONE.id}'`);
+  });
+
+  // Real monday status label colors (owner decision 2026-08-04): buildDigest
+  // threads recipient.statusColumnColors (columnId → labelId → hex, sourced from
+  // the board's status column settings) and task.statusColor. Hex values below
+  // come from tests/fixtures/board-columns-settings.probe.json — a real capture.
+  describe('real board label colors', () => {
+    const fixtureLabels = settingsFixture.data.boards[0].columns.find(
+      (c) => c.type === 'status'
+    ).settings.labels;
+    // The digest-amp buttons point at status column 'color_x'; key the probe's
+    // real label→hex pairs under it (labels: 0 → #fdab3d, 1 → #00c875).
+    const BOARD_COLORS = {
+      color_x: Object.fromEntries(fixtureLabels.map((l) => [l.id, l.hex])),
+    };
+
+    it('prefers the real board color over button.style.color for option pills', () => {
+      const doc = render({ ...RECIPIENT, statusColumnColors: BOARD_COLORS });
+      // BTN_DONE targets label 1 on color_x: board says #00c875, config guessed #00854d.
+      expect(doc).toContain('background:#00c875');
+      expect(doc).not.toContain('background:#00854d');
+      expect(doc).toContain("c9004:'bg_00c875'");
+      expect(doc).toContain('.dd-trig.bg_00c875 { background:#00c875; }');
+      // BTN_STUCK targets label 2 — NOT in the board settings → config color kept.
+      expect(doc).toContain(`background:${BTN_STUCK.style.color}`);
+    });
+
+    it('uses task.statusColor for the current-status chip when set', () => {
+      const withColor = {
+        ...RECIPIENT,
+        statusColumnColors: BOARD_COLORS,
+        sections: [
+          {
+            ...RECIPIENT.sections[0],
+            // 9001 current status "טרם החל" matches no button label — today that
+            // guessed neutral; the board's real color wins now.
+            tasks: [{ ...RECIPIENT.sections[0].tasks[0], statusColor: '#00c875' }],
+          },
+        ],
+      };
+      const doc = render(withColor);
+      expect(doc).toContain('"c9001":"bg_00c875"');
+      expect(doc).toContain('class="dd-trig bg_00c875"');
+    });
+
+    it('unknown label (no statusColor) still falls back to config-color match / neutral', () => {
+      const doc = render({ ...RECIPIENT, statusColumnColors: BOARD_COLORS });
+      // 9001: statusText "טרם החל", no statusColor, no button label match → neutral.
+      expect(doc).toContain('"c9001":"bg_c4c4c4"');
+      // 9004: statusText "בעבודה" matches BTN_START whose pill color is the
+      // board's real #fdab3d for label 0 (same hex the config carried).
+      expect(doc).toContain('"c9004":"bg_fdab3d"');
+    });
   });
 
   it('escapes HTML in task names', () => {

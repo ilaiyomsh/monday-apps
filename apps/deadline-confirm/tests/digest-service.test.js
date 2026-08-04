@@ -351,6 +351,59 @@ describe('buildDigest — show-by-status classification', () => {
   });
 });
 
+describe('buildDigest — real status label colors (statusColumnColors)', () => {
+  // Shape produced by getBoardItems from the board's status column settings
+  // (tests/fixtures/board-columns-settings.probe.json: settings.labels[].hex).
+  const STATUS_COLORS = {
+    status_a: { 0: '#fdab3d', 1: '#00c875' },
+  };
+
+  it('populates task.statusColor from the section primary-button status column + label id (0 valid)', () => {
+    const result = buildDigest({
+      config: baseConfig(),
+      users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+      tasks: [
+        taskRow('9001', 'צבע אמיתי', {
+          persons: ['501'],
+          startDate: '2026-07-10',
+          statusA: 0,
+          statusAText: 'בעבודה',
+        }),
+      ],
+      today: TODAY,
+      statusColumnColors: STATUS_COLORS,
+    });
+    expect(result.recipients[0].sections[0].tasks[0].statusColor).toBe('#fdab3d');
+    // The renderers receive the map through the recipient (option-pill colors).
+    expect(result.recipients[0].statusColumnColors).toEqual(STATUS_COLORS);
+  });
+
+  it('unknown label / missing settings → statusColor stays undefined (renderer falls back)', () => {
+    const config = baseConfig();
+    config.digest.sections[0].includeStatusLabelIds = [7];
+    const withMap = buildDigest({
+      config,
+      users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+      tasks: [
+        taskRow('9001', 'לייבל לא מוכר', { persons: ['501'], startDate: '2026-07-10', statusA: 7 }),
+      ],
+      today: TODAY,
+      statusColumnColors: STATUS_COLORS, // has no entry for label 7
+    });
+    expect(withMap.recipients[0].sections[0].tasks[0].statusColor).toBeUndefined();
+
+    const withoutMap = buildDigest({
+      config: baseConfig(),
+      users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+      tasks: [
+        taskRow('9001', 'בלי מפה', { persons: ['501'], startDate: '2026-07-10', statusA: 0 }),
+      ],
+      today: TODAY,
+    });
+    expect(withoutMap.recipients[0].sections[0].tasks[0].statusColor).toBeUndefined();
+  });
+});
+
 describe('buildDigest — user matching', () => {
   it('task with two persons appears in BOTH users’ digests; unmatched user gets none', () => {
     const result = buildDigest({
