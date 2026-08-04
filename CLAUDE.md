@@ -180,7 +180,7 @@ packages/shared                     EMPTY STUB — see below
   | team-people-column | `apps/team-people-column` | 11689948 | client, `dist/` |
   | deadline-confirm | `apps/deadline-confirm` | 11704868 | server, app root |
   | telemetry-dashboard | `apps/telemetry-dashboard` | secret `APP_TELEMETRY_DASHBOARD_ID` set — numeric ID lives in the secret, not mirrored here (slug `telemetry-dashboard`) | server, app root |
-  | twyst-your-status | `apps/twyst-your-status` | secret `APP_TWYST_YOUR_STATUS_ID` set — numeric ID lives in the secret, not mirrored here (slug `twyst-your-status`) | client, `dist/` |
+  | twyst-your-status | `apps/twyst-your-status` | secret `APP_TWYST_YOUR_STATUS_ID` set — numeric ID lives in the secret, not mirrored here (slug `twyst-your-status`) | server, `server/` app root; SPA served from `server/public` (round324 same-origin unification — one monday-code push, no CDN `-c`) |
   | docs-export | `apps/docs-export` | **none yet** — no App ID, no `APP_DOCS_EXPORT_ID` secret, no `deploy-{draft,live}` workflow. Ships to **GitHub Pages** only (slug `docs-export`) | client, `dist/` |
 
 - **`docs-export` local dev:** `pnpm --filter ./apps/docs-export dev:mock` on port

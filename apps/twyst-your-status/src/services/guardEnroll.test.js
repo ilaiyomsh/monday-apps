@@ -24,12 +24,20 @@ const makeDeps = (overrides = {}) => ({
 });
 
 describe('enrollColumnGuard', () => {
-  it("returns 'disabled' without fetching or asking for a token when no guard URL is configured", async () => {
-    const deps = makeDeps({ guardUrl: '' });
+  it("returns 'disabled' without fetching or asking for a token when the base resolves to null (dev-harness mock)", async () => {
+    const deps = makeDeps({ guardUrl: null });
     const status = await enrollColumnGuard({ boardId: '5098', columnId: 'status_col' }, deps);
     expect(status).toBe('disabled');
     expect(deps.fetchImpl).not.toHaveBeenCalled();
     expect(deps.sessionTokenProvider).not.toHaveBeenCalled();
+  });
+
+  it("POSTs to the RELATIVE /api/guard/enroll (same-origin) when the base is '' — a real build's default", async () => {
+    const deps = makeDeps({ guardUrl: '' });
+    const status = await enrollColumnGuard({ boardId: '5098', columnId: 'status_col' }, deps);
+    expect(status).toBe('enrolled');
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(1);
+    expect(deps.fetchImpl.mock.calls[0][0]).toBe('/api/guard/enroll');
   });
 
   it('POSTs to <guardUrl>/api/guard/enroll with the sessionToken and a JSON body of boardId+columnId as strings', async () => {

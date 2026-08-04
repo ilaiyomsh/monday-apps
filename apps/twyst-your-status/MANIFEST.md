@@ -5,14 +5,17 @@
 - App ID: `11775054`
 - Column feature type: `AppFeatureStatusColumn`
 - Settings feature type: column settings placement
-- Client-only CDN app (no monday-code server)
+- Since round324 (same-origin unification) the SPA is served BY the app's
+  monday-code server (`server/public`), so every feature URL is on `<BASE_URL>`
+  (the monday-code URL from `mapps code:status`), not the CDN. One deploy, one
+  origin — see `docs/GUARD-ACTIVATION.md` and `CHANGELOG.md`.
 - Feature URLs (configure on the draft/live version):
-  - On-click dialog: `<CDN_ORIGIN>/picker`
-  - Column settings (tiny shell): `<CDN_ORIGIN>/settings`
+  - On-click dialog: `<BASE_URL>/picker`
+  - Column settings (tiny shell): `<BASE_URL>/settings`
   - Full settings overlay (opened from the shell via `openAppFeatureModal`):
-    `<CDN_ORIGIN>/settings-full`
+    `<BASE_URL>/settings-full`
   - Required-fields fill form (opened from the picker via `openAppFeatureModal`):
-    `<CDN_ORIGIN>/required-fields` — **no Developer Center entry**, opened at runtime
+    `<BASE_URL>/required-fields` — **no Developer Center entry**, opened at runtime
 
 Do **not** bind an On-Hover Dialog to `/picker` — hover dialogs close when the
 pointer leaves the cell, which feels like the picker vanishing while choosing.

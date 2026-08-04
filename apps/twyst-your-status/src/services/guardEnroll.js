@@ -5,8 +5,10 @@
  * the guard. Every outcome is a returned STATUS, never a throw.
  *
  * Statuses:
- *   'disabled'      — no guard URL configured for this build (local dev,
- *                     pre-activation deployments). Nothing was attempted.
+ *   'disabled'      — the dev-harness mock (VITE_MONDAY_MOCK): no backend is
+ *                     reachable, so nothing was attempted. In a real build the
+ *                     guard is same-origin (this SPA is served BY it), so this
+ *                     status does not occur.
  *   'enrolled'      — the guard confirmed the column's webhook (created now
  *                     or already present — the endpoint is idempotent).
  *   'not_activated' — the guard answered 409: the account has not completed
@@ -16,7 +18,7 @@
  *
  * @param {{ boardId: string|number, columnId: string }} target
  * @param {{
- *   guardUrl?: string,                    // default: import.meta.env.VITE_TWYST_GUARD_URL
+ *   guardUrl?: string|null,               // default: '' (same-origin); null skips
  *   sessionTokenProvider?: () => Promise<string>,  // default: monday.get('sessionToken')
  *   fetchImpl?: typeof fetch,
  * }} [deps]
@@ -24,17 +26,18 @@
  */
 
 import logger from '../utils/logger.js';
+import { resolveGuardBase } from './guardBase.js';
 
 export async function enrollColumnGuard({ boardId, columnId }, deps = {}) {
-  const guardUrl = (deps.guardUrl ?? import.meta.env.VITE_TWYST_GUARD_URL ?? '').replace(/\/$/, '');
-  if (guardUrl === '') return 'disabled';
+  const base = resolveGuardBase(deps.guardUrl);
+  if (base === null) return 'disabled';
 
   const doFetch = deps.fetchImpl ?? globalThis.fetch;
   const getSessionToken = deps.sessionTokenProvider ?? defaultSessionTokenProvider;
 
   try {
     const sessionToken = await getSessionToken();
-    const response = await doFetch(`${guardUrl}/api/guard/enroll`, {
+    const response = await doFetch(`${base}/api/guard/enroll`, {
       method: 'POST',
       headers: {
         Authorization: sessionToken,

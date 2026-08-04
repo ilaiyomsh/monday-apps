@@ -12,6 +12,11 @@
 # forces the buildpack down the `npm install` path, exactly like the other
 # monday-code servers here (deadline-confirm, telemetry-dashboard) which ship
 # no lockfile either. (Incident: draft deploy run 30882322872, 2026-08-04.)
+#
+# public/ IS shipped (round324 same-origin unification): CI stages the built
+# SPA there and this server serves it statically (app.js). It is deliberately
+# NOT excluded below — the deploy would serve a 404 shell without it. CI strips
+# every .map from public/ before push so no sourcemap reaches the browser.
 node_modules/
 tests/
 src/

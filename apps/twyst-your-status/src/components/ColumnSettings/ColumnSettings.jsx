@@ -30,6 +30,7 @@ import {
   GET_STATUS_COLUMN_REVISION,
 } from '../../services/graphqlQueries';
 import { enrollColumnGuard } from '../../services/guardEnroll';
+import { startGuardAuthorization } from '../../services/guardAuthorize';
 import mondayService from '../../services/mondayService';
 import BypassMonitor from './BypassMonitor';
 import { loadAccountTeams } from '../../services/teamsAccess';
@@ -954,6 +955,18 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     }
   };
 
+  // round325 — one-time guard authorization (OAuth) for the signed-in owner.
+  // Opens the guard's /oauth/start in a new tab; that page reports its own
+  // success, so we only surface the pop-up-blocked case here. Never throws.
+  const handleAuthorizeGuard = async () => {
+    const status = await startGuardAuthorization();
+    if (status === 'blocked') {
+      mondayService.showNotice('הדפדפן חסם את חלון החיבור — אשרו חלונות קופצים ונסו שוב.', 'error');
+    } else if (status === 'failed') {
+      mondayService.showNotice('לא ניתן היה לפתוח את החיבור. נסו שוב.', 'error');
+    }
+  };
+
   if (settingsLoading || metaLoading || !draft || !labelsDraft) {
     return <LoadingState message="טוען הגדרות…" />;
   }
@@ -1107,6 +1120,15 @@ function ColumnSettings({ context, variant = 'overlay' }) {
               <span>כשדלוק, שינוי סטטוס שעוקף את ההגדרות (מהנייד או בטעינת הלוח) יוחזר תוך שניות על שם הבעלים הראשי, והמשתמש יקבל הודעה. כשכבוי — העקיפות רק נספרות בניטור שלמטה.</span>
             </span>
           </label>
+
+          <div className="twyst-guard-authorize">
+            <Button kind="secondary" size="small" disabled={saving} onClick={handleAuthorizeGuard}>
+              חיבור הגרד (אישור בעלים)
+            </Button>
+            <span className="twyst-guard-authorize-text">
+              נדרש פעם אחת כדי שההחזרות ייכתבו על שמכם. נפתחת לשונית אישור מול monday; לאחר האישור אפשר לסגור אותה.
+            </span>
+          </div>
         </section>
 
         <BypassMonitor
