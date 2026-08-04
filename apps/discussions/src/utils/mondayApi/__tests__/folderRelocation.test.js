@@ -23,7 +23,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { api, state } = vi.hoisted(() => {
   const state = {
     calls: [], boardWorkspace: '999', failFolder: false,
-    moveFails: new Set(), moveThrows: new Set(), boardsThrow: false,
+    moveFails: new Set(), moveThrows: new Set(), boardsThrow: false, boardMissing: false,
   };
   return {
     state,
@@ -32,6 +32,8 @@ const { api, state } = vi.hoisted(() => {
       state.calls.push({ q: s, vars });
       if (s.includes('workspace { id }')) {
         if (state.boardsThrow) throw new Error('boards read failed');
+        // monday answers an unknown/inaccessible id with an EMPTY LIST, not an error.
+        if (state.boardMissing) return { boards: [] };
         return { boards: [{ id: String(vars.ids[0]), workspace: { id: state.boardWorkspace } }] };
       }
       if (s.includes('folders(')) return { folders: [] };
@@ -55,7 +57,7 @@ vi.mock('../managedColumns.js', () => ({
   findManagedDropdownColumnByTitle: vi.fn(async () => null),
 }));
 
-import { resolveWorkspaceId, moveBoardsIntoProvisionFolder } from '../provisionBoards.js';
+import { resolveWorkspaceId, readBoardWorkspaceId, moveBoardsIntoProvisionFolder } from '../provisionBoards.js';
 
 const BOARDS = {
   discussions: { id: 'B1' }, topics: { id: 'B2' }, tasks: { id: 'B3' }, decisions: { id: 'B4' },
@@ -68,6 +70,7 @@ beforeEach(() => {
   state.moveFails = new Set();
   state.moveThrows = new Set();
   state.boardsThrow = false;
+  state.boardMissing = false;
   vi.clearAllMocks();
 });
 
@@ -91,6 +94,40 @@ describe('resolveWorkspaceId', () => {
   it('returns null when there is no board, and when the read throws', async () => {
     expect(await resolveWorkspaceId(null, null)).toBeNull();
     state.boardsThrow = true;
+    expect(await resolveWorkspaceId('B1', null)).toBeNull();
+  });
+});
+
+/*
+ * round344 (review finding) — the RAW read, which throws. `resolveWorkspaceId` returns null
+ * both for "this board has no workspace" (⇒ main) and for a failed read, and that ambiguity
+ * is only safe for provisioning: relocation moves boards that already exist, so a swallowed
+ * error would pull them out of their workspace into a main-workspace folder with no undo.
+ */
+describe('readBoardWorkspaceId', () => {
+  it('returns the workspace, and null when the board genuinely has none', async () => {
+    expect(await readBoardWorkspaceId('B1')).toBe('999');
+    state.boardWorkspace = null;
+    expect(await readBoardWorkspaceId('B1')).toBeNull();
+  });
+
+  // The whole point: it must PROPAGATE, where resolveWorkspaceId swallows.
+  it('THROWS when the read fails, unlike resolveWorkspaceId', async () => {
+    state.boardsThrow = true;
+    await expect(readBoardWorkspaceId('B1')).rejects.toThrow('boards read failed');
+    expect(await resolveWorkspaceId('B1', null)).toBeNull();
+  });
+
+  /*
+   * An EMPTY board list is a failure too (review finding): monday answers a deleted or
+   * inaccessible board id with `boards: []` rather than an error — the behaviour
+   * `apps/docs-export/src/services/boardMeta.js` documents and throws on. Reading it as
+   * null would tell the relocation "main workspace" and move every other board there.
+   */
+  it('THROWS on an empty board list rather than reading it as the main workspace', async () => {
+    state.boardMissing = true;
+    await expect(readBoardWorkspaceId('B1')).rejects.toThrow(/לא נמצא/);
+    // the fail-soft wrapper still degrades to null, so provisioning is unchanged
     expect(await resolveWorkspaceId('B1', null)).toBeNull();
   });
 });
