@@ -271,6 +271,83 @@ describe('buildDigest — show-by-status classification', () => {
     expect(result.recipients[0].dateColumns).toEqual([{ id: 'date_start', title: 'תאריך התחלה' }]);
   });
 
+  // Section order = priority (owner decision 2026-08-04): a task matching several
+  // sections' conditions is claimed by the FIRST section in config order and
+  // skipped by the rest — one row per task per email, so the same item can never
+  // carry two dropdowns (the root cause of reachable conflict_item rejections).
+  describe('section priority — first match wins', () => {
+    const overlappingSections = [
+      {
+        id: 's_a',
+        title: 'א',
+        dateColumnId: 'date_start',
+        dateColumnTitle: 'תאריך התחלה',
+        buttonId: 'b_start001',
+        includeStatusLabelIds: [0],
+      },
+      {
+        id: 's_b',
+        title: 'ב',
+        dateColumnId: 'date_start',
+        dateColumnTitle: 'תאריך התחלה (שנית)',
+        buttonId: 'b_done0001',
+        includeStatusLabelIds: [0],
+      },
+    ];
+    const overlapConfig = (sections) =>
+      baseConfig({
+        digest: {
+          usersBoardId: '222',
+          usersPeopleColumnId: 'people_u',
+          usersEmailColumnId: 'email_u',
+          subject: 'המשימות שלך',
+          sections,
+        },
+      });
+    const doubleMatcher = () =>
+      taskRow('9001', 'משימה כפולה', { persons: ['501'], startDate: '2026-07-10', statusA: 0, statusB: 0 });
+
+    it('a task matching two sections appears ONLY in the first; the emptied section is elided', () => {
+      const result = buildDigest({
+        config: overlapConfig(overlappingSections),
+        users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+        tasks: [doubleMatcher()],
+        today: TODAY,
+      });
+      expect(result.recipients[0].sections.map((s) => s.sectionId)).toEqual(['s_a']);
+      expect(result.recipients[0].sections[0].tasks.map((t) => t.itemId)).toEqual(['9001']);
+      expect(result.recipients[0].taskCount).toBe(1);
+    });
+
+    it('reversing the section order moves the task to the now-first section', () => {
+      const result = buildDigest({
+        config: overlapConfig([overlappingSections[1], overlappingSections[0]]),
+        users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+        tasks: [doubleMatcher()],
+        today: TODAY,
+      });
+      expect(result.recipients[0].sections.map((s) => s.sectionId)).toEqual(['s_b']);
+      expect(result.recipients[0].sections[0].tasks.map((t) => t.itemId)).toEqual(['9001']);
+    });
+
+    it('a later section keeps tasks the first did not claim; taskCount reflects the dedup', () => {
+      const result = buildDigest({
+        config: overlapConfig(overlappingSections),
+        users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+        tasks: [
+          doubleMatcher(),
+          // matches ONLY s_b: status_a keeps it out of s_a's include set
+          taskRow('9002', 'רק במקבץ ב', { persons: ['501'], startDate: '2026-07-10', statusA: 1, statusB: 0 }),
+        ],
+        today: TODAY,
+      });
+      expect(result.recipients[0].sections.map((s) => s.sectionId)).toEqual(['s_a', 's_b']);
+      expect(result.recipients[0].sections[0].tasks.map((t) => t.itemId)).toEqual(['9001']);
+      expect(result.recipients[0].sections[1].tasks.map((t) => t.itemId)).toEqual(['9002']);
+      expect(result.recipients[0].taskCount).toBe(2);
+    });
+  });
+
   it('THE BUG FIX: an overdue task already "בוצע" (status NOT in the include set) is excluded', () => {
     const result = buildDigest({
       config: baseConfig(),

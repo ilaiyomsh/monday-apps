@@ -288,6 +288,9 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect((doc.match(/class="dd-trig /g) ?? []).length).toBe(1);
   });
 
+  // Since the section-priority dedup (2026-08-04) buildDigest no longer emits
+  // the same item into two sections — this recipient is hand-built to keep the
+  // renderer's defence-in-depth (shared state key + single hidden field) pinned.
   it('shares one hidden wire field when the same item appears in two clusters', () => {
     const dual = {
       ...RECIPIENT,

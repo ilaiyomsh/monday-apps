@@ -109,6 +109,12 @@ src/
   email on two rows → two messages); rows with ≠1 person skipped as
   `multi_person`. Pending = date ≤ today (Asia/Jerusalem) AND status in
   section's `includeStatusLabelIds`.
+- **Section order = priority (owner decision 2026-08-04):** a task matching
+  several sections' conditions appears ONLY in the first section in config
+  order (per recipient — `claimed` set in `digest-service.js`). The admin ↑/↓
+  arrows are the whole priority UI; no priority field exists. A rendered email
+  can therefore never produce `conflict_item` — that guard remains for
+  hand-crafted POSTs only.
 - **Per-task required note (0.12.0):** a digest section MAY map
   `noteColumnId` + `noteColumnTitle` (a TEXT column on the TASKS board). When it
   does, every row of that cluster gets a text field in the AMP table and the task

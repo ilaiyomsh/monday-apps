@@ -763,6 +763,20 @@ the only authorization.
 
 ---
 
+## 10b. Post-V6 owner decisions
+
+- **Section order = priority (owner, 2026-08-04).** Digest sections may overlap
+  (a task can satisfy several sections' date+status conditions). Before this
+  decision the task rendered once per matching section — two dropdowns for one
+  item in a single form, which is also the only way a rendered email could
+  produce the `conflict_item` rejection. Now the first section in config order
+  claims the task and later sections skip it, per recipient
+  (`digest-service.js`, the `claimed` set). The admin reorders sections with
+  ↑/↓ arrows; the array order is the entire priority model — no priority field.
+  The `conflict_item` wire guard stays (hand-crafted POSTs), and the renderer's
+  duplicate-item de-dup (shared state key, single hidden field) stays as
+  defence-in-depth.
+
 ## 11. Still open
 
 **Nothing blocks implementation.** All of O1–O7 are closed (owner, 2026-07-27):

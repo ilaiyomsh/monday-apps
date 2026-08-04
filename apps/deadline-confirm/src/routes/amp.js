@@ -141,8 +141,9 @@ function extractSelections(body) {
       const existing = byItem.get(itemId);
       if (existing === undefined) byItem.set(itemId, value);
       // One item, two DIFFERENT buttons in one submission is not producible
-      // by a single-table form — with multi-cluster tables it can happen when
-      // the same item is marked in two sections.
+      // by a rendered email: single-table forms never were, and since the
+      // section-priority dedup (2026-08-04) multi-cluster digests carry each
+      // item once. The guard stays — the wire accepts hand-crafted bodies.
       else if (existing !== value) return { error: 'conflict_item' };
     }
   }

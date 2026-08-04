@@ -58,10 +58,14 @@ function sectionButtonIds(section) {
  * selection's cluster maps none.
  *
  * The lookup goes through the BUTTON, not the cluster index: the wire carries
- * one selection per item (`item_<id>=<btnId>`) and no cluster identity, and a
- * task legitimately appears in two clusters. Resolving from the chosen button
- * makes the target follow the action the reader actually took. A button shared
- * by two mapped clusters is ambiguous by construction — first match wins.
+ * one selection per item (`item_<id>=<btnId>`) and no cluster identity.
+ * Resolving from the chosen button makes the target follow the action the
+ * reader actually took. A button shared by two mapped clusters is ambiguous by
+ * construction — first match wins. NOTE: the section-priority dedup
+ * (2026-08-04) means a RENDERED email carries each task once, but it does not
+ * resolve this button-level ambiguity — two mapped sections can still share a
+ * button, and the note column keeps resolving from the button, not the section
+ * that displayed the task.
  *
  * @param {object|null} config
  * @param {string} btnId

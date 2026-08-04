@@ -117,6 +117,17 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
     onChange({ sections: digest.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
   };
 
+  // Section order IS the priority (owner decision 2026-08-04): buildDigest lets
+  // the first matching section claim a task. These arrows are the whole
+  // priority UI — no separate priority field exists.
+  const moveSection = (index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (target < 0 || target >= digest.sections.length) return;
+    const sections = [...digest.sections];
+    [sections[index], sections[target]] = [sections[target], sections[index]];
+    onChange({ sections });
+  };
+
   // The status-condition options for a section = the labels of the status
   // column that the section's action button writes to (owner decision: the
   // condition lives on the button's status column).
@@ -323,8 +334,11 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
             כל מקבץ הוא טבלה במייל: עמודת תאריך שקובעת "באיחור" (תאריך שעבר — כולל היום),
             תנאי סטטוס שקובע אילו משימות נכנסות, ותפריט נפתח מעוצב (תגית צבע → אפשרויות)
             לבחירת סטטוס חדש מהכפתורים שנבחרו כאן.
+            <br />
+            סדר המקבצים קובע עדיפות: משימה שמתאימה לתנאים של כמה מקבצים תופיע רק
+            בגבוה ביותר מביניהם. סדרו עם החיצים.
           </div>
-          {digest.sections.map((section) => {
+          {digest.sections.map((section, sectionIndex) => {
             const primaryButtonId = section.buttonIds[0] ?? section.buttonId;
             const statusOptions = statusLabelOptionsFor(primaryButtonId);
             const selectedStatus = statusOptions.filter((o) =>
@@ -381,12 +395,30 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     />
                   </div>
                   {digest.sections.length > 1 && (
-                    <Button
-                      kind={Button.kinds.TERTIARY}
-                      onClick={() => onChange({ sections: digest.sections.filter((s) => s.id !== section.id) })}
-                    >
-                      הסרה
-                    </Button>
+                    <>
+                      <Button
+                        kind={Button.kinds.TERTIARY}
+                        disabled={sectionIndex === 0}
+                        ariaLabel="העלאת עדיפות המקבץ"
+                        onClick={() => moveSection(sectionIndex, -1)}
+                      >
+                        ↑
+                      </Button>
+                      <Button
+                        kind={Button.kinds.TERTIARY}
+                        disabled={sectionIndex === digest.sections.length - 1}
+                        ariaLabel="הורדת עדיפות המקבץ"
+                        onClick={() => moveSection(sectionIndex, 1)}
+                      >
+                        ↓
+                      </Button>
+                      <Button
+                        kind={Button.kinds.TERTIARY}
+                        onClick={() => onChange({ sections: digest.sections.filter((s) => s.id !== section.id) })}
+                      >
+                        הסרה
+                      </Button>
+                    </>
                   )}
                 </div>
                 <div className="dc-row">

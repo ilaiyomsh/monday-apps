@@ -8,7 +8,9 @@
 // Wire format unchanged:
 //   hidden: a, p, m, s, sig
 //   selection: <input type="hidden" name="item_<itemId>" [value]=btnId> ("" = no change)
-// Same item across clusters shares one state key + one hidden field.
+// Same item across clusters shares one state key + one hidden field — since the
+// section-priority dedup (2026-08-04) buildDigest no longer PRODUCES a duplicate
+// item, so this sharing is defence-in-depth for hand-built recipients only.
 
 import { escapeHtml } from './html.js';
 import { buildManifest, signManifest, currentSlot } from '../services/manifest-signature.js';
@@ -639,7 +641,7 @@ ${clusters}
         <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
         <div submit-error><template type="amp-mustache"><div class="err">{{message}}{{#detail}}<span class="err-detail">{{detail}}</span>{{/detail}}</div></template></div>
       </form>
-      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה בתפריט לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
+      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה בתפריט לא משתנות · כל משימה מופיעה פעם אחת, במקבץ בעל העדיפות הגבוהה · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
     </div>
   </body>
 </html>`;

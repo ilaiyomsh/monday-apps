@@ -122,6 +122,8 @@ describe('renderDigestAmp — per-task note column', () => {
     expect(html).not.toContain('dd.n9002');
   });
 
+  // Hand-built duplicate: buildDigest stopped producing one (section-priority
+  // dedup, 2026-08-04); the renderer's note de-dup stays as defence-in-depth.
   it('one hidden note field for a task that appears in TWO mapped clusters', () => {
     const html = render([
       noteSection(),

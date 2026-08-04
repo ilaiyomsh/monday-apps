@@ -189,11 +189,18 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
   for (const r of userRecipients) {
     const sections = [];
     let taskCount = 0;
+    // Section order = priority (owner decision 2026-08-04): the first section in
+    // config order claims a matching task; later sections skip it. One row per
+    // task per email — the same item can never carry two dropdowns, so a rendered
+    // message cannot produce a conflict_item. Per-recipient (not in the Phase-A
+    // classification) so the rule survives any future recipient-dependent filter.
+    const claimed = new Set();
     for (const section of digest.sections) {
-      const mine = (pendingBySection.get(section.id) ?? []).filter((t) =>
-        t.personIds.includes(r.personId)
+      const mine = (pendingBySection.get(section.id) ?? []).filter(
+        (t) => t.personIds.includes(r.personId) && !claimed.has(t.itemId)
       );
       if (mine.length === 0) continue;
+      for (const t of mine) claimed.add(t.itemId);
       taskCount += mine.length;
       sections.push({
         sectionId: section.id,

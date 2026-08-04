@@ -459,6 +459,12 @@ digest: {
 
 A digest block requires `peopleColumnId` to be set (matching column).
 
+**Section order = priority (owner decision 2026-08-04).** The `sections` array
+order is meaningful: a task whose conditions match several sections is claimed
+by the FIRST section in array order and skipped by the rest — each task appears
+exactly once per message (per recipient). The admin UI reorders with ↑/↓ arrows;
+no separate priority field exists.
+
 ## Environment (extends §5)
 
 - `RESEND_API_KEY`, `DIGEST_FROM` — the Resend sender funnel
