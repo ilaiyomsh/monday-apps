@@ -13,7 +13,11 @@ const envManager = new EnvironmentVariablesManager({ updateProcessEnv: true });
 import { createApp } from './app.js';
 import { createAppStorage } from './services/storage.js';
 import { createMondayApi } from './services/monday-api.js';
-import { createRateLimiter } from './helpers/rate-limit.js';
+import {
+  createRateLimiter,
+  AMP_PER_IP_CAPACITY,
+  AMP_PER_ACCOUNT_CAPACITY,
+} from './helpers/rate-limit.js';
 import { createSecureStorageBackend } from './storage/secure-storage-backend.js';
 import { createMemoryBackend } from './storage/memory-backend.js';
 import { getEnv } from './helpers/environment.js';
@@ -84,13 +88,14 @@ const backend = safeBootInit(
 );
 const storage = createAppStorage({ backend });
 const api = createMondayApi();
-// V6 §4 two buckets: A (per-IP, generous — abuse control before any secret
-// work) and B (per accountId:ip, 30/min — protects the monday complexity
-// budget after verification). Entropy blocks guessing; these protect
-// resources.
+// V6 §4 two buckets: A (per-IP — abuse control before any secret work) and B
+// (per accountId:ip — protects the monday complexity budget after
+// verification). Entropy blocks guessing; these protect resources. Both
+// capacities and the reason they are equal live with the limiter
+// (helpers/rate-limit.js) so they are testable and documented in one place.
 const rateLimiters = {
-  perIp: createRateLimiter({ capacity: 120 }),
-  perAccount: createRateLimiter(),
+  perIp: createRateLimiter({ capacity: AMP_PER_IP_CAPACITY }),
+  perAccount: createRateLimiter({ capacity: AMP_PER_ACCOUNT_CAPACITY }),
 };
 
 // SMTP XOAUTH2 is the only sending channel — a hard swap off the Gmail API,
