@@ -10,6 +10,33 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.7.0 — 2026-08-04
+
+- round339 (בקשת בעלים): **ארבעת הלוחות מוקמים בתוך תיקייה אחת בשם "בסיס מידע".**
+  התקנה בחשבון חדש כבר לא מפזרת ארבעה לוחות בשורש מרחב העבודה.
+  - `ensureProvisionFolder` נקראת **פעם אחת**, לפני כל `create_board`, וה-`folder_id`
+    שהיא מחזירה עובר לכל ארבעת הלוחות — כולל מסלול ה-custom object שיוצר גם את לוח
+    הדיונים עצמו.
+  - **התיקייה ממוחזרת, לא נוצרת בעיוורון:** הקוד קורא קודם `folders(workspace_ids)`
+    ומחפש התאמת שם. בלי זה כל הרצת top-up (או התקנה שנייה באותו מרחב עבודה) הייתה
+    יוצרת תיקיית "בסיס מידע" נוספת.
+  - **fail-soft במכוון:** אם התיקייה לא נקראת/נוצרת (הרשאות, תקלת API, מסלול ללא
+    תיקיות) ההקמה ממשיכה עם `folderId = null` והלוחות נוצרים בשורש — בדיוק כמו קודם.
+    אובדן הקיבוץ הוא נזק קוסמטי; הפלת ההתקנה כולה בגללו לא. הכשל נרשם, לא נבלע.
+  - **אימות מול ה-API לפי חוקי הריפו:** הצורות נבדקו מול הסכמה החיה
+    (`create_folder(name: String!, workspace_id: ID)`, `create_board(..., folder_id: ID)`,
+    `folders(workspace_ids: [ID]) { children }`) **וגם נבדקו חי** בסביבת ה-sandbox
+    (16291824, אובייקטי `WZ-`, נמחקו אחרי). הבדיקה החיה אישרה את מה שחשוב: לוח שנוצר
+    עם `folder_id` מוחזר באמת כ-`child` של אותה תיקייה. ה-mock בבדיקות בנוי על צורות
+    התשובה שנצפו בפועל.
+  - בדיקות: `provisionFolder.test.js` — 5 בדיקות (תיקייה אחת לכל הלוחות, גם במסלול
+    custom object, מיחזור תיקייה קיימת, fail-soft בשני מפלסים). red→green + **3
+    מוטציות שנהרגו**: ביטול המיחזור, איבוד התיקייה בלולאה שיוצרת 3 מתוך 4 הלוחות,
+    והסרת ה-fail-soft.
+  - **לא בקוד:** שם הרכיב בסרגל הצד ("Discussions" → "ניהול דיונים") אינו מוגדר בריפו
+    כלל — הוא שם ה-app feature במניפסט של האפליקציה ב-Developer Center. שינוי בצד
+    הפלטפורמה, בידי הבעלים (סוכנים לא נוגעים ב-`MONDAY_TOKEN`).
+
 ## 2.6.19 — 2026-08-03
 
 - round338 (החלטת בעלים): **אזהרות `exhaustive-deps` מושתקות עד להחלטה אחרת.**

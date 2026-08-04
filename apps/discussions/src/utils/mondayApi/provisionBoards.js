@@ -280,12 +280,65 @@ function countSteps(tasks, createDiscussionsBoard = false) {
   return n;
 }
 
-async function createBoard(name, workspaceId) {
+/*
+ * round339 (owner request) — every board this app provisions lands inside ONE
+ * folder named "בסיס מידע", so a fresh install does not scatter four boards
+ * across the workspace root.
+ *
+ * REUSED, not blindly created: a top-up run (or a second install in the same
+ * workspace) must not end up with two "בסיס מידע" folders. `folders(workspace_ids)`
+ * is read first and a name match wins. Verified live in the sandbox: the folder
+ * read returns `children { id name }`, i.e. the boards inside it, which is what
+ * makes the match trustworthy.
+ *
+ * FAIL-SOFT BY DESIGN: if the folder cannot be read or created (permissions, a
+ * plan without folders, an API hiccup), provisioning continues with folderId
+ * null and the boards land in the workspace root exactly as before. Losing the
+ * tidy grouping is a cosmetic loss; failing the whole install over it would not
+ * be. The failure is logged, never swallowed.
+ */
+export const PROVISION_FOLDER_NAME = 'בסיס מידע';
+
+export async function ensureProvisionFolder(workspaceId) {
+  try {
+    const read = await api(
+      `query ($ws: [ID]) { folders(workspace_ids: $ws, limit: 100) { id name } }`,
+      { ws: [workspaceId ? String(workspaceId) : null] },
+      'folders'
+    );
+    const existing = (read?.folders || []).find(
+      (f) => String(f?.name || '').trim() === PROVISION_FOLDER_NAME
+    );
+    if (existing?.id) {
+      logger.info(MODULE, 'תיקיית בסיס המידע קיימת — הלוחות ייווצרו בתוכה', { folderId: existing.id });
+      return String(existing.id);
+    }
+    const vars = { name: PROVISION_FOLDER_NAME };
+    if (workspaceId) vars.ws = String(workspaceId);
+    const created = await api(
+      `mutation ($name: String!, $ws: ID) { create_folder(name: $name, workspace_id: $ws) { id } }`,
+      vars,
+      'create_folder'
+    );
+    const id = created?.create_folder?.id;
+    if (!id) throw new Error('create_folder לא החזיר מזהה');
+    logger.info(MODULE, 'נוצרה תיקיית בסיס מידע', { folderId: id });
+    return String(id);
+  } catch (err) {
+    // Cosmetic grouping only — the install proceeds with boards at the workspace
+    // root rather than failing. Logged (never silent) so the reason is visible.
+    logger.warn(MODULE, 'יצירת/איתור תיקיית "בסיס מידע" נכשלה — הלוחות ייווצרו ישירות במרחב העבודה', err);
+    return null;
+  }
+}
+
+async function createBoard(name, workspaceId, folderId = null) {
   const vars = { name, kind: 'public' };
   if (workspaceId) vars.wsId = String(workspaceId);
+  if (folderId) vars.folderId = String(folderId);
   const data = await api(
-    `mutation ($name: String!, $kind: BoardKind!, $wsId: ID) {
-      create_board(board_name: $name, board_kind: $kind, workspace_id: $wsId) { id }
+    `mutation ($name: String!, $kind: BoardKind!, $wsId: ID, $folderId: ID) {
+      create_board(board_name: $name, board_kind: $kind, workspace_id: $wsId, folder_id: $folderId) { id }
     }`,
     vars,
     'create_board'
@@ -569,9 +622,12 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // tasks is either created (mode 'create') or an existing board is connected
   // (mode 'connect'), in which case its columns are still ensured/reused below.
   const boardIds = {};
+  // round339 — resolved ONCE, before any create_board, so all four boards share
+  // the same folder. Null (fail-soft) means "workspace root", i.e. the old behaviour.
+  const folderId = await ensureProvisionFolder(workspaceId);
   if (createDiscussionsBoard && !(existingConfig && hasIdEarly(existingConfig.boards?.discussions))) {
     setPhase('מקים את לוח הדיונים…');
-    boardIds.discussions = await createBoard(PROVISION_SPEC.discussions.name, workspaceId);
+    boardIds.discussions = await createBoard(PROVISION_SPEC.discussions.name, workspaceId, folderId);
     tick('נוצר לוח: דיונים');
   } else {
     boardIds.discussions = String(
@@ -610,7 +666,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       continue;
     }
     setPhase(`יוצר את לוח "${PROVISION_SPEC[key].name}"…`);
-    boardIds[key] = await createBoard(PROVISION_SPEC[key].name, workspaceId);
+    boardIds[key] = await createBoard(PROVISION_SPEC[key].name, workspaceId, folderId);
     tick(`נוצר לוח: ${PROVISION_SPEC[key].name}`);
   }
 
