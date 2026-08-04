@@ -74,16 +74,27 @@ describe('renderDigestAmp — per-task note column', () => {
     expect(html).toContain('סיכום ביצוע');
   });
 
-  it('emits exactly one hidden note_<itemId> field, bound to the typed value', () => {
+  // The TYPED input carries the name itself (live 2026-08-04): the value used to
+  // ride a bound hidden field fed by input-throttled → AMP.setState, and in Gmail
+  // that state never updated, so every note reached the server EMPTY while the
+  // status (fed by tap:) arrived fine. A named text input needs no binding to
+  // submit — the transport no longer depends on an event firing at all.
+  it('emits exactly one note_<itemId> field and it is the TYPED input', () => {
     const html = render([noteSection()]);
     expect(countOf(html, 'name="note_9001"')).toBe(1);
-    expect(html).toContain('[value]="dd.n9001"');
+    expect(html).toMatch(/<input type="text"[^>]*name="note_9001"/);
   });
 
-  it('the VISIBLE input carries no name — only the bound hidden field submits', () => {
+  it('does not fall back to a bound hidden field for the value', () => {
     const html = render([noteSection()]);
-    // Two named note fields for one item would submit the same key twice.
-    expect(countOf(html, 'name="note_9001"')).toBe(1);
+    // A hidden twin would submit the key twice, and its [value] binding is the
+    // exact mechanism that silently dropped every note.
+    expect(html).not.toContain('[value]="dd.n9001"');
+    expect(html).not.toMatch(/<input type="hidden"[^>]*name="note_9001"/);
+  });
+
+  it('still mirrors the typed value into state — the submit gate reads it', () => {
+    const html = render([noteSection()]);
     expect(html).toContain('AMP.setState({dd:{n9001:event.value}})');
   });
 

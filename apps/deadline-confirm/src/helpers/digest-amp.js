@@ -440,17 +440,26 @@ ${options}
  * @param {object} task
  * @param {boolean} includeHidden emit the wire hidden input once per item
  */
-function renderNoteCell(task, includeHidden) {
+function renderNoteCell(task, includeName) {
   const id = String(task.itemId);
   const nKey = `n${id}`;
   const vKey = `v${id}`;
-  const hidden = includeHidden
-    ? `\n                <input type="hidden" name="${escapeHtml(`note_${id}`)}" value="" [value]="dd.${nKey}">`
-    : '';
+  // THE TYPED INPUT CARRIES THE NAME. It used to be nameless, with the value
+  // riding a hidden twin bound `[value]="dd.n<id>"` and fed by
+  // input-throttled:AMP.setState — the same split the dropdown uses. Measured
+  // live 2026-08-04: that state never updated in Gmail, so every note reached
+  // the server EMPTY while the status (fed by `tap:`) arrived intact. The
+  // difference is the EVENT, not the binding: `tap` is honoured in AMP4EMAIL,
+  // `input-throttled` on a text input is not. A named input needs no event and
+  // no binding to submit, so the value no longer depends on either.
+  // Emitted once per item (an item listed in two mapped clusters would
+  // otherwise submit the key twice); later cells render read-only-ish twins
+  // with no name, which simply do not participate in the submission.
+  const name = includeName ? ` name="${escapeHtml(`note_${id}`)}"` : '';
   return `              <td class="note-cell">
-                <input type="text" class="note-in" placeholder="${escapeHtml(NOTE_PLACEHOLDER)}"
+                <input type="text"${name} class="note-in" placeholder="${escapeHtml(NOTE_PLACEHOLDER)}"
                        [class]="dd.${vKey} != '' && dd.${nKey} == '' ? 'note-in note-missing' : 'note-in'"
-                       on="input-throttled:AMP.setState({dd:{${nKey}:event.value}})">${hidden}
+                       on="input-throttled:AMP.setState({dd:{${nKey}:event.value}})">
               </td>`;
 }
 
