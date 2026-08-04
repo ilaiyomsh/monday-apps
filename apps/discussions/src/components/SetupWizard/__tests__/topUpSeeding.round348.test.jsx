@@ -197,15 +197,46 @@ describe('round348 — top-up seeds through the mounted provider', () => {
    * circling back to.
    */
   it('hydrates the provider when the store disagrees with it', async () => {
-    storage.getItem.mockImplementation(async () => ({
-      data: { value: JSON.stringify({ templates: [{ id: 'seed-default-type', discussionType: 'דיון כללי', topics: [] }] }) },
-    }));
+    const ours = [{ id: 'seed-default-type', discussionType: 'דיון כללי', topics: [] }];
+    storage.getItem.mockImplementation(async () => ({ data: { value: JSON.stringify({ templates: ours }) } }));
+    // A real reload commits what it read, so the mock returns it — the result is read off THIS
+    // list (round350), not off the durable read that triggered the hydration.
+    reloadTypeTemplates.mockResolvedValueOnce(ours);
     withProvider([]);
     await clickCreate();
     await waitFor(() => expect(reloadTypeTemplates).toHaveBeenCalled());
     // ...and the label is still reconciled, because the template really is there.
     expect(addDropdownLabel).toHaveBeenCalled();
     expect(upsertTypeTemplate).not.toHaveBeenCalled();
+  });
+
+  /*
+   * round350 (review finding) — the answer rests on the RELOADED list. A reload that fails returns
+   * null, and claiming `already-default` off the earlier read would add the label while the session
+   * still holds an empty list: the same staleness, one level deeper.
+   */
+  it('claims nothing when the hydration itself fails', async () => {
+    storage.getItem.mockImplementation(async () => ({
+      data: { value: JSON.stringify({ templates: [{ id: 'seed-default-type', discussionType: 'דיון כללי', topics: [] }] }) },
+    }));
+    reloadTypeTemplates.mockResolvedValueOnce(null);
+    withProvider([]);
+    await clickCreate();
+    await waitFor(() => expect(reloadTypeTemplates).toHaveBeenCalled());
+    expect(addDropdownLabel).not.toHaveBeenCalled();
+    expect(upsertTypeTemplate).not.toHaveBeenCalled();
+  });
+
+  // ...and when the reload SUCCEEDS but comes back without our default (a racing delete), the
+  // label is not added either — the answer follows the reloaded list, not the earlier read.
+  it('follows the reloaded list, not the read that preceded it', async () => {
+    storage.getItem.mockImplementation(async () => ({
+      data: { value: JSON.stringify({ templates: [{ id: 'seed-default-type', discussionType: 'דיון כללי', topics: [] }] }) },
+    }));
+    reloadTypeTemplates.mockResolvedValueOnce([{ id: 'x', discussionType: 'הנהלה', topics: [] }]);
+    withProvider([]);
+    await clickCreate();
+    expect(addDropdownLabel).not.toHaveBeenCalled();
   });
 
   // No disagreement, no reload: an agreeing provider must not pay for a second read.

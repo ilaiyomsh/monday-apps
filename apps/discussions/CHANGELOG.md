@@ -10,6 +10,15 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.13.3 — 2026-08-04
+
+round350 — התוצאה נשענת על הרשימה שנטענה מחדש, לא על הקריאה שקדמה לה.
+
+`reloadTypeTemplates()` מחזיר `null` כשהקריאה או הפענוח נכשלו, והתעלמנו מזה: דיווחנו
+`already-default` על סמך הקריאה העמידה שקדמה לרענון, הוספנו את התווית — והסשן נשאר עם
+רשימה ריקה. אותה בעיה בדיוק שהסבבים הקודמים חיסלו, רק רמה אחת פנימה. מעכשיו: אין
+הידרציה, אין הצהרה — והתשובה נקראת מהרשימה שהרענון באמת קיבע.
+
 ## 2.13.2 — 2026-08-04
 
 round349 — ממצא P1 שעצר שחרור: רשימה ריקה אחרי טעינה איננה הוכחה שהחנות ריקה.

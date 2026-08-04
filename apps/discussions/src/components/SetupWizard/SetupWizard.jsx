@@ -259,8 +259,15 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
          * creates a discussion with no agenda until a reload. Bringing the provider in line is
          * the whole point of having found the disagreement.
          */
-        await templatesCtx.reloadTypeTemplates?.();
-        return hasDefaultTypeTemplate(durable.list) ? 'already-default' : 'skipped-existing';
+        const hydrated = await templatesCtx.reloadTypeTemplates?.();
+        /*
+         * And the RELOADED list is what the answer rests on (round350 review finding): a reload
+         * that failed returns null, and reporting `already-default` off the earlier read would add
+         * the label while this session still holds an empty list — the same staleness one level
+         * deeper. No hydration, no claim.
+         */
+        if (!hydrated) return 'failed';
+        return hasDefaultTypeTemplate(hydrated) ? 'already-default' : 'skipped-existing';
       }
       /*
        * `strict: true` (review finding) — without it `persistTypes` logs a storage failure and
