@@ -29,7 +29,10 @@ const { api, state } = vi.hoisted(() => {
       state.calls.push({ q: s, vars });
       if (s.includes('folders(')) {
         if (state.folderFails) throw new Error('folders read failed');
-        return { folders: state.existingFolders };
+        // Paged like the real API: `page` is 1-based, a short page is the last.
+        const size = 100;
+        const page = Number(vars?.page || 1);
+        return { folders: state.existingFolders.slice((page - 1) * size, page * size) };
       }
       if (s.includes('create_folder')) {
         if (state.folderFails) throw new Error('create_folder failed');
@@ -102,6 +105,29 @@ describe('round339 — provisioned boards land in one "בסיס מידע" folder
     await provisionAllBoards({ discussionsBoardId: '1', workspaceId: '77' });
     expect(folderCreateCalls()).toHaveLength(0);
     for (const c of createBoardCalls()) expect(c.vars.folderId).toBe('9999');
+  });
+
+  /*
+   * Added after the PR review, which was right: the lookup read page 1 only, so
+   * in a workspace with more folders than fit one page an existing "בסיס מידע"
+   * read as ABSENT and create_folder made a duplicate — defeating the very reuse
+   * this feature depends on. 100 filler folders push the real one onto page 2.
+   */
+  it('finds the folder on a LATER page instead of creating a duplicate', async () => {
+    state.existingFolders = [
+      ...Array.from({ length: 100 }, (_, i) => ({ id: `f${i}`, name: `תיקייה ${i}` })),
+      { id: '7777', name: PROVISION_FOLDER_NAME },
+    ];
+    await provisionAllBoards({ discussionsBoardId: '1', workspaceId: '77' });
+    expect(folderCreateCalls()).toHaveLength(0);
+    for (const c of createBoardCalls()) expect(c.vars.folderId).toBe('7777');
+  });
+
+  it('stops paging at a short page (does not loop the API needlessly)', async () => {
+    state.existingFolders = [{ id: '1', name: 'לא זה' }];
+    await provisionAllBoards({ discussionsBoardId: '1', workspaceId: '77' });
+    const folderReads = state.calls.filter((c) => c.q.includes('folders('));
+    expect(folderReads).toHaveLength(1);
   });
 
   it('is fail-soft: a folder failure still provisions the boards, at the workspace root', async () => {

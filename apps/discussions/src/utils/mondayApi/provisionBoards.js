@@ -299,16 +299,34 @@ function countSteps(tasks, createDiscussionsBoard = false) {
  */
 export const PROVISION_FOLDER_NAME = 'בסיס מידע';
 
+const FOLDER_PAGE_SIZE = 100;
+const FOLDER_MAX_PAGES = 20; // 2,000 folders — a runaway guard, not a real limit
+
 export async function ensureProvisionFolder(workspaceId) {
   try {
-    const read = await api(
-      `query ($ws: [ID]) { folders(workspace_ids: $ws, limit: 100) { id name } }`,
-      { ws: [workspaceId ? String(workspaceId) : null] },
-      'folders'
-    );
-    const existing = (read?.folders || []).find(
-      (f) => String(f?.name || '').trim() === PROVISION_FOLDER_NAME
-    );
+    /*
+     * PAGINATED (PR review on round339, correct): `folders` is a paged
+     * collection — reading page 1 only meant that in a workspace with more
+     * folders than one page, an existing "בסיס מידע" on a later page read as
+     * ABSENT and a duplicate got created. That is the very failure the reuse
+     * lookup exists to prevent, so the lookup has to see every page.
+     *
+     * Stop conditions: a match, a short page (the last one), or the runaway
+     * guard. `limit` is passed explicitly because the API default is 25.
+     */
+    let existing = null;
+    for (let page = 1; page <= FOLDER_MAX_PAGES; page += 1) {
+      const read = await api(
+        `query ($ws: [ID], $limit: Int!, $page: Int!) {
+          folders(workspace_ids: $ws, limit: $limit, page: $page) { id name }
+        }`,
+        { ws: [workspaceId ? String(workspaceId) : null], limit: FOLDER_PAGE_SIZE, page },
+        'folders'
+      );
+      const batch = read?.folders || [];
+      existing = batch.find((f) => String(f?.name || '').trim() === PROVISION_FOLDER_NAME);
+      if (existing?.id || batch.length < FOLDER_PAGE_SIZE) break;
+    }
     if (existing?.id) {
       logger.info(MODULE, 'תיקיית בסיס המידע קיימת — הלוחות ייווצרו בתוכה', { folderId: existing.id });
       return String(existing.id);
@@ -622,8 +640,22 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // tasks is either created (mode 'create') or an existing board is connected
   // (mode 'connect'), in which case its columns are still ensured/reused below.
   const boardIds = {};
-  // round339 — resolved ONCE, before any create_board, so all four boards share
-  // the same folder. Null (fail-soft) means "workspace root", i.e. the old behaviour.
+  /*
+   * round339 — resolved ONCE, before any create_board, so every board this run
+   * CREATES shares the same folder. Null (fail-soft) means "workspace root".
+   *
+   * SCOPE, stated precisely (PR review on round339 was right to flag the gap):
+   * this folders the boards provisioning CREATES. In a BOARD-VIEW install the
+   * discussions board is the pre-existing HOST board — it never goes through
+   * createBoard, so it stays wherever the account already keeps it, and only
+   * topics/tasks/decisions land in the folder. All four land there in the
+   * CUSTOM-OBJECT install, where the discussions board is created too.
+   *
+   * Relocating a board the account already owns is deliberately NOT done here:
+   * `update_board_hierarchy` could move it, but silently moving a board someone
+   * placed on purpose is a surprise that is hard to undo (they would have to
+   * remember where it was). Left as an owner decision.
+   */
   const folderId = await ensureProvisionFolder(workspaceId);
   if (createDiscussionsBoard && !(existingConfig && hasIdEarly(existingConfig.boards?.discussions))) {
     setPhase('מקים את לוח הדיונים…');
