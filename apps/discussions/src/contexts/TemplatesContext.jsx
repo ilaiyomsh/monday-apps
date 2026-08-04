@@ -34,7 +34,23 @@ const TYPE_STORAGE_KEY_BASE = 'discussions_type_templates';
 const TYPE_COLORS_STORAGE_KEY_BASE = 'discussions_type_colors';
 const TIMEOUT_MS = 5000;
 
-const TemplatesContext = createContext(null);
+/*
+ * round349 — hoisted out of `load()`: the targeted `reloadTypeTemplates` needs the same bound,
+ * and two copies of it would be two things to keep in step.
+ */
+const withTimeout = (p) =>
+  Promise.race([
+    p,
+    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), TIMEOUT_MS)),
+  ]);
+
+/*
+ * round348 — EXPORTED so a component can distinguish "provider mounted" from the
+ * empty-store fallback `useTemplates()` returns. `SetupWizard` runs in both worlds: first-run
+ * it is mounted by SettingsGate ABOVE this provider, and in top-up mode it is inside it, where
+ * seeding must go THROUGH the provider or its in-memory state never learns about the write.
+ */
+export const TemplatesContext = createContext(null);
 let missingProviderWarned = false;
 
 function genId() {
@@ -117,12 +133,6 @@ export function TemplatesProvider({ children }) {
   }, []);
 
   const load = useCallback(async () => {
-    const withTimeout = (p) =>
-      Promise.race([
-        p,
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), TIMEOUT_MS)),
-      ]);
-
     // Topic templates.
     try {
       const res = await withTimeout(monday.storage.getItem(instanceKey(context)));
@@ -315,8 +325,41 @@ export function TemplatesProvider({ children }) {
 
   // Upsert by discussionType — there is at most ONE type template per type, so
   // saving replaces any existing entry for that type (keeping its id) or appends.
+  /*
+   * round349 (review finding) — a targeted RE-READ of the type templates.
+   *
+   * `load()` runs once and commits `[]` when its read fails, so a session can hold an empty list
+   * while durable storage actually has templates. Whoever discovers that disagreement (the setup
+   * wizard, verifying before it seeds) needs a way to bring this provider back in line — without
+   * reaching into its state, and without re-reading the three OTHER stores `load()` covers.
+   * Returns the committed list so the caller can act on what is now really in memory.
+   */
+  const reloadTypeTemplates = useCallback(async () => {
+    try {
+      const res = await withTimeout(monday.storage.getItem(typeInstanceKey(context)));
+      const saved = res?.data?.value ? JSON.parse(res.data.value) : null;
+      const raw = Array.isArray(saved) ? saved : saved?.templates || [];
+      const list = raw.map((t) => sanitizeTypeTemplate(t, t?.id || genId())).filter(Boolean);
+      commitTypes(list);
+      return list;
+    } catch (err) {
+      // Deliberately NOT committing []: an unreadable store is unknown, and overwriting a good
+      // in-memory list with emptiness is the very failure this round exists to remove.
+      logger.warn('TemplatesContext', 'רענון תבניות סוגי הדיון נכשל — המצב בזיכרון נשאר כשהיה', err);
+      return null;
+    }
+  }, [context, commitTypes]);
+
+  /*
+   * round348 (review finding) — `opts.strict` is forwarded to persistTypes, which otherwise
+   * LOGS a storage failure and resolves anyway. A caller that acts on the result (the install
+   * wizard adds the type's dropdown label only if the template was really saved) would
+   * otherwise be told "saved" for a write that never landed, leaving a selectable type with no
+   * agenda after the next reload. Default stays non-strict: the UI callers show their own
+   * toast and prefer the optimistic in-memory update over an exception.
+   */
   const upsertTypeTemplate = useCallback(
-    async (template) => {
+    async (template, opts = {}) => {
       const clean = sanitizeTypeTemplate(template, template?.id || genId());
       if (!clean) return null; // missing/invalid discussionType
       const existing = typeTemplatesRef.current.find((t) => t.discussionType === clean.discussionType);
@@ -324,7 +367,7 @@ export function TemplatesProvider({ children }) {
       const next = existing
         ? typeTemplatesRef.current.map((t) => (t.discussionType === clean.discussionType ? withId : t))
         : [...typeTemplatesRef.current, withId];
-      await persistTypes(next);
+      await persistTypes(next, opts);
       return withId;
     },
     [persistTypes]
@@ -469,6 +512,7 @@ export function TemplatesProvider({ children }) {
         updateParticipantTemplate,
         deleteParticipantTemplate,
         upsertTypeTemplate,
+        reloadTypeTemplates,
         deleteTypeTemplate,
         typeColor,
         typeColorName,
@@ -504,6 +548,7 @@ export function useTemplates() {
       updateParticipantTemplate: async () => null,
       deleteParticipantTemplate: async () => {},
       upsertTypeTemplate: async () => null,
+      reloadTypeTemplates: async () => [],
       deleteTypeTemplate: async () => {},
       typeColor: (name) => colorNameToCss(stableColorForKey(name)),
       typeColorName: (name) => stableColorForKey(name),
