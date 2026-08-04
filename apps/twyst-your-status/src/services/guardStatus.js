@@ -22,13 +22,18 @@
  * this column would still be skipped. Tri-state: true / false / null (server
  * could not know — e.g. the column has no owners yet, or an older server).
  *
- * @returns {Promise<{ activated: boolean|null, enrolled: boolean|null, primaryAuthorized: boolean|null }>}
+ * round327 review (Codex P2): also `meAuthorized` — whether the REQUESTING
+ * user holds a token. The settings line renders only when the DRAFT primary
+ * owner is the current user, and a draft crowning is not saved yet, so the
+ * stored-primary signal can be stale for it; "am I authorized" cannot be.
+ *
+ * @returns {Promise<{ activated: boolean|null, enrolled: boolean|null, primaryAuthorized: boolean|null, meAuthorized: boolean|null }>}
  */
 
 import logger from '../utils/logger.js';
 import { resolveGuardBase } from './guardBase.js';
 
-const UNKNOWN = { activated: null, enrolled: null, primaryAuthorized: null };
+const UNKNOWN = { activated: null, enrolled: null, primaryAuthorized: null, meAuthorized: null };
 
 /** strict tri-state: anything that is not a boolean collapses to null */
 const triState = (value) => (value === true ? true : value === false ? false : null);
@@ -55,6 +60,7 @@ export async function getGuardStatus({ boardId, columnId }, deps = {}) {
       activated: body?.activated === true,
       enrolled: body?.enrolled === true,
       primaryAuthorized: triState(body?.primaryAuthorized),
+      meAuthorized: triState(body?.meAuthorized),
     };
   } catch (err) {
     // Best-effort: an unreachable status probe must not break the settings screen.

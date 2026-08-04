@@ -20,7 +20,7 @@ const okResponse = (status, body) => ({
 const makeDeps = (overrides = {}) => ({
   guardUrl: 'https://guard.example',
   sessionTokenProvider: vi.fn().mockResolvedValue('session-jwt'),
-  fetchImpl: vi.fn().mockResolvedValue(okResponse(200, { activated: true, enrolled: true, primaryAuthorized: true })),
+  fetchImpl: vi.fn().mockResolvedValue(okResponse(200, { activated: true, enrolled: true, primaryAuthorized: true, meAuthorized: true })),
   ...overrides,
 });
 
@@ -28,7 +28,7 @@ describe('getGuardStatus', () => {
   it('returns the neutral {null,null} without fetching when the base resolves to null (dev-harness mock)', async () => {
     const deps = makeDeps({ guardUrl: null });
     const status = await getGuardStatus({ boardId: '5098', columnId: 'status_col' }, deps);
-    expect(status).toEqual({ activated: null, enrolled: null, primaryAuthorized: null });
+    expect(status).toEqual({ activated: null, enrolled: null, primaryAuthorized: null, meAuthorized: null });
     expect(deps.fetchImpl).not.toHaveBeenCalled();
     expect(deps.sessionTokenProvider).not.toHaveBeenCalled();
   });
@@ -43,13 +43,13 @@ describe('getGuardStatus', () => {
   });
 
   it('maps a 200 body to strict booleans (activated + enrolled) and tri-state primaryAuthorized', async () => {
-    const deps = makeDeps({ fetchImpl: vi.fn().mockResolvedValue(okResponse(200, { activated: true, enrolled: false, primaryAuthorized: false })) });
-    expect(await getGuardStatus({ boardId: 1, columnId: 'c' }, deps)).toEqual({ activated: true, enrolled: false, primaryAuthorized: false });
+    const deps = makeDeps({ fetchImpl: vi.fn().mockResolvedValue(okResponse(200, { activated: true, enrolled: false, primaryAuthorized: false, meAuthorized: true })) });
+    expect(await getGuardStatus({ boardId: 1, columnId: 'c' }, deps)).toEqual({ activated: true, enrolled: false, primaryAuthorized: false, meAuthorized: true });
   });
 
   it('coerces a missing/undefined flag to false, never true — but primaryAuthorized stays null (unknowable, e.g. older server)', async () => {
     const deps = makeDeps({ fetchImpl: vi.fn().mockResolvedValue(okResponse(200, {})) });
-    expect(await getGuardStatus({ boardId: 1, columnId: 'c' }, deps)).toEqual({ activated: false, enrolled: false, primaryAuthorized: null });
+    expect(await getGuardStatus({ boardId: 1, columnId: 'c' }, deps)).toEqual({ activated: false, enrolled: false, primaryAuthorized: null, meAuthorized: null });
   });
 
   it('collapses a non-boolean primaryAuthorized to null, never truthy-coerced', async () => {
@@ -65,11 +65,11 @@ describe('getGuardStatus', () => {
 
   it('returns the neutral {null,null} on a non-2xx answer (does not treat it as not-connected)', async () => {
     const deps = makeDeps({ fetchImpl: vi.fn().mockResolvedValue(okResponse(502, { error: 'status_failed' })) });
-    expect(await getGuardStatus({ boardId: 1, columnId: 'c' }, deps)).toEqual({ activated: null, enrolled: null, primaryAuthorized: null });
+    expect(await getGuardStatus({ boardId: 1, columnId: 'c' }, deps)).toEqual({ activated: null, enrolled: null, primaryAuthorized: null, meAuthorized: null });
   });
 
   it('returns the neutral {null,null} — never throws — when the network request rejects', async () => {
     const deps = makeDeps({ fetchImpl: vi.fn().mockRejectedValue(new TypeError('Failed to fetch')) });
-    await expect(getGuardStatus({ boardId: 1, columnId: 'c' }, deps)).resolves.toEqual({ activated: null, enrolled: null, primaryAuthorized: null });
+    await expect(getGuardStatus({ boardId: 1, columnId: 'c' }, deps)).resolves.toEqual({ activated: null, enrolled: null, primaryAuthorized: null, meAuthorized: null });
   });
 });

@@ -181,7 +181,8 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ru
 
       const reader = await tokenStore.getReaderToken(session.accountId);
       if (!reader) {
-        res.status(200).json({ activated: false, enrolled: false, primaryAuthorized: false });
+        // No reader ⇒ no owner anywhere has authorized, the requester included.
+        res.status(200).json({ activated: false, enrolled: false, primaryAuthorized: false, meAuthorized: false });
         return;
       }
       let enrolled = false;
@@ -199,7 +200,13 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ru
           primaryAuthorized = (await tokenStore.getOwnerToken(session.accountId, String(owners.primaryOwnerId))) != null;
         }
       }
-      res.status(200).json({ activated: true, enrolled, primaryAuthorized });
+      // round327 review (Codex P2) — the settings line renders only when the
+      // DRAFT primary owner is the requesting user, and a draft crowning is not
+      // saved yet, so `primaryAuthorized` (the STORED primary) can be stale for
+      // it. "Is the REQUESTER authorized" is the exact question that line asks,
+      // and it is column-independent.
+      const meAuthorized = (await tokenStore.getOwnerToken(session.accountId, String(session.userId))) != null;
+      res.status(200).json({ activated: true, enrolled, primaryAuthorized, meAuthorized });
     } catch (err) {
       logger.error('status probe failed', TAG, { error: String(err?.message ?? err) });
       res.status(502).json({ error: 'status_failed' });

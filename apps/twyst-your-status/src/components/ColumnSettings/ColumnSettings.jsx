@@ -957,18 +957,20 @@ function ColumnSettings({ context, variant = 'overlay' }) {
   };
 
   // round326 — the guard's connection state, so the one switch can show
-  // "מחובר ✓" vs "דרוש אישור". round327: the signal is the PRIMARY owner's own
-  // authorization (primaryAuthorized) — account-level `activated` can be true
-  // because a DIFFERENT owner authorized, while this column's reverts would all
-  // be skipped. Account-level is only the fallback when the server cannot know
-  // (fresh column, no owners yet). null = unknown/loading.
-  const [guardConn, setGuardConn] = useState({ activated: null, primaryAuthorized: null });
-  const guardConnected = guardConn.primaryAuthorized ?? guardConn.activated;
+  // "מחובר ✓" vs "דרוש אישור". round327 (+Codex P2): the line renders only when
+  // the DRAFT primary owner is the CURRENT USER, so the exact question it asks
+  // is "am I authorized" (meAuthorized) — the stored-primary signal
+  // (primaryAuthorized) goes stale the moment the user crowns themselves in the
+  // draft, and account-level `activated` can be true thanks to a DIFFERENT
+  // owner while this column's reverts are all skipped. Those two are fallbacks,
+  // in that order, only when the server cannot answer. null = unknown/loading.
+  const [guardConn, setGuardConn] = useState({ activated: null, primaryAuthorized: null, meAuthorized: null });
+  const guardConnected = guardConn.meAuthorized ?? guardConn.primaryAuthorized ?? guardConn.activated;
 
   const refreshGuardStatus = useCallback(async () => {
     if (!boardId || !columnId) return;
-    const { activated, primaryAuthorized } = await getGuardStatus({ boardId, columnId });
-    setGuardConn({ activated, primaryAuthorized });
+    const { activated, primaryAuthorized, meAuthorized } = await getGuardStatus({ boardId, columnId });
+    setGuardConn({ activated, primaryAuthorized, meAuthorized });
   }, [boardId, columnId]);
 
   // Read on open, and again when the tab regains focus — that is when the owner
