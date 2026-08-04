@@ -1,0 +1,3 @@
+# The repo is pnpm; a committed npm lockfile drifts out of sync with package.json
+# and breaks the monday-code buildpack (see .mappsignore). Never commit one.
+package-lock.json
