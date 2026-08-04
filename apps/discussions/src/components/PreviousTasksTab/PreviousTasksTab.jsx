@@ -37,7 +37,7 @@ import { isValidStatus } from '@generated/constants/statusConfig';
 import { usePreviousDecisions } from './usePreviousDecisions.js';
 import { PreviousDecisionsTable } from './PreviousDecisionsTable.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
+import { PREVIOUS_TASKS_MODES, resolvePreference } from '@generated/utils/mondayApi/boards.config.js';
 // Quick-filter status battery (round 81) — shared buckets + presentation chip.
 import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
 import battery from '@generated/components/TaskStatusBattery/TaskStatusBattery.module.css';
@@ -139,7 +139,9 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // by the current discussion's TYPE (taskTypeID written on each task). Owner sets
   // this in Settings (settings.preferences.previousTasksMode).
   const { settings } = useSettings();
-  const mode = settings?.preferences?.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION;
+  // round340 — through resolvePreference, so an instance with nothing stored gets the
+  // SHIPPED default (now 'auto') instead of a fallback hardcoded at this call site.
+  const mode = resolvePreference(settings?.preferences, 'previousTasksMode');
   // Resolve by TYPE when the mode is DISCUSSION_TYPE (always) or AUTO *and* this
   // discussion actually has a type. In AUTO with no type we fall through to the
   // previous-discussion link path (byType=false) — so a single flag still drives

@@ -9,7 +9,7 @@ import { useDecisions } from '@generated/hooks/useDecisions';
 import { useDiscussionDetails } from '@generated/hooks/useDiscussions';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { DEFAULT_PREFERENCES, resolveAccessPeople, isComponentVisible } from '@api/boards.config.js';
+import { DEFAULT_PREFERENCES, resolveAccessPeople, isComponentVisible, resolvePreference } from '@api/boards.config.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { usePermissions } from '@generated/hooks/usePermission.js';
@@ -368,7 +368,10 @@ export function DiscussionCard({
   // discussion type's template (deciderIsLead). Falls back to the hook default
   // (current user) when off / no lead. Always replaceable inline afterwards.
   const defaultDecider = useMemo(() => {
-    const globalOn = settings?.preferences?.defaultDeciderLead === true;
+    // round340 — `=== true` treated an UNSET preference as false, so the shipped default
+    // could never apply. resolvePreference returns a stored `false` as-is and only an
+    // absent value as the default.
+    const globalOn = resolvePreference(settings?.preferences, 'defaultDeciderLead') === true;
     const typeTpl = (typeTemplates || []).find((t) => t?.discussionType === data?.discussionTypeID);
     const on = globalOn || typeTpl?.deciderIsLead === true;
     const lead = Array.isArray(data?.discussionLeadID) ? data.discussionLeadID : [];

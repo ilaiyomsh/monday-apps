@@ -175,6 +175,31 @@ export const DEFAULT_PREFERENCES = {
   },
 };
 
+/**
+ * Read ONE preference, falling back to its shipped default.
+ *
+ * round340 — this exists because changing a value in DEFAULT_PREFERENCES turned out not
+ * to change anything. Every read site had spelled its own fallback inline
+ * (`settings?.preferences?.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION`,
+ * `settings?.preferences?.defaultDeciderLead === true`), so DEFAULT_PREFERENCES was
+ * documentation rather than behaviour: an instance with nothing stored got whatever each
+ * call site happened to hardcode, and the two disagreed after the owner asked for new
+ * defaults. Reading through here is what makes DEFAULT_PREFERENCES the single answer.
+ *
+ * "Unset" means undefined, null, or an empty string — a blank stored value is unusable
+ * for every preference we have, so it resolves to the default rather than through it.
+ * `false` and `0` are REAL values and are returned as-is, which is the whole reason this
+ * cannot be written as `stored || default`.
+ *
+ * @param {object|null|undefined} preferences settings.preferences
+ * @param {string} key a DEFAULT_PREFERENCES key
+ */
+export function resolvePreference(preferences, key) {
+  const stored = preferences?.[key];
+  if (stored === undefined || stored === null || stored === '') return DEFAULT_PREFERENCES[key];
+  return stored;
+}
+
 // The discussion-board roles selectable as auto-fill sources for the tasks
 // access columns (round 78). `alias` is the discussions COLUMN_SCHEMA alias;
 // `label` is the Hebrew fallback shown when the live column title is unknown.

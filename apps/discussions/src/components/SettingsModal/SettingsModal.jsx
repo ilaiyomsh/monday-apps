@@ -21,7 +21,7 @@ function Diskette({ size = 16 }) {
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, COLUMN_SCHEMA, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, COLUMN_SCHEMA, DEFAULT_PREFERENCES, resolvePreference, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField } from '../../utils/mondayApi/boards.config.js';
 
 // Round 78: the effective auto-fill role list for a tasks access column
 // (taskEditorsID) — the stored preference, or the default when
@@ -1439,8 +1439,8 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                     <div className={styles.prefControl}>
                       <ButtonGroup
                         options={PREVIOUS_TASKS_MODE_OPTIONS}
-                        value={preferences.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION}
-                        onSelect={(value) => setPreferences((p) => ({ ...p, previousTasksMode: value || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION }))}
+                        value={resolvePreference(preferences, 'previousTasksMode')}
+                        onSelect={(value) => setPreferences((p) => ({ ...p, previousTasksMode: value || DEFAULT_PREFERENCES.previousTasksMode }))}
                         size="small"
                         kind="secondary"
                       />
@@ -1457,7 +1457,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                         <input
                           type="checkbox"
-                          checked={preferences.defaultDeciderLead === true}
+                          checked={resolvePreference(preferences, 'defaultDeciderLead') === true}
                           onChange={(e) => setPreferences((p) => ({ ...p, defaultDeciderLead: e.target.checked }))}
                         />
                         <Text type={"text2"}>בכל הדיונים, ללא תלות בסוג</Text>

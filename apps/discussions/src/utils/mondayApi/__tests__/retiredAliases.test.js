@@ -6,6 +6,7 @@ import {
   PERMISSION_ROLE_SOURCES,
   DEFAULT_PREFERENCES,
   PREVIOUS_TASKS_MODES,
+  resolvePreference,
 } from '../boards.config.js';
 
 /*
@@ -139,21 +140,50 @@ describe('pruneRetiredSettings', () => {
   });
 });
 
-describe('round340 preference defaults', () => {
-  /*
-   * Owner request: a fresh instance opens on AUTO. AUTO is the strictly more forgiving
-   * mode — a discussion WITH a type resolves by type, one without still falls back to
-   * the previous-discussion link — so nothing that worked under LINKED_DISCUSSION
-   * stops working, while the old default started every install in the mode that shows
-   * nothing until somebody manually links a previous discussion.
-   */
-  it('previous-tasks mode defaults to אוטומטי', () => {
+/*
+ * round340 preference defaults — and the reason these are `resolvePreference` tests
+ * rather than assertions about the constants.
+ *
+ * My first version of this block asserted DEFAULT_PREFERENCES.previousTasksMode === AUTO
+ * and DEFAULT_PREFERENCES.defaultDeciderLead === true. Both passed, and BOTH FEATURES
+ * WERE STILL BROKEN: every read site spelled its own fallback inline
+ * (`|| PREVIOUS_TASKS_MODES.LINKED_DISCUSSION`, `=== true`), so the constants were
+ * documentation and the app never consulted them. Asserting the constant tests that I
+ * typed a value, not that anything reads it.
+ */
+describe('resolvePreference — the defaults are actually REACHABLE', () => {
+  it('previous-tasks mode resolves to אוטומטי when nothing is stored', () => {
+    expect(resolvePreference(undefined, 'previousTasksMode')).toBe(PREVIOUS_TASKS_MODES.AUTO);
+    expect(resolvePreference({}, 'previousTasksMode')).toBe(PREVIOUS_TASKS_MODES.AUTO);
     expect(DEFAULT_PREFERENCES.previousTasksMode).toBe(PREVIOUS_TASKS_MODES.AUTO);
   });
 
-  // Owner request: the discussion's lead is the decider far more often than whoever
-  // happens to be typing the decision, and the field stays editable inline either way.
-  it('a new decision defaults its מחליט to the discussion lead', () => {
+  it('a new decision defaults its מחליט to the discussion lead when nothing is stored', () => {
+    expect(resolvePreference({}, 'defaultDeciderLead')).toBe(true);
     expect(DEFAULT_PREFERENCES.defaultDeciderLead).toBe(true);
+  });
+
+  // A STORED value always wins — the point of a default is to cover the unset case only.
+  it('a stored value wins over the default', () => {
+    expect(resolvePreference({ previousTasksMode: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION }, 'previousTasksMode'))
+      .toBe(PREVIOUS_TASKS_MODES.LINKED_DISCUSSION);
+  });
+
+  /*
+   * The case that rules out writing this as `stored || default`: an owner who
+   * deliberately UNTICKED "the decider is the lead" stored `false`, and a `||` fallback
+   * would read that as unset and hand them back `true` — silently overriding a real
+   * choice with the default. Same for a numeric 0.
+   */
+  it('returns a stored FALSE as-is, rather than treating it as unset', () => {
+    expect(resolvePreference({ defaultDeciderLead: false }, 'defaultDeciderLead')).toBe(false);
+    expect(resolvePreference({ defaultLayoutRatio: 0 }, 'defaultLayoutRatio')).toBe(0);
+  });
+
+  // null / '' ARE unset: a blank stored mode is unusable, so it resolves to the default
+  // rather than through it as an empty string.
+  it('treats null and an empty string as unset', () => {
+    expect(resolvePreference({ previousTasksMode: null }, 'previousTasksMode')).toBe(PREVIOUS_TASKS_MODES.AUTO);
+    expect(resolvePreference({ previousTasksMode: '' }, 'previousTasksMode')).toBe(PREVIOUS_TASKS_MODES.AUTO);
   });
 });
