@@ -52,6 +52,15 @@ export interface DigestSectionConfig {
   title: string;
   dateColumnId: string;
   dateColumnTitle: string; // the board column's title, captured at save → email <th>
+  /**
+   * Text column on the TASKS board this cluster maps. When set, the email adds a
+   * text field per row and a task cannot be marked without filling it; the value
+   * is written to this column (overwriting it) alongside the status.
+   * null/absent = no field, no requirement (every pre-0.12.0 config).
+   */
+  noteColumnId?: string | null;
+  /** The board column's title, captured at save → the email column header. */
+  noteColumnTitle?: string;
   /** Primary button — used for the status-column filter (includeStatusLabelIds). */
   buttonId: string;
   /**
@@ -106,6 +115,17 @@ export interface DigestPreviewResponse {
   amp: string | null;
 }
 
+/** POST /api/digest/send-raw — the AMP debug lane (edited document, sent as typed). */
+export interface DigestRawSendResponse {
+  ok: boolean;
+  /** Gmail message id, or null if the provider returned none. */
+  id: string | null;
+  to: string;
+  subject: string;
+  /** UTF-8 size of the amp part actually shipped. */
+  ampBytes: number;
+}
+
 export interface DigestSendResult extends DigestRecipientSummary {
   ok: boolean;
   error?: string;
@@ -127,6 +147,18 @@ export interface GoogleSenderState {
   status: OauthStatus;
   /** The visible From address. Never a token. */
   senderAddress: string | null;
+  /**
+   * Why the sender is broken, when known (e.g. 'google_invalid_grant').
+   * Also 'broken' without a lastError = the grant's scope predates the
+   * 2026-08-04 change (findings §5) and needs re-consent.
+   */
+  lastError: string | null;
+  /**
+   * The scope string Google echoed at consent, verbatim (null when never
+   * connected). Shown so a scope mismatch is readable instead of guessed —
+   * scopes are capability names, never credentials.
+   */
+  grantedScope: string | null;
   /** null until connected. false = clicks in the sent mail will 403. */
   senderAllowedForAmp: boolean | null;
 }
@@ -154,7 +186,7 @@ export interface StatusLabel {
 export interface BoardColumn {
   id: string;
   title: string;
-  type: 'status' | 'people' | 'date' | 'email'; // email: v4 digest users board
+  type: 'status' | 'people' | 'date' | 'email' | 'text'; // email: users board · text: per-task note
   labels: StatusLabel[]; // parsed from settings.labels, status columns only
 }
 

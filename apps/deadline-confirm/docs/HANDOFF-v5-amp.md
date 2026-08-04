@@ -190,7 +190,15 @@ A new feature *instance* does not change which version loads.
    scratch objects, then `/monday-api check`. See `tests/fixtures/README.md`.
    **This code is already in production** — the gate was crossed by the manual
    promote, so treat it as debt to retire, not a blocker.
-5. **Phase 2 — sending the AMP MIME part.** Not wired. Resend's support for
+5. **Phase 2 — sending the AMP MIME part.**
+   > **SUPERSEDED 2026-08-04.** The "chosen direction" below was implemented and
+   > then **disproven by live sends** (`docs/amp-email-verified-findings.md` §2,
+   > §5): `users.messages.send` strips the `text/x-amp-html` part on external
+   > delivery, and SMTP AUTH rejects `gmail.send`. The shipped channel is SMTP
+   > XOAUTH2 (`src/services/smtp-sender.js`) with the broad scope
+   > `https://mail.google.com/` (owner decision, testing phase). Kept for history.
+
+   Not wired. Resend's support for
    `text/x-amp-html` is undocumented. Chosen direction: a dedicated Google
    Workspace mailbox via Gmail API `users.messages.send` with raw RFC822, scope
    **`gmail.send` only** (send, never read) — same least-privilege story as the

@@ -7,10 +7,16 @@
 //     keeps env in helpers/environment.js + index.js, and per-tenant credentials
 //     (owner decision 2026-07-29 — each organization sends from its own internal
 //     mailbox) are only expressible if the caller supplies them.
-//  2. Scope is `gmail.send` plus the OIDC identity pair. D12 forbids mail READ
-//     scopes; `openid email` reads no mail — it is what makes the sender address
-//     known without a Gmail metadata call, and the address is required to write
-//     the `From` header.
+//  2. Scope is the full-mailbox `https://mail.google.com/` plus the OIDC
+//     identity pair (owner decision 2026-08-04, testing phase). The send path
+//     moves to SMTP XOAUTH2, and smtp.gmail.com REJECTS a `gmail.send` token —
+//     measured in docs/amp-email-verified-findings.md §5: the 334 challenge
+//     names https://mail.google.com/ as the scope it demands. This supersedes
+//     the earlier `gmail.send`-only choice (D12) for the testing phase; the
+//     restricted scope on an External consent screen triggers CASA, which is
+//     why testing runs on an Internal screen. `openid email` reads no mail —
+//     it is what makes the sender address known without a Gmail metadata call,
+//     and the address is required to write the `From` header.
 //  3. Token state is returned, never persisted here. This module is transport
 //     only; services/gmail-sender.js owns storage.
 //
@@ -24,8 +30,12 @@ import { logError, logWarn } from '../../../helpers/logger.js';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
-/** gmail.send for the mail itself; openid+email to learn the sender address. */
-export const GOOGLE_SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'openid', 'email'].join(' ');
+/**
+ * Full-mailbox scope for SMTP XOAUTH2 (findings §5 — the only scope
+ * smtp.gmail.com accepts; owner decision 2026-08-04, testing phase);
+ * openid+email to learn the sender address.
+ */
+export const GOOGLE_SCOPES = ['https://mail.google.com/', 'openid', 'email'].join(' ');
 
 /**
  * The consent URL the operator's browser is sent to.
@@ -82,7 +92,7 @@ async function postForm(fetchImpl, body) {
  * because both failures are invisible until the first digest run otherwise.
  * @param {{ code: string, redirectUri: string, clientId: string, clientSecret: string,
  *          fetchImpl?: typeof fetch, now?: () => number }} p
- * @returns {Promise<{ accessToken: string, refreshToken: string, accessTokenExpiresAt: number, senderAddress: string }>}
+ * @returns {Promise<{ accessToken: string, refreshToken: string, accessTokenExpiresAt: number, senderAddress: string, scope: string }>}
  */
 export async function exchangeGoogleCode({
   code,
@@ -122,6 +132,10 @@ export async function exchangeGoogleCode({
     refreshToken,
     accessTokenExpiresAt: now() + Number(tokens.expires_in || 3600) * 1000,
     senderAddress,
+    // The GRANTED scope as Google echoes it — persisted on the sender record
+    // so /api/state can tell a pre-change grant (gmail.send, or no scope at
+    // all) from one that satisfies SMTP XOAUTH2 (findings §5).
+    scope: tokens.scope ?? '',
   };
 }
 

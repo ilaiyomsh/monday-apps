@@ -43,13 +43,19 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build deadline-confirm
+        # Version layer: stamp the exact commit into the bundle (__BUILD_SHA__).
+        # Without it vite.config.ts falls back to 'local' and the admin's version
+        # line reads "0.12.0 · local" on EVERY deploy — indistinguishable from a
+        # dev build and useless for telling which commit is live (cost a round of
+        # confusion 2026-08-04). It is also what keys Axiom symbolication.
         # Axiom activation gate (error-guard remote-monitoring): the ingest token is the
         # only secret; dataset/app are literals; inert/fail-soft when the secret is unset.
         # Wires the client admin SPA's browser sink (src/client/admin/utils/axiomErrorSink.ts).
         env:
+          VITE_BUILD_SHA: ${{ github.sha }}
           VITE_AXIOM_DATASET: app-errors
           VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
-          VITE_AXIOM_APP: deadline-confirm
+          VITE_AXIOM_APP: deadline-confirm-admin
         run: pnpm --filter "./apps/deadline-confirm" build
 
       # The admin CLIENT bundle ('hidden' sourcemaps) is served to browsers, so its

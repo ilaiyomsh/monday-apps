@@ -48,6 +48,7 @@ function makeHarness({ seed = {}, env = ENV, tokenResponse } = {}) {
         access_token: 'at1',
         refresh_token: 'rt1',
         expires_in: 3600,
+        scope: 'https://mail.google.com/ openid email',
         id_token: idToken('deadline@twyst.co.il'),
       },
     text: async () => '{}',
@@ -111,7 +112,9 @@ describe('GET /oauth/google/start — consent redirect', () => {
     expect(url.searchParams.get('client_id')).toBe('gcid');
     expect(url.searchParams.get('redirect_uri')).toBe('https://app.example/oauth/google/callback');
     expect(url.searchParams.get('access_type')).toBe('offline');
-    expect(url.searchParams.get('scope')).toContain('gmail.send');
+    // Spec re-pinned: owner decision 2026-08-04, findings §5 — SMTP XOAUTH2
+    // demands https://mail.google.com/ (was gmail.send).
+    expect(url.searchParams.get('scope')).toContain('https://mail.google.com/');
 
     const nonce = url.searchParams.get('state');
     expect(await backend.get(`${KEYS.GOOGLE_OAUTH_STATE_PREFIX}${nonce}`)).toMatchObject({
@@ -141,6 +144,9 @@ describe('GET /oauth/google/callback', () => {
       refreshToken: 'rt1',
       accessToken: 'at1',
       senderAddress: 'deadline@twyst.co.il',
+      // Granted scope persisted so /api/state can flag pre-change grants as
+      // needing re-consent (owner decision 2026-08-04, findings §5).
+      scope: 'https://mail.google.com/ openid email',
     });
   });
 

@@ -32,14 +32,34 @@ import express from 'express';
 import { generateSecret, maskSecret } from '../services/secret.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
 import { renderDigestPlain } from '../helpers/digest-plain.js';
+import { buildMultipartAlternative } from '../helpers/mime-alternative.js';
 import { buildDigest, digestTaskColumnIds, decorateRecipientSections } from '../services/digest-service.js';
 import { runDigestForAccount, todayInJerusalem as todayInJerusalemFromRun } from '../services/digest-run.js';
 import { MondayApiError } from '../services/monday-api.js';
-import { logError } from '../helpers/logger.js';
+import { logError, logInfo } from '../helpers/logger.js';
+
+/**
+ * The scope the SMTP XOAUTH2 send path demands (owner decision 2026-08-04;
+ * measured in docs/amp-email-verified-findings.md §5 — smtp.gmail.com names it
+ * in its 334 challenge and rejects gmail.send). A google_sender record whose
+ * granted scope does not include it needs re-consent.
+ */
+const REQUIRED_GOOGLE_SCOPE = 'https://mail.google.com/';
 
 const BUTTON_ID_RE = /^b_[A-Za-z0-9_-]{4,16}$/;
 const SECTION_ID_RE = /^s_[A-Za-z0-9_-]{4,16}$/;
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+// --- POST /api/digest/send-raw (AMP debug lane) constants -------------------
+/** Single address, no spaces/commas — rejects header injection by construction. */
+const RAW_EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+const HEADER_BREAK_RE = /[\r\n]/;
+const RAW_SUBJECT_MAX = 200;
+/** Far above Gmail's 100KB AMP-part ceiling — a cap on abuse, not on debugging. */
+const RAW_AMP_MAX_BYTES = 1_000_000;
+const RAW_FALLBACK_SUBJECT = '[AMP debug] מייל מסכם';
+const RAW_FALLBACK_PLAIN =
+  'שליחת בדיקה של החלק הדינמי (AMP). בלקוח דואר שלא תומך ב-AMP for Email אין כאן תוכן לצפייה.';
 
 function generateId(prefix) {
   return `${prefix}_${crypto.randomBytes(6).toString('base64url').slice(0, 8)}`;
@@ -140,6 +160,19 @@ function validateConfig(body) {
       ) {
         return { field: 'digest.sections' };
       }
+      // Optional per-cluster note column: mapping it makes a per-task text
+      // field mandatory in the email. Absent/null/'' = no mapping, which is
+      // what every config saved before this feature carries.
+      let noteColumnId = null;
+      let noteColumnTitle = '';
+      if (s.noteColumnId !== undefined && s.noteColumnId !== null && s.noteColumnId !== '') {
+        if (!isNonEmptyString(s.noteColumnId)) return { field: 'digest.sections' };
+        // The title becomes the email column header — a mapping without one
+        // would render a nameless column, so it is required, not defaulted.
+        if (!isNonEmptyString(s.noteColumnTitle, 255)) return { field: 'digest.sections' };
+        noteColumnId = s.noteColumnId;
+        noteColumnTitle = s.noteColumnTitle;
+      }
       sections.push({
         id: s.id ?? generateId('s'),
         title: s.title,
@@ -148,6 +181,8 @@ function validateConfig(body) {
         buttonId: sectionButtonIds[0],
         buttonIds: sectionButtonIds,
         includeStatusLabelIds: [...s.includeStatusLabelIds],
+        noteColumnId,
+        noteColumnTitle,
       });
     }
     if (new Set(sections.map((s) => s.id)).size !== sections.length) {
@@ -247,6 +282,9 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
       tasks: tasksRead.items,
       users: usersRead.items,
       today,
+      // Real board label colors (tasks board read) — preview renders with the
+      // same colors the send path uses; absent on older doubles → fallback.
+      statusColumnColors: tasksRead.statusColumnColors,
     });
 
     const buttonsById = new Map(config.buttons.map((b) => [b.id, b]));
@@ -334,6 +372,98 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     })
   );
 
+  // --- AMP debug lane (owner ask 2026-08-02) ---------------------------------
+  // The preview hands the admin the exact amp4email document the renderer
+  // produced; this route sends back whatever the admin edited it into. Gmail's
+  // only diagnostic for a bad dynamic part is `INTERNAL_ERROR`, so bisecting it
+  // means mutating the document by hand and re-sending — which is impossible
+  // while the only send path re-renders from config.
+  //
+  // Deliberately independent of the digest pipeline: no config, no link secret
+  // and no monday token are required, because the point is to test the MESSAGE,
+  // not the data behind it. The one thing it shares with the real send is
+  // buildMultipartAlternative — a debug message assembled differently from the
+  // production one would prove nothing about the production one.
+  //
+  // The admin's bytes are passed through untouched (no re-render, no
+  // normalization); only header-injection and size are refused.
+  router.post(
+    '/api/digest/send-raw',
+    guarded(async (req, res) => {
+      if (!emailSender) {
+        res.status(409).json({ error: 'email_not_configured' });
+        return;
+      }
+      const body = typeof req.body === 'object' && req.body !== null ? req.body : {};
+      const { amp, to, subject, plain } = body;
+
+      if (typeof amp !== 'string' || amp.trim().length === 0) {
+        res.status(400).json({ error: 'invalid_amp', message: 'amp must be a non-empty string' });
+        return;
+      }
+      if (typeof to !== 'string' || !RAW_EMAIL_RE.test(to.trim())) {
+        res.status(400).json({ error: 'invalid_recipient', message: 'to must be a single email address' });
+        return;
+      }
+      if (subject !== undefined && subject !== null) {
+        if (typeof subject !== 'string' || subject.length > RAW_SUBJECT_MAX || HEADER_BREAK_RE.test(subject)) {
+          res.status(400).json({ error: 'invalid_subject', message: 'subject is too long or contains a header break' });
+          return;
+        }
+      }
+      if (plain !== undefined && plain !== null && typeof plain !== 'string') {
+        res.status(400).json({ error: 'invalid_plain', message: 'plain must be a string when present' });
+        return;
+      }
+      const ampBytes = Buffer.byteLength(amp, 'utf8');
+      if (ampBytes > RAW_AMP_MAX_BYTES) {
+        res.status(413).json({ error: 'amp_too_large', message: `amp part is ${ampBytes} bytes (max ${RAW_AMP_MAX_BYTES})` });
+        return;
+      }
+
+      const config = await storage.forAccount(req.session.accountId).getConfig();
+      const configuredSubject = typeof config?.digest?.subject === 'string' ? config.digest.subject.trim() : '';
+      const finalSubject =
+        typeof subject === 'string' && subject.trim().length > 0
+          ? subject
+          : configuredSubject.length > 0
+            ? configuredSubject
+            : RAW_FALLBACK_SUBJECT;
+      const finalPlain = typeof plain === 'string' && plain.length > 0 ? plain : RAW_FALLBACK_PLAIN;
+
+      const mime = buildMultipartAlternative({ plain: finalPlain, amp });
+      let sent;
+      try {
+        sent = await emailSender.send({
+          accountId: req.session.accountId,
+          to: to.trim(),
+          subject: finalSubject,
+          plain: finalPlain,
+          amp,
+          mime,
+        });
+      } catch (err) {
+        const message = String(err?.message ?? err);
+        logError('admin_api', 'raw amp send failed', {
+          accountId: req.session.accountId,
+          code: err?.code,
+          error: message,
+        });
+        // 502, not 500: the failure belongs to Gmail, and its message IS the
+        // debug output the operator came here for. Never swallowed.
+        res.status(502).json({ error: 'send_failed', message, code: err?.code ?? null });
+        return;
+      }
+
+      logInfo('admin_api', 'raw amp sent', {
+        accountId: req.session.accountId,
+        ampBytes,
+        messageId: sent?.id,
+      });
+      res.json({ ok: true, id: sent?.id ?? null, to: to.trim(), subject: finalSubject, ampBytes });
+    })
+  );
+
   router.post('/api/digest/send', guarded(handleDigestSend));
 
   // T12 / D8 — resend today for ALL recipients using the current slot
@@ -400,10 +530,32 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
       // `configured` reports whether the SERVER holds an OAuth client at all,
       // so the UI can tell "nobody connected yet" apart from "credentials are
       // missing on the platform" — two problems with different fixes.
+      //
+      // Scope sufficiency (owner decision 2026-08-04, findings §5): the SMTP
+      // XOAUTH2 send path only works with https://mail.google.com/. A grant
+      // without it — every pre-change grant has no scope field at all — is
+      // reported 'broken', the same state the admin's reconnect button already
+      // handles, so re-consent is signaled without a new UI state.
+      const scopeSufficient =
+        typeof googleSender?.scope === 'string' &&
+        googleSender.scope.includes(REQUIRED_GOOGLE_SCOPE);
       const google = {
         configured: Boolean(env.googleOauthClientId && env.googleOauthClientSecret),
-        status: !googleSender ? 'disconnected' : googleSender.disconnectedAt ? 'broken' : 'connected',
+        status: !googleSender
+          ? 'disconnected'
+          : googleSender.disconnectedAt || !scopeSufficient
+            ? 'broken'
+            : 'connected',
         senderAddress: googleSender?.senderAddress ?? null,
+        // The scope string Google echoed at consent, verbatim. Without it a
+        // scope mismatch is invisible to the operator — the admin can only see
+        // 'broken' and guess (incident 2026-08-04). Scopes are capability
+        // names, never credentials, so this is safe to show.
+        grantedScope: typeof googleSender?.scope === 'string' ? googleSender.scope : null,
+        // Why the sender broke, when known (e.g. 'google_invalid_grant' from
+        // the refresh path). String-coerced — never an object that could leak
+        // record internals.
+        lastError: googleSender?.lastError != null ? String(googleSender.lastError) : null,
         // The AMP endpoint default-denies senders that are not on the
         // allowlist, so a connected mailbox that is not listed sends mail whose
         // buttons all fail with 403. Surface it rather than let it be debugged

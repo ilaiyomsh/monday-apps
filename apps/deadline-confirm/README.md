@@ -17,7 +17,8 @@
     (חתימה אחת לכל הודעה, manifest של task×button, slot יומי)
 
 Admin View → /admin: OAuth, לוח+כפתורים, מייל מסכם (לוח משתמשים, מקבצים,
-שעת שליחה, תצוגה מקדימה plain+AMP, שליחה ידנית)
+שעת שליחה, עמודת טקסט חובה לכל מקבץ, תצוגה מקדימה plain+AMP,
+עורך AMP + שליחת בדיקה, שליחה ידנית)
 ```
 
 **נמחק ב-V6:** `/confirm`, snippet, email-template, Resend.
@@ -46,11 +47,24 @@ USE_LOCAL_STORAGE=true npm start
 6. Scheduler (אחרי פריסה):  
    `mapps scheduler:create -a 11704868 -n digest-send -s "0 * * * *" -e "/digest-send"`  
    (שעתי UTC; האפליקציה מסננת לפי `sendHour` בירושלים).
-7. Gmail dynamic email + OAuth שולח — אחרי הקמת אפליקציית Google Cloud (T9).
+7. אפליקציית Google Cloud (מדריך מלא: `docs/google-setup-guide.md`): OAuth client
+   + scope **`https://mail.google.com/`** (החלטת בעלים 2026-08-04, שלב בדיקות —
+   מסך consent חייב להיות Internal), `GOOGLE_OAUTH_CLIENT_ID/SECRET` ב-env.
+8. חיבור תיבת השולח במסך האדמין (**חבר מחדש** אם ה-grant קדם להרחבת ה-scope —
+   `/api/state` מדווח עליו `broken` עד אז).
+9. אימות אחרי פריסה: **`docs/manual-verification-checklist.md`** — בדיקת sandbox
+   לכתיבה האטומית, שליחה לשתי תיבות נפרדות, סבב scheduler, ופורט 465.
 
 ## תפעול
 
 - **רוטציית מפתח** מבטלת את כל החתימות הקיימות — kill switch.
-- **שליחה אוטומטית:** endpoint מוכן (`/mndy-cronjob/digest-send`); שליחה אמיתית
-  ממתינה ל-Gmail OAuth. בינתיים `/api/digest/send` ו-`/api/digest/resend-today`
-  מחזירים 409 `email_not_configured`.
+- **ערוץ השליחה: SMTP XOAUTH2** (`smtp.gmail.com:465`, `src/services/smtp-sender.js`)
+  — לא ה-Gmail API, שמוחק את חלק ה-AMP במסירה חיצונית
+  (`docs/amp-email-verified-findings.md` §2). דורש grant עם
+  `https://mail.google.com/`; grant ישן מסומן `broken` עד **חבר מחדש** במסך האדמין.
+- **שליחה אוטומטית:** `/mndy-cronjob/digest-send` מחובר לערוץ האמיתי; הסינון
+  לפי `digest.sendHour` (שעון ירושלים). `/api/digest/send` ו-
+  `/api/digest/resend-today` מחזירים 409 `email_not_configured` רק כשחסרים
+  `GOOGLE_OAUTH_CLIENT_ID/SECRET` בסביבת השרת.
+- **אחרי merge:** לעבור על `docs/manual-verification-checklist.md` — כולל
+  הסיכון הידוע של פורט 465 יוצא מ-monday-code (fallback מוכן: 587 + STARTTLS).

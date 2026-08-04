@@ -82,6 +82,29 @@ describe('createApp — body parsing', () => {
   });
 });
 
+// The AMP debug lane POSTs a whole amp4email document as JSON. Express's
+// default 100kb JSON limit is BELOW a realistic digest, so the ceiling here is
+// a product requirement, not tuning: at the default the send-raw route would
+// answer "too large" for exactly the documents worth debugging.
+describe('createApp — JSON body ceiling', () => {
+  const jsonPost = (bytes) =>
+    request(makeApp())
+      .post('/api/digest/send-raw')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ amp: 'x'.repeat(bytes) }));
+
+  it('accepts a JSON body well above express default 100kb (reaches the route, not the parser)', async () => {
+    // 401 = the session gate, i.e. the body WAS parsed and routing happened.
+    expect((await jsonPost(500_000)).status).toBe(401);
+  });
+
+  it('refuses a body past the ceiling with 413, never a 500', async () => {
+    const res = await jsonPost(2_500_000);
+    expect(res.status).toBe(413);
+    expect(res.body).toStrictEqual({ error: 'payload_too_large' });
+  });
+});
+
 describe('createApp — mounted surfaces', () => {
   it('mounts the Google OAuth router', async () => {
     // No sessionToken → 401 from the route's own gate. A 404 would mean the

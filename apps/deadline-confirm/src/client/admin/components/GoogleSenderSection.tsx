@@ -56,6 +56,20 @@ export function GoogleSenderSection({ google, onRefresh, refreshing }: Props) {
         <>
           <div className="dc-error">
             ההרשאה של תיבת השליחה בוטלה או פגה. השליחה מושבתת עד חיבור מחדש.
+            <br />
+            {/* Shown UNCONDITIONALLY in the broken state. Gating this on a
+                non-null grantedScope hid it exactly when it mattered most — a
+                record written before the scope change carries no scope field at
+                all, which is the single most likely reason to be broken here. */}
+            ההרשאה שגוגל העניקה בפועל:{' '}
+            <code dir="ltr">
+              {google.grantedScope === null
+                ? '(לא נרשמה — חיבור שקדם לשינוי ה-scope)'
+                : google.grantedScope || '(ריק)'}
+            </code>{' '}
+            — שליחת SMTP דורשת גם <code dir="ltr">https://mail.google.com/</code>. אם היא
+            חסרה כאן, יש לוודא שה-scope שמור ב-Google Cloud Console (Data Access → Save)
+            ורק אז להתחבר מחדש.
           </div>
           <div className="dc-row">
             <Button onClick={openGoogleOauthTab}>חבר מחדש</Button>

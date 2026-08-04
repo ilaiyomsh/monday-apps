@@ -4,11 +4,19 @@
 
 import { useEffect, useState } from 'react';
 import { Button, Dropdown, TextField, Toggle } from '@vibe/core';
-import type { ActionButton, BoardColumn, Board, DigestPreviewResponse, DigestSendResponse } from '../types';
+import type {
+  ActionButton,
+  BoardColumn,
+  Board,
+  DigestPreviewResponse,
+  DigestRawSendResponse,
+  DigestSendResponse,
+} from '../types';
 import type { DigestDraft, DigestSectionDraft } from '../draft';
 import { newDigestSection } from '../draft';
-import { apiFetch, ApiError } from '../services/api';
+import { apiFetch, ApiError, formatApiFailure } from '../services/api';
 import { fetchBoardColumns } from '../services/monday';
+import { ampByteLength, ampSizeWarning, defaultDebugSubject, validateRawSend } from '../amp-debug';
 import logger from '../utils/logger';
 
 interface Option {
@@ -30,7 +38,7 @@ const GUARD_MESSAGES: Record<string, string> = {
   digest_not_configured: 'המייל המסכם עוד לא נשמר — הפעילו אותו, השלימו את השדות ולחצו "שמירת הגדרות".',
   no_secret: 'אין מפתח קישורים פעיל — צרו מפתח בלשונית ההגדרות.',
   not_connected: 'אין חיבור monday פעיל — התחברו מחדש בלשונית ההגדרות.',
-  email_not_configured: 'ערוץ השליחה לא מוגדר בשרת (Gmail API — חסרים credentials בסביבת האפליקציה).',
+  email_not_configured: 'ערוץ השליחה לא מוגדר בשרת (חסר צמד ה-OAuth client בסביבת האפליקציה).',
   monday_api_failed: 'קריאת הלוחות ממאנדיי נכשלה. נסו שוב.',
 };
 
@@ -59,6 +67,14 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const [sendResult, setSendResult] = useState<DigestSendResponse | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
 
+  // AMP debug lane: the preview's amp4email document, editable, sent as typed.
+  const [ampDraft, setAmpDraft] = useState('');
+  const [ampTo, setAmpTo] = useState('');
+  const [ampSubject, setAmpSubject] = useState('');
+  const [rawSending, setRawSending] = useState(false);
+  const [rawResult, setRawResult] = useState<DigestRawSendResponse | null>(null);
+  const [rawError, setRawError] = useState<string | null>(null);
+
   // Users board picked → load ITS columns (people + email pickers).
   useEffect(() => {
     if (!digest.usersBoardId) {
@@ -73,13 +89,15 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
         if (cancelled) return;
         setUsersColumns(cols);
       })
+      .finally(() => {
+        if (!cancelled) setUsersColumnsLoading(false);
+      })
+      // The chain must TERMINATE in catch — a .finally() tail leaves the
+      // rejection unhandled once .then() throws (promise/catch-or-return).
       .catch((err: unknown) => {
         if (cancelled) return;
         logger.error('admin', 'digest_users_columns_load_failed', err);
         setUsersColumnsError('טעינת עמודות לוח המשתמשים נכשלה. נסו לרענן.');
-      })
-      .finally(() => {
-        if (!cancelled) setUsersColumnsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -90,12 +108,24 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const peopleOptions = usersColumns.filter((c) => c.type === 'people').map((c) => toOption(c.id, c.title));
   const emailOptions = usersColumns.filter((c) => c.type === 'email').map((c) => toOption(c.id, c.title));
   const dateOptions = tasksColumns.filter((c) => c.type === 'date').map((c) => toOption(c.id, c.title));
+  const textOptions = tasksColumns.filter((c) => c.type === 'text').map((c) => toOption(c.id, c.title));
   const buttonOptions = buttons
     .filter((b) => b.name.trim().length > 0)
     .map((b) => toOption(b.id, b.name));
 
   const patchSection = (id: string, patch: Partial<DigestSectionDraft>) => {
     onChange({ sections: digest.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+  };
+
+  // Section order IS the priority (owner decision 2026-08-04): buildDigest lets
+  // the first matching section claim a task. These arrows are the whole
+  // priority UI — no separate priority field exists.
+  const moveSection = (index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (target < 0 || target >= digest.sections.length) return;
+    const sections = [...digest.sections];
+    [sections[index], sections[target]] = [sections[target], sections[index]];
+    onChange({ sections });
   };
 
   // The status-condition options for a section = the labels of the status
@@ -115,7 +145,15 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
       const qs = recipient ? `?recipient=${encodeURIComponent(recipient)}` : '';
       const res = await apiFetch<DigestPreviewResponse>(`/api/digest/preview${qs}`);
       setPreview(res);
-      setPreviewRecipient(recipient ?? res.recipients[0]?.email ?? null);
+      const shown = recipient ?? res.recipients[0]?.email ?? null;
+      setPreviewRecipient(shown);
+      // A fresh preview is a fresh document — the editor mirrors it, and the
+      // previous send's outcome no longer describes what is in the box.
+      setAmpDraft(res.amp ?? '');
+      setAmpTo(shown ?? '');
+      setAmpSubject(defaultDebugSubject(digest.subject));
+      setRawResult(null);
+      setRawError(null);
     } catch (err) {
       logger.error('admin', 'digest_preview_failed', err);
       setPreviewError(guardMessage(err));
@@ -144,6 +182,40 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
     } catch (err) {
       logger.error('admin', 'digest_amp_copy_failed', err);
       setPreviewError('העתקה נכשלה — אפשר לפתוח את הקונסול ולהעתיק ידנית.');
+    }
+  };
+
+  // Send the box's CURRENT contents — not a re-render. This is the whole point
+  // of the lane: bisect a Gmail rendering failure by hand-editing the document.
+  const sendRawAmp = async () => {
+    const invalid = validateRawSend({ amp: ampDraft, to: ampTo });
+    if (invalid) {
+      setRawError(invalid);
+      return;
+    }
+    setRawSending(true);
+    setRawError(null);
+    setRawResult(null);
+    try {
+      const res = await apiFetch<DigestRawSendResponse>('/api/digest/send-raw', {
+        method: 'POST',
+        body: JSON.stringify({
+          amp: ampDraft,
+          to: ampTo.trim(),
+          subject: ampSubject,
+          // Same plain part the real message carries, so the only variable
+          // under test is the AMP document itself.
+          plain: preview?.plain ?? undefined,
+        }),
+      });
+      setRawResult(res);
+    } catch (err) {
+      logger.error('admin', 'digest_raw_amp_send_failed', err);
+      // The server's message IS the diagnostic here (Gmail's rejection text) —
+      // never collapse it into a generic Hebrew sentence.
+      setRawError(formatApiFailure(err, 'שליחת הקוד הערוך נכשלה.'));
+    } finally {
+      setRawSending(false);
     }
   };
 
@@ -262,8 +334,11 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
             כל מקבץ הוא טבלה במייל: עמודת תאריך שקובעת "באיחור" (תאריך שעבר — כולל היום),
             תנאי סטטוס שקובע אילו משימות נכנסות, ותפריט נפתח מעוצב (תגית צבע → אפשרויות)
             לבחירת סטטוס חדש מהכפתורים שנבחרו כאן.
+            <br />
+            סדר המקבצים קובע עדיפות: משימה שמתאימה לתנאים של כמה מקבצים תופיע רק
+            בגבוה ביותר מביניהם. סדרו עם החיצים.
           </div>
-          {digest.sections.map((section) => {
+          {digest.sections.map((section, sectionIndex) => {
             const primaryButtonId = section.buttonIds[0] ?? section.buttonId;
             const statusOptions = statusLabelOptionsFor(primaryButtonId);
             const selectedStatus = statusOptions.filter((o) =>
@@ -320,13 +395,61 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     />
                   </div>
                   {digest.sections.length > 1 && (
-                    <Button
-                      kind={Button.kinds.TERTIARY}
-                      onClick={() => onChange({ sections: digest.sections.filter((s) => s.id !== section.id) })}
-                    >
-                      הסרה
-                    </Button>
+                    <>
+                      <Button
+                        kind={Button.kinds.TERTIARY}
+                        disabled={sectionIndex === 0}
+                        ariaLabel="העלאת עדיפות המקבץ"
+                        onClick={() => moveSection(sectionIndex, -1)}
+                      >
+                        ↑
+                      </Button>
+                      <Button
+                        kind={Button.kinds.TERTIARY}
+                        disabled={sectionIndex === digest.sections.length - 1}
+                        ariaLabel="הורדת עדיפות המקבץ"
+                        onClick={() => moveSection(sectionIndex, 1)}
+                      >
+                        ↓
+                      </Button>
+                      <Button
+                        kind={Button.kinds.TERTIARY}
+                        onClick={() => onChange({ sections: digest.sections.filter((s) => s.id !== section.id) })}
+                      >
+                        הסרה
+                      </Button>
+                    </>
                   )}
+                </div>
+                <div className="dc-row">
+                  <div className="dc-field" style={{ minWidth: 280 }}>
+                    <label>עמודת טקסט חובה (אופציונלי)</label>
+                    <Dropdown
+                      placeholder={
+                        tasksColumnsLoading
+                          ? 'טוען…'
+                          : textOptions.length === 0
+                            ? 'אין עמודות טקסט בלוח'
+                            : 'ללא — אין שדה טקסט'
+                      }
+                      disabled={tasksColumnsLoading || textOptions.length === 0}
+                      options={textOptions}
+                      value={findOption(textOptions, section.noteColumnId)}
+                      onChange={(opt: Option | null) =>
+                        patchSection(section.id, {
+                          noteColumnId: opt?.value ?? null,
+                          // capture the board column title → email header
+                          noteColumnTitle: opt?.label ?? '',
+                        })
+                      }
+                      clearable
+                    />
+                    <div className="dc-hint">
+                      כשבוחרים עמודה, כל שורה במקבץ מקבלת שדה טקסט במייל — <b>אי אפשר לסמן משימה
+                      בלי למלא אותו</b>, וכפתור האישור נשאר מנוטרל עד שכל השורות שסומנו מולאו.
+                      הערך נכתב לעמודה הזו ודורס את מה שהיה בה. ריק = אין שדה ואין חובה.
+                    </div>
+                  </div>
                 </div>
                 <div className="dc-row">
                   <div className="dc-field" style={{ minWidth: 320, flex: 1 }}>
@@ -479,16 +602,91 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                 )}
                 {preview.amp && (
                   <div style={{ marginTop: 10 }}>
-                    <Button kind="secondary" size="small" onClick={() => void copyAmp(preview.amp as string)}>
-                      {ampCopied ? 'הועתק ✓' : 'העתק גרסת AMP (מייל דינמי בג׳ימייל)'}
-                    </Button>
+                    <label>קוד ה-AMP המלא שנבנה — ניתן לעריכה ולשליחה</label>
                     <div className="dc-hint">
-                      להדבקה ב-playground.amp.dev (פורמט Email). שליחה מה־playground
-                      דורשת ש־<code>AMP_ALLOWED_SENDERS</code> יכלול את{' '}
-                      <code>amp@gmail.dev</code> — אחרת תראו Failed to fetch / בקשה
-                      לא תקינה. עדיף: Send to Gmail משם, ואז לאשר מתוך המייל עצמו
-                      (הנמען מוסיף את כתובת השולח תחת Dynamic email → Developer
-                      settings).
+                      זה בדיוק המסמך שנשלח כחלק <code>text/x-amp-html</code>. אפשר לערוך אותו כאן
+                      ולשלוח את הבתים שנערכו כמו שהם בערוץ השליחה (SMTP) — בלי רינדור מחדש —
+                      כדי לבודד מה בדיוק ג׳ימייל דוחה.
+                    </div>
+                    <textarea
+                      dir="ltr"
+                      spellCheck={false}
+                      value={ampDraft}
+                      onChange={(e) => setAmpDraft(e.target.value)}
+                      style={{
+                        width: '100%',
+                        minHeight: 320,
+                        marginTop: 8,
+                        padding: 12,
+                        borderRadius: 8,
+                        border: '1px solid var(--ui-border-color, #d0d4e4)',
+                        background: 'var(--ui-background-color, #f6f7fb)',
+                        fontFamily: 'Menlo, Consolas, monospace',
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        whiteSpace: 'pre',
+                        resize: 'vertical',
+                      }}
+                    />
+                    <div className="dc-hint">
+                      {ampByteLength(ampDraft).toLocaleString('en-US')} bytes
+                      {ampDraft !== preview.amp && ' · נערך (שונה מהמקור)'}
+                    </div>
+                    {ampSizeWarning(ampDraft) && <div className="dc-error">{ampSizeWarning(ampDraft)}</div>}
+
+                    <div className="dc-row" style={{ marginTop: 8, alignItems: 'flex-end' }}>
+                      <div className="dc-field" style={{ minWidth: 240 }}>
+                        <label>נמען לבדיקה</label>
+                        <TextField value={ampTo} placeholder="you@example.com" onChange={setAmpTo} />
+                      </div>
+                      <div className="dc-field" style={{ minWidth: 240 }}>
+                        <label>נושא</label>
+                        <TextField value={ampSubject} placeholder="נושא" onChange={setAmpSubject} />
+                      </div>
+                      <Button
+                        kind={Button.kinds.PRIMARY}
+                        size="small"
+                        loading={rawSending}
+                        disabled={rawSending}
+                        onClick={() => void sendRawAmp()}
+                      >
+                        שליחת הקוד הערוך
+                      </Button>
+                      <Button
+                        kind="secondary"
+                        size="small"
+                        disabled={ampDraft === preview.amp}
+                        onClick={() => {
+                          setAmpDraft(preview.amp as string);
+                          setRawError(null);
+                          setRawResult(null);
+                        }}
+                      >
+                        שחזור לקוד המקורי
+                      </Button>
+                      <Button kind="secondary" size="small" onClick={() => void copyAmp(ampDraft)}>
+                        {ampCopied ? 'הועתק ✓' : 'העתקה'}
+                      </Button>
+                    </div>
+
+                    {rawError && (
+                      <pre dir="ltr" className="dc-error" style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>
+                        {rawError}
+                      </pre>
+                    )}
+                    {rawResult && (
+                      <div className="dc-success">
+                        נשלח ✓ — {rawResult.to} · {rawResult.ampBytes.toLocaleString('en-US')} bytes ·
+                        Gmail message id: <code>{rawResult.id ?? '—'}</code>
+                      </div>
+                    )}
+
+                    <div className="dc-hint">
+                      השליחה יוצאת מתיבת ה-Gmail המחוברת של הארגון ובאותו מבנה MIME של המייל האמיתי
+                      (plain → x-amp-html → html). לצפייה בחלק הדינמי הנמען צריך להוסיף את כתובת
+                      השולח תחת Dynamic email → Developer settings. אפשר גם להדביק את הקוד
+                      ב-playground.amp.dev (פורמט Email); שליחה משם דורשת ש־
+                      <code>AMP_ALLOWED_SENDERS</code> יכלול את <code>amp@gmail.dev</code>.
                     </div>
                   </div>
                 )}
