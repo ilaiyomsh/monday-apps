@@ -6,14 +6,17 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createMondayApi, MondayApiError } from '../src/services/monday-api.js';
+import settingsFixture from './fixtures/board-columns-settings.probe.json';
 
 function gqlResponse(data) {
   return { ok: true, status: 200, json: () => Promise.resolve({ data }) };
 }
 
-function itemsPageData({ viaNext = false, cursor = null, items = [] } = {}) {
+function itemsPageData({ viaNext = false, cursor = null, items = [], columns } = {}) {
   const page = { cursor, items };
-  return viaNext ? { next_items_page: page } : { boards: [{ items_page: page }] };
+  return viaNext
+    ? { next_items_page: page }
+    : { boards: [{ ...(columns !== undefined ? { columns } : {}), items_page: page }] };
 }
 
 const RAW_ITEM = {
@@ -103,6 +106,65 @@ describe('getBoardItems', () => {
     expect(res.truncated).toBe(true);
     expect(res.items).toHaveLength(1);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // Real status label colors (owner decision 2026-08-04): the boards query also
+  // reads columns { id type settings } — ONE extra field on the first page, not
+  // per item. Shape from tests/fixtures/board-columns-settings.probe.json:
+  // settings.labels[] with { id, hex } on status-type columns.
+  describe('statusColumnColors (probe: board-columns-settings.probe.json)', () => {
+    const fixtureColumns = settingsFixture.data.boards[0].columns;
+
+    it('fetches columns settings with the first page and maps status columns to { labelId → hex }', async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(
+        gqlResponse(itemsPageData({ cursor: null, items: [RAW_ITEM], columns: fixtureColumns }))
+      );
+      const api = createMondayApi({ fetchImpl });
+      const res = await api.getBoardItems({ token: 't', boardId: '111', columnIds: ['people_t'] });
+
+      const firstBody = JSON.parse(fetchImpl.mock.calls[0][1].body);
+      expect(firstBody.query).toMatch(/columns\s*\{[^}]*settings[^}]*\}/);
+      // people/date columns (settings without labels) contribute nothing.
+      expect(res.statusColumnColors).toEqual({
+        color_mm58mbec: { 0: '#fdab3d', 1: '#00c875' },
+      });
+      // Additive: the existing shape is untouched.
+      expect(res.items.map((i) => i.id)).toEqual(['9001']);
+      expect(res.truncated).toBe(false);
+    });
+
+    it('answers {} when the response carries no columns (older double / defensive)', async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(
+        gqlResponse(itemsPageData({ cursor: null, items: [RAW_ITEM] }))
+      );
+      const api = createMondayApi({ fetchImpl });
+      const res = await api.getBoardItems({ token: 't', boardId: '111', columnIds: ['people_t'] });
+      expect(res.statusColumnColors).toEqual({});
+    });
+
+    it('skips malformed labels (no hex / no id) without dropping the healthy ones', async () => {
+      const columns = [
+        {
+          id: 'color_mm58mbec',
+          type: 'status',
+          settings: {
+            labels: [
+              { id: 0, hex: '#fdab3d' },
+              { id: 1 }, // hex missing
+              { hex: '#00c875' }, // id missing
+              null,
+            ],
+          },
+        },
+        { id: 'status_no_settings', type: 'status', settings: null },
+      ];
+      const fetchImpl = vi.fn().mockResolvedValue(
+        gqlResponse(itemsPageData({ cursor: null, items: [], columns }))
+      );
+      const api = createMondayApi({ fetchImpl });
+      const res = await api.getBoardItems({ token: 't', boardId: '111', columnIds: ['people_t'] });
+      expect(res.statusColumnColors).toEqual({ color_mm58mbec: { 0: '#fdab3d' } });
+    });
   });
 
   it('GraphQL soft errors inside a 200 body are thrown as MondayApiError (funnel rule)', async () => {

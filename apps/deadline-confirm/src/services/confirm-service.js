@@ -65,9 +65,20 @@ export function configIsComplete(config) {
  * @param {string} deps.btnId - regex-validated by the route
  * @param {string|null} [deps.expectedPersonId] - D11: signed recipient person
  *   id; when set, the item must still be assigned to that person
+ * @param {string|null} [deps.noteColumnId] - text column the cluster maps; when
+ *   set, `note` is mandatory and rides the SAME write as the status
+ * @param {string} [deps.note] - the reader's per-task note
  * @returns {Promise<{ outcome: string, button?: object }>}
  */
-export async function performAction({ storage, api, itemId, btnId, expectedPersonId = null }) {
+export async function performAction({
+  storage,
+  api,
+  itemId,
+  btnId,
+  expectedPersonId = null,
+  noteColumnId = null,
+  note = '',
+}) {
   const config = await storage.getConfig();
   const token = await storage.getOauthToken();
 
@@ -117,27 +128,53 @@ export async function performAction({ storage, api, itemId, btnId, expectedPerso
     }
   }
 
+  // A mapped note column makes the note mandatory. The route already refused
+  // an empty one, so reaching here means a caller bypassed it — refuse again
+  // rather than trust the layer above (the write is the last line).
+  const notesEnabled = typeof noteColumnId === 'string' && noteColumnId.length > 0;
+  const noteText = typeof note === 'string' ? note.trim() : '';
+  if (notesEnabled && noteText.length === 0) {
+    logger.logError('confirm', 'guard failed: note_required', { itemId });
+    return { outcome: 'note_required' };
+  }
+
   // Silent idempotency: the daily re-sent email lands here on repeat clicks.
+  // A note supplied on an already-marked task is deliberately NOT written — the
+  // mark did not happen, so nothing authorized overwriting the column.
   if (item.statusLabelId === button.targetIndex) {
     return { outcome: 'already_done', button };
   }
 
   try {
-    await api.changeStatus({
-      token,
-      boardId: config.boardId,
-      itemId,
-      columnId: button.statusColumnId,
-      toLabelId: button.targetIndex,
-    });
+    if (notesEnabled) {
+      // ONE mutation: a task must never end up marked without its note.
+      await api.changeColumns({
+        token,
+        boardId: config.boardId,
+        itemId,
+        values: {
+          [button.statusColumnId]: { index: button.targetIndex },
+          [noteColumnId]: noteText,
+        },
+      });
+    } else {
+      await api.changeStatus({
+        token,
+        boardId: config.boardId,
+        itemId,
+        columnId: button.statusColumnId,
+        toLabelId: button.targetIndex,
+      });
+    }
   } catch (err) {
     logger.logError('confirm', 'status mutation failed', describeApiError(err, itemId));
     return { outcome: 'api_error' };
   }
 
-  const body = item.peopleText
+  const base = item.peopleText
     ? `סומן "${button.targetLabel}" במייל על ידי ${item.peopleText}`
     : `סומן "${button.targetLabel}" במייל`;
+  const body = noteText.length > 0 ? `${base} · הערה: "${noteText}"` : base;
   let audit = 'ok';
   try {
     await api.createUpdate({ token, itemId, body });

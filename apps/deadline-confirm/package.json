@@ -1,6 +1,6 @@
 {
   "name": "deadline-confirm",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "One-click deadline confirmation from email — status transition + attribution update (monday code)",
   "private": true,
   "type": "module",
@@ -16,6 +16,7 @@
     "build": "npm run build:client",
     "test": "vitest run",
     "test:watch": "vitest",
+    "validate:amp": "node ./scripts/validate-amp.mjs",
     "typecheck": "tsc --noEmit",
     "type-check": "tsc --noEmit",
     "lint": "eslint ."
@@ -29,6 +30,7 @@
     "express": "^4.18.0",
     "jsonwebtoken": "^9.0.0",
     "monday-sdk-js": "^0.5.5",
+    "nodemailer": "^7.0.13",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
   },
@@ -38,6 +40,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/supertest": "^6.0.2",
     "@vitejs/plugin-react": "^5.1.2",
+    "amphtml-validator": "1.0.38",
     "concurrently": "^9.2.1",
     "eslint": "^9.0.0",
     "globals": "^15.0.0",

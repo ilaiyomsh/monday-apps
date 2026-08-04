@@ -35,6 +35,8 @@ const DIGEST_CONFIG: DigestConfig = {
       title: 'לסיים:',
       dateColumnId: 'date_due',
       dateColumnTitle: 'תאריך סיום',
+      noteColumnId: null,
+      noteColumnTitle: '',
       buttonId: 'b_done0001',
       buttonIds: ['b_done0001'],
       includeStatusLabelIds: [0],
@@ -95,6 +97,8 @@ describe('digestFromConfig / draftFromConfig', () => {
         title: 'לסיים:',
         dateColumnId: 'date_due',
         dateColumnTitle: 'תאריך סיום',
+        noteColumnId: null,
+        noteColumnTitle: '',
         buttonId: 'b_done0001',
         buttonIds: ['b_done0001'],
         includeStatusLabelIds: [0],
@@ -154,10 +158,10 @@ describe('digestIsComplete', () => {
     ['no email column', { usersEmailColumnId: null }],
     ['empty subject', { subject: '  ' }],
     ['no sections', { sections: [] }],
-    ['section without date column', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: null, dateColumnTitle: '', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [0] }] }],
-    ['section without button', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: null, buttonIds: [], includeStatusLabelIds: [0] }] }],
-    ['section with empty title', { sections: [{ id: 's_a1234', title: ' ', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [0] }] }],
-    ['section with no include statuses', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [] }] }],
+    ['section without date column', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: null, dateColumnTitle: '', noteColumnId: null, noteColumnTitle: '', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [0] }] }],
+    ['section without button', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', noteColumnId: null, noteColumnTitle: '', buttonId: null, buttonIds: [], includeStatusLabelIds: [0] }] }],
+    ['section with empty title', { sections: [{ id: 's_a1234', title: ' ', dateColumnId: 'd', dateColumnTitle: 'ת', noteColumnId: null, noteColumnTitle: '', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [0] }] }],
+    ['section with no include statuses', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', noteColumnId: null, noteColumnTitle: '', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [] }] }],
   ])('false when %s', (_name, patch) => {
     expect(digestIsComplete({ ...digestFromConfig(DIGEST_CONFIG), ...patch })).toBe(false);
   });

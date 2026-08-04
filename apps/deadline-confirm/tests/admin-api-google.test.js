@@ -52,6 +52,9 @@ function connectedRecord(overrides = {}) {
     accessTokenExpiresAt: 9_999_999,
     senderAddress: SENDER,
     connectedAt: 1,
+    // The granted scope, as persisted by the callback since the 2026-08-04
+    // scope change (findings §5) — SMTP XOAUTH2 needs the full-mailbox scope.
+    scope: 'https://mail.google.com/ openid email',
     ...overrides,
   };
 }
@@ -74,6 +77,7 @@ describe('GET /api/state — google block', () => {
       status: 'disconnected',
       senderAddress: null,
       senderAllowedForAmp: null,
+      lastError: null,
     });
   });
 
@@ -85,6 +89,47 @@ describe('GET /api/state — google block', () => {
   it('reports broken once the grant died', async () => {
     const app = harness({ seed: { [senderKey()]: connectedRecord({ disconnectedAt: 5 }) } });
     expect(await google(app)).toMatchObject({ status: 'broken' });
+  });
+
+  // Re-consent signaling (owner decision 2026-08-04, findings §5): the SMTP
+  // XOAUTH2 send path needs https://mail.google.com/. A grant without it —
+  // every pre-change grant has no scope field at all — must surface as
+  // 'broken' so the admin's existing reconnect button drives re-consent.
+  it('reports broken for a pre-change grant with no scope field', async () => {
+    const record = connectedRecord();
+    delete record.scope;
+    const app = harness({ seed: { [senderKey()]: record } });
+    expect(await google(app)).toMatchObject({ status: 'broken', senderAddress: SENDER });
+  });
+
+  it('reports broken for a grant whose scope lacks mail.google.com (old gmail.send consent)', async () => {
+    const app = harness({
+      seed: {
+        [senderKey()]: connectedRecord({
+          scope: 'https://www.googleapis.com/auth/gmail.send openid email',
+        }),
+      },
+    });
+    expect(await google(app)).toMatchObject({ status: 'broken' });
+  });
+
+  it('reports connected for a grant carrying the full-mailbox scope', async () => {
+    const app = harness({ seed: { [senderKey()]: connectedRecord() } });
+    expect(await google(app)).toMatchObject({ status: 'connected' });
+  });
+
+  it('surfaces lastError as a string when the record carries one', async () => {
+    const app = harness({
+      seed: {
+        [senderKey()]: connectedRecord({ disconnectedAt: 5, lastError: 'google_invalid_grant' }),
+      },
+    });
+    expect(await google(app)).toMatchObject({ status: 'broken', lastError: 'google_invalid_grant' });
+  });
+
+  it('reports lastError:null when the record carries none', async () => {
+    const app = harness({ seed: { [senderKey()]: connectedRecord() } });
+    expect(await google(app)).toMatchObject({ lastError: null });
   });
 
   it('never surfaces the refresh or access token', async () => {

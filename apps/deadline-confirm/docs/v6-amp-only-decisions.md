@@ -218,6 +218,23 @@ possible when the client lives in the consenting user's own Workspace.
 Everything else in D12/D13 stands — Gmail API as the only channel, Resend gone,
 SecureStorage for the refresh token, `invalid_grant` surfacing loudly.
 
+> **Scope suspension — 2026-08-04 (owner decision, testing phase).** D12's
+> "no mail read scopes / `gmail.send` only" rule — restated as
+> "`gmail.send` plus `openid email`" in the 2026-07-29 supersession above —
+> is **suspended for the testing phase**, not deleted. The send path moves to
+> SMTP XOAUTH2, and `smtp.gmail.com` rejects a `gmail.send` token: its 334
+> challenge names `https://mail.google.com/` as the one scope it accepts
+> (measured — `docs/amp-email-verified-findings.md` §5). The requested scope
+> is therefore **`https://mail.google.com/` + `openid email`**, and
+> `GET /api/state` reports any grant without it as `broken` so the admin
+> reconnect button drives re-consent. Two caveats recorded with the decision:
+> the broad scope is *restricted*, so an **External** consent screen would
+> trigger Google's CASA assessment (Internal escapes it — findings §5), and
+> the shippable production channel remains an open owner decision (findings
+> §5 lists the channels with no Google OAuth in the send path). The app still
+> never READS mail — the broad grant is a capability of the token, not a
+> behavior of the code.
+
 ### D12 — Gmail API is the only sending channel. Resend is retired.
 
 Mail is sent exclusively through the Gmail API, from **one dedicated Google
@@ -745,6 +762,20 @@ the only authorization.
   (D15), no longer "optional; empty = any installing account".
 
 ---
+
+## 10b. Post-V6 owner decisions
+
+- **Section order = priority (owner, 2026-08-04).** Digest sections may overlap
+  (a task can satisfy several sections' date+status conditions). Before this
+  decision the task rendered once per matching section — two dropdowns for one
+  item in a single form, which is also the only way a rendered email could
+  produce the `conflict_item` rejection. Now the first section in config order
+  claims the task and later sections skip it, per recipient
+  (`digest-service.js`, the `claimed` set). The admin reorders sections with
+  ↑/↓ arrows; the array order is the entire priority model — no priority field.
+  The `conflict_item` wire guard stays (hand-crafted POSTs), and the renderer's
+  duplicate-item de-dup (shared state key, single hidden field) stays as
+  defence-in-depth.
 
 ## 11. Still open
 

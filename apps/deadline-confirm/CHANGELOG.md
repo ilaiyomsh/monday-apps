@@ -2,6 +2,75 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.12.0 — 2026-08-03 — a required text field per task, mapped to a board text column
+
+*(0.12.0 addendum, 2026-08-04 — the same version also shipped, in one round:
+the **SMTP XOAUTH2 send channel** replacing the Gmail API, which was measured
+stripping the AMP part on external delivery — `docs/amp-email-verified-findings.md`
+§2/§5, scope broadened to `https://mail.google.com/`, re-consent required;
+**strict amp4email CSS** — `data-css-strict` + every violation fixed + a
+non-blocking CI validator; **real status label colors** from the board's column
+settings; and **section priority** — a task matching several digest sections
+appears only in the first, with ↑/↓ reorder arrows in the admin. Hand-written
+here because this environment has no change-tracker DB; fold these into the DB
+on the next tracked change.)*
+
+A digest cluster can now map a **text column on the tasks board**. When it does,
+every row in that cluster's table gets a text field, **a task cannot be marked
+without filling it**, and what the reader types is written to that column
+alongside the status.
+
+**Why `required` is not the answer.** The obvious HTML solution — `required` on
+the input — is wrong for this email, and the reason is structural: the digest is
+**one bulk form** for every cluster and every task. A `required` input blocks the
+whole submission, so a reader who marked one row would be stopped by the empty
+fields of nine rows they deliberately left alone. The requirement has to be
+*conditional on that row being marked*, which plain HTML cannot express.
+
+**So the gate is `amp-bind`, and it is UX only.** The submit button carries
+`[disabled]="(dd.v9001 != '' && dd.n9001 == '') || …"` — one clause per
+note-owing task, reading "some row is marked but empty" — and a marked-but-empty
+field turns red so the blocker is findable. But AMP runs inside the reader's mail
+client, and `/amp/confirm` is a public endpoint: a hand-made POST skips every bit
+of that. **The server is the authority.** A selection whose note is missing is
+refused per item (`note_required`), and a final guard inside `performAction`
+refuses again rather than trust the layer above.
+
+**Per item, not per request.** A noteless task fails alone; the rows the reader
+did fill still go through. Failing the batch would punish correct work, and the
+reply now names the cause in Hebrew instead of the bare "1 task was not updated",
+which reads like a platform fault.
+
+**Status and note land in ONE write.** `change_multiple_column_values` replaces
+the two-call sequence for this path, because "a task cannot be marked without its
+note" cannot survive a second call failing. It also costs one API call instead of
+two against the complexity budget.
+
+**Details that will bite later, so they are pinned by tests:**
+- The target column resolves from the **selected button's** section. The wire
+  carries one selection per item and no cluster identity, so following the button
+  makes the column follow the action actually taken. A button shared by two
+  mapped clusters is ambiguous by construction — first match wins.
+- **One** `note_<itemId>` field per item, even when the task appears in two
+  clusters — the same shape the status selection already uses. Two named inputs
+  for one item would submit the key twice.
+- `already_done` still short-circuits with no write: no mark happened, so nothing
+  authorized overwriting the column.
+- Notes cap at 500 characters and are **refused**, never truncated.
+- The note is quoted into the item's attribution update, so the board audit trail
+  carries it too.
+- A cluster with no mapped column renders byte-for-byte as before — no field, no
+  state keys, no CSS, no gate. Existing configs are unaffected.
+
+**Writes overwrite** the column (owner decision) — the cell always shows the most
+recent note rather than an accumulating log.
+
+⚠️ **Sandbox probe outstanding.** The `change_multiple_column_values` shape follows
+the monday-api skill's `column-formats.md` (status `{ index }`, text a plain
+string) and passes `/monday-api check`, but this branch was built in a cloud
+session with no `MONDAY_TOKEN`, so it was **not** exercised against a live WZ-
+sandbox board. Worth one real write before the release to customers.
+
 ## 0.11.0 — 2026-08-02 — editable AMP code box in the preview + send-as-typed debug lane
 
 Clicking **"תצוגה מקדימה"** in the מייל מסכם tab now also opens the full

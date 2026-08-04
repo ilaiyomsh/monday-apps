@@ -38,7 +38,7 @@ const GUARD_MESSAGES: Record<string, string> = {
   digest_not_configured: 'המייל המסכם עוד לא נשמר — הפעילו אותו, השלימו את השדות ולחצו "שמירת הגדרות".',
   no_secret: 'אין מפתח קישורים פעיל — צרו מפתח בלשונית ההגדרות.',
   not_connected: 'אין חיבור monday פעיל — התחברו מחדש בלשונית ההגדרות.',
-  email_not_configured: 'ערוץ השליחה לא מוגדר בשרת (Gmail API — חסרים credentials בסביבת האפליקציה).',
+  email_not_configured: 'ערוץ השליחה לא מוגדר בשרת (חסר צמד ה-OAuth client בסביבת האפליקציה).',
   monday_api_failed: 'קריאת הלוחות ממאנדיי נכשלה. נסו שוב.',
 };
 
@@ -108,12 +108,24 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const peopleOptions = usersColumns.filter((c) => c.type === 'people').map((c) => toOption(c.id, c.title));
   const emailOptions = usersColumns.filter((c) => c.type === 'email').map((c) => toOption(c.id, c.title));
   const dateOptions = tasksColumns.filter((c) => c.type === 'date').map((c) => toOption(c.id, c.title));
+  const textOptions = tasksColumns.filter((c) => c.type === 'text').map((c) => toOption(c.id, c.title));
   const buttonOptions = buttons
     .filter((b) => b.name.trim().length > 0)
     .map((b) => toOption(b.id, b.name));
 
   const patchSection = (id: string, patch: Partial<DigestSectionDraft>) => {
     onChange({ sections: digest.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+  };
+
+  // Section order IS the priority (owner decision 2026-08-04): buildDigest lets
+  // the first matching section claim a task. These arrows are the whole
+  // priority UI — no separate priority field exists.
+  const moveSection = (index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (target < 0 || target >= digest.sections.length) return;
+    const sections = [...digest.sections];
+    [sections[index], sections[target]] = [sections[target], sections[index]];
+    onChange({ sections });
   };
 
   // The status-condition options for a section = the labels of the status
@@ -322,8 +334,11 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
             כל מקבץ הוא טבלה במייל: עמודת תאריך שקובעת "באיחור" (תאריך שעבר — כולל היום),
             תנאי סטטוס שקובע אילו משימות נכנסות, ותפריט נפתח מעוצב (תגית צבע → אפשרויות)
             לבחירת סטטוס חדש מהכפתורים שנבחרו כאן.
+            <br />
+            סדר המקבצים קובע עדיפות: משימה שמתאימה לתנאים של כמה מקבצים תופיע רק
+            בגבוה ביותר מביניהם. סדרו עם החיצים.
           </div>
-          {digest.sections.map((section) => {
+          {digest.sections.map((section, sectionIndex) => {
             const primaryButtonId = section.buttonIds[0] ?? section.buttonId;
             const statusOptions = statusLabelOptionsFor(primaryButtonId);
             const selectedStatus = statusOptions.filter((o) =>
@@ -380,13 +395,61 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     />
                   </div>
                   {digest.sections.length > 1 && (
-                    <Button
-                      kind={Button.kinds.TERTIARY}
-                      onClick={() => onChange({ sections: digest.sections.filter((s) => s.id !== section.id) })}
-                    >
-                      הסרה
-                    </Button>
+                    <>
+                      <Button
+                        kind={Button.kinds.TERTIARY}
+                        disabled={sectionIndex === 0}
+                        ariaLabel="העלאת עדיפות המקבץ"
+                        onClick={() => moveSection(sectionIndex, -1)}
+                      >
+                        ↑
+                      </Button>
+                      <Button
+                        kind={Button.kinds.TERTIARY}
+                        disabled={sectionIndex === digest.sections.length - 1}
+                        ariaLabel="הורדת עדיפות המקבץ"
+                        onClick={() => moveSection(sectionIndex, 1)}
+                      >
+                        ↓
+                      </Button>
+                      <Button
+                        kind={Button.kinds.TERTIARY}
+                        onClick={() => onChange({ sections: digest.sections.filter((s) => s.id !== section.id) })}
+                      >
+                        הסרה
+                      </Button>
+                    </>
                   )}
+                </div>
+                <div className="dc-row">
+                  <div className="dc-field" style={{ minWidth: 280 }}>
+                    <label>עמודת טקסט חובה (אופציונלי)</label>
+                    <Dropdown
+                      placeholder={
+                        tasksColumnsLoading
+                          ? 'טוען…'
+                          : textOptions.length === 0
+                            ? 'אין עמודות טקסט בלוח'
+                            : 'ללא — אין שדה טקסט'
+                      }
+                      disabled={tasksColumnsLoading || textOptions.length === 0}
+                      options={textOptions}
+                      value={findOption(textOptions, section.noteColumnId)}
+                      onChange={(opt: Option | null) =>
+                        patchSection(section.id, {
+                          noteColumnId: opt?.value ?? null,
+                          // capture the board column title → email header
+                          noteColumnTitle: opt?.label ?? '',
+                        })
+                      }
+                      clearable
+                    />
+                    <div className="dc-hint">
+                      כשבוחרים עמודה, כל שורה במקבץ מקבלת שדה טקסט במייל — <b>אי אפשר לסמן משימה
+                      בלי למלא אותו</b>, וכפתור האישור נשאר מנוטרל עד שכל השורות שסומנו מולאו.
+                      הערך נכתב לעמודה הזו ודורס את מה שהיה בה. ריק = אין שדה ואין חובה.
+                    </div>
+                  </div>
                 </div>
                 <div className="dc-row">
                   <div className="dc-field" style={{ minWidth: 320, flex: 1 }}>
@@ -542,8 +605,8 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     <label>קוד ה-AMP המלא שנבנה — ניתן לעריכה ולשליחה</label>
                     <div className="dc-hint">
                       זה בדיוק המסמך שנשלח כחלק <code>text/x-amp-html</code>. אפשר לערוך אותו כאן
-                      ולשלוח את הבתים שנערכו כמו שהם דרך Gmail API — בלי רינדור מחדש — כדי לבודד
-                      מה בדיוק ג׳ימייל דוחה.
+                      ולשלוח את הבתים שנערכו כמו שהם בערוץ השליחה (SMTP) — בלי רינדור מחדש —
+                      כדי לבודד מה בדיוק ג׳ימייל דוחה.
                     </div>
                     <textarea
                       dir="ltr"

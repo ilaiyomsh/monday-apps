@@ -31,6 +31,8 @@ const section = (over: Partial<DigestDraft['sections'][number]> = {}) => ({
   title: 'משימות שנדרש להתחיל',
   dateColumnId: 'date4',
   dateColumnTitle: 'תאריך התחלה',
+  noteColumnId: null,
+  noteColumnTitle: '',
   buttonId: 'b_start001',
   buttonIds: ['b_start001'],
   includeStatusLabelIds: [3],
