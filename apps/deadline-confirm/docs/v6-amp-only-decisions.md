@@ -154,10 +154,14 @@ Admin: multi-select "כפתורי פעולה"; primary (first) drives status fil
   race: amp-bind mutates the DOM on the next vsync frame and the submit does not
   wait, so the POST would carry the previous value. The setState in that chain is
   cosmetic (close the menu, repaint the trigger) and cannot lose a selection.
-- **The submit fires on `tap` on the radio, not `change`.** A radio's
-  checkedness is set in the pre-click activation step, so a tap handler already
-  sees it checked; and tap fires again on a second tap of the same option, which
-  is what makes retrying a failed row possible.
+- **`change` on the radio submits; `tap` only repaints and closes the menu.**
+  `change:<formId>.submit` is the supported AMP-for-Email pattern for a form
+  control (owner, 2026-08-04) and fires after the radio is checked. Splitting the
+  two is required, not tidy: both fire on a first pick, so submitting from each
+  would double-post every selection and the duplicate would answer
+  `already_done`, replacing the row's ✓. Accepted cost: re-tapping the SAME
+  option fires no `change`, so a failed row is retried by choosing a different
+  status (or from the board).
 - **A status cannot be picked before a mapped text field is filled** — the
   trigger carries `disabled` + `[disabled]="dd.n<id> == ''"` (owner decision
   2026-08-04, same day, shipped first). The static attribute IS the initial
@@ -170,10 +174,13 @@ Admin: multi-select "כפתורי פעולה"; primary (first) drives status fil
 - **Rate limits re-tuned:** one POST per task instead of one per message, so
   bucket B (per `accountId:ip`) went 30 → 120/min to match bucket A. The monday
   workload is unchanged — same tasks, same writes, same complexity budget.
-- **UNVERIFIED IN GMAIL:** the `form.submit` action, and (from the note lock) the
-  `change` event on a text input. Both need one real send before release; the
-  fallback if `submit` is unsupported is a small per-row confirm button — one
-  extra tap, still not one button per message.
+- **`change:<form>.submit` is CONFIRMED supported in Gmail** (owner,
+  2026-08-04), so the write path itself is not a risk and the per-row confirm
+  button contingency is dropped. Still unverified, and narrower: `change` on a
+  TEXT input, which only the note lock depends on — without it a mapped row's
+  trigger stays locked, while clusters with no mapped text column are unaffected.
+  A native `<select>` (whose `change` is the same pattern) stays rejected for the
+  2026-07-27 reason: the OS popup cannot be styled.
 
 ### D10 — One signature per message, over a signed manifest.
 

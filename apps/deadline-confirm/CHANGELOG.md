@@ -34,11 +34,14 @@ phone, which the fixed-width table never did.
   wait, so the POST would carry the PREVIOUS value. A checked radio is
   serialized by the form itself. The `setState` still in that chain is cosmetic
   — close the menu, repaint the trigger — and cannot lose a selection.
-- **The submit fires on `tap` on the radio, not `change`.** A radio's
-  checkedness is set in the pre-click activation step, so a tap handler already
-  sees it checked; and unlike `change`, tap fires again when the reader taps the
-  SAME option, which is the only thing that makes retrying a failed row
-  possible.
+- **`change` on the radio submits; `tap` only repaints and closes the menu.**
+  `change:<formId>.submit` is the supported AMP-for-Email pattern for a form
+  control, and it fires after the radio is checked. The split is required rather
+  than tidy: both events fire on a first pick, so submitting from each would post
+  twice and the duplicate would answer `already_done` — replacing the ✓ of a
+  write that had just succeeded. Accepted cost: re-tapping the same option fires
+  no `change` and does not resubmit, so a failed row is retried by picking a
+  different status.
 
 **Signed per row.** Each form carries a manifest covering its own task only, so
 a leaked form authorizes one item, and the document is smaller than it would be
@@ -62,13 +65,13 @@ state, the ORed `[disabled]` submit gate, the marked-but-empty note highlight
 (the trigger lock makes that state unreachable) and the cross-cluster de-dup —
 each form submits alone, so each carries its own named note field.
 
-⚠️ **Two amp4email behaviours are still unverified in Gmail, and they gate the
-release:** the `form.submit` action (without it nothing is ever written) and
-`change` on a text input (without it mapped rows stay locked — `input-throttled`
-was already measured dead there). One real send through the `send-raw` debug lane
-answers both. If `submit` turns out to be unsupported, the fallback is a small
-per-row confirm button — one extra tap, still not one button per message. Also
-still open from 0.12.0: `npm run validate:amp` could not run in the cloud session
+⚠️ **One amp4email behaviour is still unverified in Gmail:** `change` on a TEXT
+input, which the note lock's state mirror depends on (`input-throttled` was
+already measured dead there). Without it a mapped row's trigger stays locked;
+clusters with no mapped text column are unaffected. The write path itself is not
+at risk — `change:<form>.submit` on a form control is confirmed supported, which
+is why the submit hangs off `change` and not off `tap`. Also still open from
+0.12.0: `npm run validate:amp` could not run in the cloud session
 (`cdn.ampproject.org` is not reachable from it), so the new markup — label-wrapped
 radios, a form inside each card — has not been through the official validator.
 

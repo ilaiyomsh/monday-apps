@@ -21,10 +21,10 @@
 //     submit would carry the PREVIOUS value. A checked radio is serialized by
 //     the form itself — no binding, no frame to wait for. The setState in that
 //     chain is therefore cosmetic only (close the menu, repaint the trigger).
-//   - The submit fires on `tap` on the radio, not `change`. A radio's
-//     checkedness is set in the pre-click activation step, so a tap handler
-//     already sees it checked; and tap fires AGAIN when the reader taps the
-//     same option, which is the only way to retry a row whose request failed.
+//   - The submit fires on the radio's `change` (owner-confirmed 2026-08-04 as
+//     the supported AMP-for-Email pattern); `tap` only repaints and closes the
+//     menu. They are NOT interchangeable and must not be merged: both fire on a
+//     first pick, so submitting from each would double-post every selection.
 
 import { escapeHtml } from './html.js';
 import { buildManifest, signManifest, currentSlot } from '../services/manifest-signature.js';
@@ -468,9 +468,19 @@ function renderStatusControl({ formId, menuKey, task, buttons, palette, noteGate
       // The setState here is COSMETIC (close the menu, repaint the trigger).
       // The submitted value is the radio's, so the vsync delay cannot lose it.
       const paint = `AMP.setState({dd:{o:'', ${lKey}:'${escapeBindStr(button.label)}', ${cKey}:'${escapeBindStr(cls)}'}})`;
+      // The two events are split on purpose:
+      //   change → submit. This is the documented AMP-for-Email pattern for a
+      //     form control (owner-confirmed 2026-08-04), and it fires AFTER the
+      //     radio is checked, so the form serializes the right value.
+      //   tap → paint. Repainting on tap (not change) also closes the menu on a
+      //     tap of the already-selected option, which fires no change event.
+      // Consequence to know: re-tapping the SAME option does not resubmit, so a
+      // row whose request failed is retried by picking a different status (or
+      // from the board). Putting submit on tap as well would double-post every
+      // first pick, since both events fire on it.
       return `              <label class="dd-opt" style="background:${escapeHtml(color)}">
                 <input type="radio" class="pick" name="${escapeHtml(`item_${id}`)}" value="${escapeHtml(button.id)}"
-                       on="tap:${paint},${formId}.submit">
+                       on="tap:${paint};change:${formId}.submit">
                 <span>&#8207;${escapeHtml(button.label)}</span>
               </label>`;
     })

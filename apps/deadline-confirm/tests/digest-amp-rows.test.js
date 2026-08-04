@@ -13,11 +13,12 @@
 //     amp-bind applies DOM mutations on the next vsync frame, so the submit
 //     would carry the PREVIOUS value. A checked radio is serialized by the form
 //     itself, with no binding and no frame to wait for.
-//  3. The trigger is `tap` on the radio, not `change`. Per the DOM spec a radio's
-//     checkedness is set in the pre-click activation step, so a tap handler
-//     already sees checked=true — and unlike `change`, tap fires again when the
-//     reader taps the SAME option, which is what makes a retry after a failed
-//     request possible.
+//  3. `change` on the radio submits; `tap` only repaints and closes the menu.
+//     `change` is the supported AMP-for-Email pattern for a form control
+//     (owner-confirmed 2026-08-04) and fires after the radio is checked. The two
+//     must stay split: both fire on a first pick, so submitting from each would
+//     double-post every selection. The cost is that re-tapping the SAME option
+//     fires no change and does not resubmit.
 //  4. Each form carries its OWN manifest + signature, covering that row only.
 //     Least privilege (a leaked form authorizes one item) and smaller than
 //     repeating the message-wide manifest N times.
@@ -136,11 +137,22 @@ describe('renderDigestAmp — one form per row', () => {
 
   // Two clusters on purpose: the submit target must carry the CLUSTER INDEX as
   // well as the item id, or a task listed twice would submit its twin's form.
-  it('submits the row from a tap on the option, not from a submit control', () => {
+  it('submits the row from the option\u2019s change, not from a submit control', () => {
     const html = render([startSection(), doneSection()]);
     expect(html).toContain(
-      `on="tap:AMP.setState({dd:{o:'', l9004:'בוצע', c9004:'bg_00854d'}}),f1_9004.submit"`
+      `on="tap:AMP.setState({dd:{o:'', l9004:'בוצע', c9004:'bg_00854d'}});change:f1_9004.submit"`
     );
+  });
+
+  // Both events fire on a first pick. Submitting from each would post twice, and
+  // the second POST would answer already_done — overwriting the row's own ✓ with
+  // "היה מעודכן כבר" on a write that had just succeeded.
+  it('never submits from tap as well — one pick must not post twice', () => {
+    const html = render([startSection()]);
+    // Scoped to the tap: segment only — `[^;"]*` stops at the ;change: handler,
+    // which legitimately does carry .submit.
+    expect(html).not.toMatch(/on="tap:[^;"]*\.submit/);
+    expect((html.match(/change:f0_9001\.submit/g) ?? []).length).toBe(2); // two options
   });
 
   it('carries the chosen button on a radio the form serializes itself', () => {

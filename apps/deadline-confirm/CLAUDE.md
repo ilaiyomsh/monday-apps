@@ -133,10 +133,14 @@ src/
      mutates on the next vsync frame, the submit does not wait — so the POST
      would carry the previous value. The setState in that chain is cosmetic
      (close menu, repaint trigger).
-  2. **The submit fires on `tap` on the radio, not `change`:** checkedness is set
-     in the pre-click activation step, so tap already sees it checked, and tap
-     fires again on a repeat tap of the same option — the only way to retry a
-     row whose request failed.
+  2. **`change` on the radio submits; `tap` only repaints and closes the menu.**
+     `change` is the supported AMP-for-Email pattern for a form control (owner,
+     2026-08-04) and fires after the radio is checked. Do NOT merge them: both
+     fire on a first pick, so submitting from each double-posts every selection
+     and the duplicate answers `already_done`, overwriting the ✓ of the write
+     that had just succeeded. The cost of this split is that re-tapping the SAME
+     option fires no `change` and does not resubmit — a row whose request failed
+     is retried by picking a different status, or from the board.
   3. **Each form is signed over ITS OWN pairs** (one item), so a leaked form
      authorizes one task. `/amp/confirm` is unchanged — it verifies whatever
      manifest arrives.
@@ -163,11 +167,13 @@ src/
   rows are locked shut — verify with a real send (`send-raw` lane) after any
   change here, and note the wrinkle: the tap that blurs the field only unlocks
   the trigger, so the reader's first tap may need a second.
-- **TWO amp4email behaviours are still UNVERIFIED in Gmail** and gate the 0.13.0
-  release: the `form.submit` action (nothing writes without it) and `change` on a
-  text input (mapped rows stay locked without it). One real send through the
-  `send-raw` lane answers both. Fallback if `submit` is unsupported: a small
-  per-row confirm button — one extra tap, still not one button per message.
+- **`change:<form>.submit` is CONFIRMED supported in Gmail** (owner, 2026-08-04)
+  — that is why the submit hangs off `change` and not off `tap`. What is still
+  unverified is narrower: `change` on a TEXT input, which the note lock's
+  `dd.n<id>` mirror depends on (`input-throttled` was already measured dead
+  there). Without it, a mapped row's trigger stays locked; rows with no mapped
+  text column are unaffected. One real send through the `send-raw` lane settles
+  it.
 - A task listed in TWO clusters (hand-built; the section-priority dedup stops
   buildDigest producing it) now renders TWO independent forms — two ids, two
   signatures, two POSTs. They still share the display state (`l`/`c`) and the
