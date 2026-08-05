@@ -1,0 +1,48 @@
+{
+  "date": "2026-08-05T13:57:35+00:00",
+  "toolchain": {
+    "node": "v22.22.2",
+    "pnpm": "10.33.0"
+  },
+  "app": "twyst-your-status",
+  "base_sha": "d9bc0d4d83650ce2f0df4d43d2630520b9b918ea",
+  "branch": "claude/twystyourstatus-cleanup-workflow-ud6gpw",
+  "scope": {
+    "app_dir": "apps/twyst-your-status",
+    "spa_dir": "apps/twyst-your-status",
+    "srv_dir": "apps/twyst-your-status/server",
+    "state_dir": "apps/twyst-your-status/.cleanup"
+  },
+  "commands": {
+    "install": "pnpm install --frozen-lockfile",
+    "wiring": "node scripts/error-wiring-audit.mjs",
+    "eager": "node scripts/lib/eager-graph.mjs",
+    "typecheck": "pnpm --filter \"./apps/twyst-your-status\" run type-check",
+    "lint": "pnpm --filter \"./apps/twyst-your-status\" lint && pnpm --filter \"./apps/twyst-your-status/server\" lint",
+    "build": "pnpm --filter \"./apps/twyst-your-status\" build && pnpm --filter \"./apps/twyst-your-status/server\" build",
+    "test": "pnpm --filter \"./apps/twyst-your-status\" test && pnpm --filter \"./apps/twyst-your-status/server\" test",
+    "drift": "pnpm --filter @mapps/error-kit test"
+  },
+  "scanners": {
+    "knip": "pnpm dlx knip@5.88.1",
+    "knip_spa_args": "--directory apps/twyst-your-status",
+    "knip_srv_args": "--directory apps/twyst-your-status/server",
+    "jscpd": "pnpm dlx jscpd@4.2.5 apps/twyst-your-status/src apps/twyst-your-status/server/src --min-tokens 50 --ignore **/*.test.js,**/*.test.jsx,**/dev-harness/**,**/test-utils/**"
+  },
+  "metrics": {
+    "loc": 15223,
+    "source_files": 90,
+    "bundle_kb": "716",
+    "clones": "6",
+    "duplication_pct": "0.38",
+    "knip_unused_files": 4,
+    "knip_unused_exports": 20,
+    "knip_unused_dependencies": 0
+  },
+  "tests": "green",
+  "raw": {
+    "knip_spa": "knip-spa-baseline.json",
+    "knip_srv": "knip-srv-baseline.json",
+    "jscpd": "jscpd-baseline/jscpd-report.json"
+  }
+}

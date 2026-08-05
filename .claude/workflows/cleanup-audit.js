@@ -20,7 +20,18 @@ const APP = 'apps/twyst-your-status'
 const STATE = `${APP}/.cleanup`
 const RAW = `${STATE}/raw`
 
-const target = (typeof args === 'string' ? args : args?.target) || `${APP}/src`
+// args arrives as an object from a tool call but as a raw STRING from the slash-command
+// form (/cleanup-audit {"target":"…"}) — which is the documented way to run this. Parse
+// that case before the scope check, or the whole JSON blob gets read as a path and the
+// scope guard refuses a perfectly valid target.
+const input = (() => {
+  if (typeof args !== 'string') return args
+  const s = args.trim()
+  if (s.startsWith('{') || s.startsWith('[')) { try { return JSON.parse(s) } catch { return args } }
+  return args
+})()
+
+const target = (typeof input === 'string' ? input.trim() : input?.target) || `${APP}/src`
 if (!target.startsWith(APP)) {
   return { error: `Refusing to run: target "${target}" is outside ${APP}. This cleanup workflow is scoped to twyst-your-status only.` }
 }

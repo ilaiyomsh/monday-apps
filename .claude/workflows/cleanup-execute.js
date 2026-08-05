@@ -15,17 +15,27 @@ const APP = 'apps/twyst-your-status'
 const STATE = `${APP}/.cleanup`
 const PLAN = `${STATE}/CLEANUP_PLAN.md`
 
-// Batch selection from args: {batches:[1,2]} | "1,2,4" | "all" | undefined
+// args arrives as an object from a tool call but as a raw STRING from the slash-command
+// form (/cleanup-execute {"batches":[1,3]}) — which is the documented way to run this, so
+// a JSON string has to be parsed before anything reads .batches off it.
+const input = (() => {
+  if (typeof args !== 'string') return args
+  const s = args.trim()
+  if (s.startsWith('{') || s.startsWith('[')) { try { return JSON.parse(s) } catch { return args } }
+  return args
+})()
+
+// Batch selection: {batches:[1,2]} | [1,2] | "1,2,4" | "all" | undefined
 const requested = (() => {
-  if (!args) return null
-  if (Array.isArray(args)) return args.map(Number).filter(n => !Number.isNaN(n))
-  if (typeof args === 'number') return [args]
-  if (typeof args === 'string') {
-    if (args.trim().toLowerCase() === 'all') return null
-    const ns = args.split(/[^0-9]+/).map(Number).filter(n => !Number.isNaN(n) && n > 0)
+  if (!input) return null
+  if (Array.isArray(input)) return input.map(Number).filter(n => !Number.isNaN(n))
+  if (typeof input === 'number') return [input]
+  if (typeof input === 'string') {
+    if (input.trim().toLowerCase() === 'all') return null
+    const ns = input.split(/[^0-9]+/).map(Number).filter(n => !Number.isNaN(n) && n > 0)
     return ns.length ? ns : null
   }
-  if (Array.isArray(args?.batches)) return args.batches.map(Number).filter(n => !Number.isNaN(n))
+  if (Array.isArray(input.batches)) return input.batches.map(Number).filter(n => !Number.isNaN(n))
   return null
 })()
 
