@@ -1,0 +1,37 @@
+{
+  "common": {
+    "retry": "Try again",
+    "close": "Close",
+    "details": "Details",
+    "copy": "Copy"
+  },
+  "toasts": {
+    "genericError": "Something went wrong",
+    "noItems": "No items found in the selected range and committees",
+    "generating": "Generating report…",
+    "generated": "Report generated and downloaded",
+    "settingsSaved": "Settings saved"
+  },
+  "errorBoundary": {
+    "chunkTitle": "Failed to load a component",
+    "chunkBody": "A new version may have shipped, or the network dropped. Reload the page to continue.",
+    "chunkAction": "Reload the page",
+    "crashTitle": "Something went wrong",
+    "crashBody": "An unexpected error occurred. Try again, and reload the page if it keeps happening.",
+    "crashAction": "Try again",
+    "details": "Details"
+  },
+  "errorDetailsModal": {
+    "title": "Error details",
+    "module": "Module",
+    "event": "Event",
+    "time": "Time",
+    "correlationId": "Correlation id",
+    "noStack": "No stack trace",
+    "copyAll": "Copy all"
+  },
+  "network": {
+    "title": "No connection",
+    "body": "We could not reach monday. Check your connection and try again."
+  }
+}

@@ -1,0 +1,49 @@
+Starting filesystem walk for root: /
+Scanned /Users/ilaish/monday_app/monday-apps-git/pnpm-lock.yaml file and found 1777 packages
+End status: 0 dirs visited, 1 inodes visited, 1 Extract calls, 44.284583ms elapsed, 44.285ms wall time
+
+Total 17 packages affected by 38 known vulnerabilities (1 Critical, 20 High, 15 Medium, 2 Low, 0 Unknown) from 1 ecosystem.
+38 vulnerabilities can be fixed.
+
++-------------------------------------+------+-----------+-----------------+---------+---------------+----------------+
+| OSV URL                             | CVSS | ECOSYSTEM | PACKAGE         | VERSION | FIXED VERSION | SOURCE         |
++-------------------------------------+------+-----------+-----------------+---------+---------------+----------------+
+| https://osv.dev/GHSA-xcpc-8h2w-3j85 | 7.5  | npm       | adm-zip         | 0.5.18  | 0.6.0         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-v422-hmwv-36x6 | 3.7  | npm       | body-parser     | 1.20.5  | 1.20.6        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-3jxr-9vmj-r5cp | 7.7  | npm       | brace-expansion | 1.1.15  | 1.1.16        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-mh99-v99m-4gvg | 7.5  | npm       | brace-expansion | 1.1.15  | 1.1.17        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-rgw5-rvv9-x895 | 7.5  | npm       | brace-expansion | 1.1.15  | 1.1.18        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-3jxr-9vmj-r5cp | 7.7  | npm       | brace-expansion | 2.1.1   | 2.1.2         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-mh99-v99m-4gvg | 7.5  | npm       | brace-expansion | 2.1.1   | 2.1.3         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-rgw5-rvv9-x895 | 7.5  | npm       | brace-expansion | 2.1.1   | 2.1.4         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-mh99-v99m-4gvg | 7.5  | npm       | brace-expansion | 5.0.7   | 5.0.8         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-rgw5-rvv9-x895 | 7.5  | npm       | brace-expansion | 5.0.7   | 5.0.9         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-67mh-4wv8-2f99 | 5.3  | npm       | esbuild         | 0.21.5  | 0.25.0        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-67mh-4wv8-2f99 | 5.3  | npm       | esbuild         | 0.24.2  | 0.25.0        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-7p8r-x3mc-p8w7 | 7.5  | npm       | fast-uri        | 3.1.3   | 3.1.5         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-v2hh-gcrm-f6hx | 7.5  | npm       | fast-uri        | 3.1.3   | 3.1.4         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-268h-hp4c-crq3 | 5.4  | npm       | nodemailer      | 7.0.13  | 8.0.9         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-c7w3-x93f-qmm8 | 2.3  | npm       | nodemailer      | 7.0.13  | 8.0.4         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-p6gq-j5cr-w38f | 7.1  | npm       | nodemailer      | 7.0.13  | 9.0.1         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-r7g4-qg5f-qqm2 | 6.5  | npm       | nodemailer      | 7.0.13  | 8.0.8         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-vvjj-xcjg-gr5g | 4.9  | npm       | nodemailer      | 7.0.13  | 8.0.5         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-wqvq-jvpq-h66f | 5.4  | npm       | nodemailer      | 7.0.13  | 8.0.9         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-6g55-p6wh-862q | 7.5  | npm       | postcss         | 8.4.31  | 8.5.12        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-fxqj-rqcc-2cmp | 6.3  | npm       | postcss         | 8.4.31  | 8.5.23        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-qx2v-qp2m-jg93 | 6.1  | npm       | postcss         | 8.4.31  | 8.5.10        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-r28c-9q8g-f849 | 7.5  | npm       | postcss         | 8.4.31  | 8.5.18        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-fxqj-rqcc-2cmp | 6.3  | npm       | postcss         | 8.5.16  | 8.5.23        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-r28c-9q8g-f849 | 7.5  | npm       | postcss         | 8.5.16  | 8.5.18        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-395f-4hp3-45gv | 8.7  | npm       | shell-quote     | 1.8.4   | 1.9.0         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-4cwx-7wf7-3272 | 7.4  | npm       | undici          | 7.28.0  | 7.29.0        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-8xcm-r25x-g524 | 4.8  | npm       | undici          | 7.28.0  | 7.29.0        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-jr45-8vmc-qm54 | 5.9  | npm       | undici          | 7.28.0  | 7.29.0        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-m8rv-5g2x-5cg5 | 4.2  | npm       | undici          | 7.28.0  | 7.29.0        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-v3r7-h72x-cjcm | 4.8  | npm       | undici          | 7.28.0  | 7.29.0        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-w5hq-g745-h8pq | 7.5  | npm       | uuid            | 8.3.2   | 11.1.1        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-w5hq-g745-h8pq | 7.5  | npm       | uuid            | 9.0.1   | 11.1.1        | pnpm-lock.yaml |
+| https://osv.dev/GHSA-4w7w-66w2-5vf9 | 6.3  | npm       | vite            | 5.4.21  | 6.4.2         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-fx2h-pf6j-xcff | 8.2  | npm       | vite            | 5.4.21  | 6.4.3         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-v6wh-96g9-6wx3 | 5.5  | npm       | vite            | 5.4.21  | 6.4.3         | pnpm-lock.yaml |
+| https://osv.dev/GHSA-5xrq-8626-4rwp | 9.8  | npm       | vitest          | 2.1.9   | 3.2.6         | pnpm-lock.yaml |
++-------------------------------------+------+-----------+-----------------+---------+---------------+----------------+

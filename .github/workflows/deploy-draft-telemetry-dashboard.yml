@@ -1,0 +1,107 @@
+name: Deploy Draft - telemetry-dashboard
+
+# Spec section 7.1: merges into develop auto-deploy to the app's LATEST DRAFT
+# version. No version IDs are stored anywhere — only the App ID secret; the CLI
+# resolves the latest draft itself.
+#
+# telemetry-dashboard is a server-side (monday-code) app: `mapps code:push`
+# WITHOUT -c. The Axiom read token + session-token secret are set on the
+# platform via `mapps code:env` (see the app README), never in this workflow.
+#
+# NOTE: this workflow cannot succeed until the monday app exists and
+# secrets.APP_TELEMETRY_DASHBOARD_ID is added — see the app README activation steps.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - develop
+    paths:
+      - "apps/telemetry-dashboard/**"
+      - "packages/shared/**"
+
+jobs:
+  deploy-draft:
+    name: Build and push telemetry-dashboard to draft
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-draft-telemetry-dashboard
+      cancel-in-progress: false
+    # Until the monday app exists and its App ID secret is added, the mapps push steps
+    # skip (via `if: env.APP_ID != ''`) so the job stays GREEN — the client build still
+    # runs, giving the same verification the CI gate provides.
+    env:
+      APP_ID: ${{ secrets.APP_TELEMETRY_DASHBOARD_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # VITE_AXIOM_* are baked into the client bundle at build time to activate the
+      # browser error sink (src/client/utils/axiomErrorSink.ts), gated on import.meta.env.PROD.
+      # VITE_AXIOM_TOKEN is an Axiom ingest token (secret); an absent secret builds an inert
+      # sink (Boolean('') === false), so the client never ships until the secret is added.
+      - name: Build telemetry-dashboard (client)
+        run: pnpm --filter "./apps/telemetry-dashboard" build
+        env:
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: telemetry-dashboard
+
+      # The dashboard CLIENT bundle ('hidden' sourcemaps) is served to browsers, so its
+      # maps must NEVER reach the deploy — archive them keyed by commit SHA, then
+      # strip them from public/ before code:push. (Server runs from source and is
+      # already readable — not symbolicated.) Pull with:
+      #   .claude/skills/axiom-sre/scripts/symbolicate '<frame>' --app telemetry-dashboard --ver <x.y.z+sha>
+      - name: Archive client sourcemaps as build artifact (for stack symbolication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-telemetry-dashboard-${{ github.sha }}
+          path: apps/telemetry-dashboard/public/**/*.map
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Strip client sourcemaps before deploy (never ship .map to the browser)
+        run: |
+          set -euo pipefail
+          find apps/telemetry-dashboard/public -name '*.map' -type f -delete
+          remaining="$(find apps/telemetry-dashboard/public -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining client .map files: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::client sourcemaps still present — refusing to push (would leak source)"
+            exit 1
+          fi
+
+      - name: Install monday.com apps CLI
+        if: ${{ env.APP_ID != '' }}
+        run: npm install -g @mondaycom/apps-cli
+
+      - name: Authenticate mapps CLI (non-interactive)
+        if: ${{ env.APP_ID != '' }}
+        run: mapps init -t "$MONDAY_TOKEN"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+
+      # Server-side app: no "-c". --verbose so a failed push prints the reason.
+      # Skipped (job stays green) until secrets.APP_TELEMETRY_DASHBOARD_ID is set.
+      - name: Push to latest DRAFT version
+        if: ${{ env.APP_ID != '' }}
+        run: >
+          mapps code:push --verbose
+          -d apps/telemetry-dashboard
+          -a "$APP_ID"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}

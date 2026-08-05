@@ -1,0 +1,203 @@
+name: Pages - docs-export
+
+# GitHub Pages hosting for ONE app only: apps/docs-export.
+#
+# This repo's normal deploy target is the monday CDN (`mapps code:push`, see
+# deploy-{draft,live}-<app>.yml). This workflow is a SEPARATE, additional target
+# requested by the owner 2026-07-29: serve the docs-export bundle as a static
+# site so it can be opened in a browser without going through monday.
+#
+# SCOPE — deliberately narrow, and it must stay that way:
+#   * The path filter only fires on apps/docs-export/**.
+#   * The uploaded artifact is ONLY apps/docs-export/dist.
+#   * No other app in this monorepo is built or published here.
+#
+# A repository has exactly ONE Pages site. Rather than spend it on a single app, the
+# bundle is staged into a PER-APP SUBDIRECTORY:
+#
+#   https://ilaiyomsh.github.io/monday-apps/docs-export/
+#
+# so the one site can host several apps side by side later, and the root stays a small
+# index instead of being one app's home page. `base: './'` in
+# apps/docs-export/vite.config.js is what makes this work at any depth — do NOT change
+# it to an absolute '/', which would break every asset outside the root.
+#
+# Requires the repository's Pages "Source" to be set to GitHub Actions.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - develop
+    paths:
+      - "apps/docs-export/**"
+      - "packages/error-kit/**"
+      - ".github/workflows/pages-docs-export.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One Pages deployment at a time; never cancel a run mid-deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build docs-export
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build docs-export
+        # Version layer: stamp the exact commit into the bundle (__BUILD_SHA__).
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
+          # Axiom activation gate (docs/ERROR-AXIOM-STANDARD.md): the ingest token is
+          # the only secret; dataset/app are literals. Fail-soft — with the secret
+          # unset the sink is inert and nothing ships, rather than the build breaking.
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: docs-export
+        run: pnpm --filter "./apps/docs-export" build
+
+      # Sourcemaps are 'hidden' in vite.config.js: they power stack symbolication
+      # but must NEVER be served. Archive them keyed by commit SHA, then strip them
+      # from the publish dir. Same contract as the monday CDN deploy workflows.
+      - name: Archive sourcemaps as build artifact (for stack symbolication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-docs-export-${{ github.sha }}
+          path: apps/docs-export/dist/**/*.map
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Strip sourcemaps before publishing (never serve .map)
+        run: |
+          set -euo pipefail
+          find apps/docs-export/dist -name '*.map' -type f -delete
+          remaining="$(find apps/docs-export/dist -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining .map files in publish dir: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::sourcemaps still present in publish dir — refusing to publish (would leak source)"
+            exit 1
+          fi
+
+      # Stage into a PER-APP SUBDIRECTORY rather than the site root.
+      #
+      # A repository gets exactly ONE Pages site, so publishing an app at the root
+      # spends the whole site on it. Publishing into `_site/<app>/` keeps that one site
+      # able to host several apps side by side, each at its own address, and keeps the
+      # root free for an index rather than being one app's home page.
+      #
+      # This is why `base: './'` in apps/docs-export/vite.config.js is load-bearing:
+      # relative asset URLs resolve correctly at ANY depth, so moving the app from / to
+      # /docs-export/ needs no rebuild and no app-code change. An absolute '/' base
+      # would break every asset the moment it stopped living at the root.
+      - name: Stage docs-export under /docs-export/
+        run: |
+          set -euo pipefail
+          mkdir -p _site/docs-export
+          cp -R apps/docs-export/dist/. _site/docs-export/
+          # No per-app 404.html on purpose. GitHub Pages honours ONLY a 404.html at the
+          # SITE ROOT — it does not look for the nearest one per directory (that is
+          # Apache/nginx behaviour). A copy in here would be a file that silently does
+          # nothing. Verified live: /docs-export/<unknown> served GitHub's own error page.
+          # docs-export also has no client-side router, so a deep link into it is not a
+          # real scenario — it is always loaded at its directory root.
+
+      # Without this the site root is a bare GitHub 404, which reads as "the deploy
+      # broke". Static, hand-written, and deliberately tiny: it is a directory, not a
+      # product surface. Add a line here when a second app joins.
+      #
+      # The same page is also written to 404.html, which IS honoured at the site root —
+      # so any unknown path lands on the directory instead of GitHub's error page. It is
+      # deliberately not one app's index: that would hand every unknown path to
+      # docs-export and mislead once a second app exists.
+      - name: Write the site index
+        run: |
+          set -euo pipefail
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="he" dir="rtl">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>monday-apps</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                     max-width: 40rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.6;
+                     color: #323338; }
+              h1 { font-size: 1.25rem; }
+              li { margin-block-end: .75rem; }
+              code { background: #f5f6f8; padding: .1em .35em; border-radius: 3px; }
+            </style>
+          </head>
+          <body>
+            <h1>monday-apps</h1>
+            <p>בנדלים סטטיים של אפליקציות monday מהמונו-ריפו הזה.</p>
+            <ul>
+              <li>
+                <a href="./docs-export/">docs-export</a> — הפקת דוח יומי/שבועי ל-DOCX.
+                <br><small>מחוץ ל-monday אין קונטקסט, ולכן היא תיעצר על מסך
+                &laquo;לא הוגדרה&raquo; — זו התנהגות מתוכננת ולא תקלה.</small>
+              </li>
+            </ul>
+          </body>
+          </html>
+          HTML
+          cp _site/index.html _site/404.html
+
+      - name: Verify what is about to be published
+        run: |
+          set -euo pipefail
+          echo "--- _site tree ---"
+          find _site -maxdepth 2 -type d | sort
+          test -f _site/index.html
+          test -f _site/404.html
+          test -f _site/docs-export/index.html
+          # Belt-and-braces: the strip step above ran against dist/, so re-check the
+          # directory that is actually uploaded.
+          remaining="$(find _site -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining .map files in _site: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::sourcemaps present in the publish dir — refusing to publish"
+            exit 1
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the staged site (docs-export ONLY, under its own subpath)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

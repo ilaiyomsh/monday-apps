@@ -1,5 +1,27 @@
 # Changelog - team-people-column
 
+## 2026-07-22 — Stack symbolication (hidden sourcemaps)
+
+### 🔧 Infrastructure
+
+- **2026-07-22** — Build now emits `sourcemap: 'hidden'` (maps written without the `//# sourceMappingURL` comment). CI archives the maps as artifact `sourcemaps-team-people-column-<sha>` (90d) then deletes them from the deploy dir before `mapps code:push`, so maps are never served to the browser. Minified `stack1` frames in the shared `app-errors` dataset are now resolvable to source via `.claude/skills/axiom-sre/scripts/symbolicate '<frame>' --app team-people-column --ver <x.y.z+sha>`. No version bump. (#356)
+  - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
+  - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
+
+## 2.2.0 — 2026-07-17
+
+- Axiom logging v2 (Phase 3): the local logger/sink gain the shared v2 telemetry
+  primitives — `logger.track()` (usage) and `logger.health()` (health) at INFO with
+  `alwaysShip`, an inlined `encodeDims` wire encoder, and a privacy `scrubMessage`
+  that ships `error.message` only redacted as `err_msg`. The sink now stamps the
+  domain `kind` (error | usage | health) and its `firstStackFrame` is anchored so an
+  email can't leak into `stack1`. The transport allowlists `err_msg`.
+- Auto view-tracking: `view_open` usage events (once per session) on the on-click
+  picker (`onclick_picker`) and the column-settings (`column_settings`) views.
+- Health signals: a one-shot `boot` signal after context load, and a bucketed
+  `api_latency` signal on the monday GraphQL funnel.
+- All telemetry stays inert until the Axiom sink activates (prod build + baked token).
+
 ## 2.1.3 — 2026-07-14
 
 - Picker: removed the hover highlight on the assignee rows — the list stays

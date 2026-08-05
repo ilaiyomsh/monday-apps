@@ -2,6 +2,33 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2026-07-22 — Stack symbolication (hidden sourcemaps)
+
+### 🔧 Infrastructure
+
+- **2026-07-22** — Build now emits `sourcemap: 'hidden'` (maps written without the `//# sourceMappingURL` comment). CI archives the maps as artifact `sourcemaps-planner-<sha>` (90d) then deletes them from the deploy dir before `mapps code:push`, so maps are never served to the browser. Minified `stack1` frames in the shared `app-errors` dataset are now resolvable to source via `.claude/skills/axiom-sre/scripts/symbolicate '<frame>' --app planner --ver <x.y.z+sha>`. No version bump. (#352)
+  - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
+  - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
+
+## 2.2.0 — 2026-07-17
+
+- **Axiom logging v2 telemetry** — created the client Axiom stack from scratch for this app (TS).
+  - `src/utils/Logger.ts`: added the v2 primitives additively — `encodeDims`, `track` (domainKind `usage`), `health` (domainKind `health`), both emitting INFO records with `alwaysShip:true` and the rendering `kind` left as `simple`. Added a sink registry (`addSink`/`removeSink`/`getBuffer`) + ring buffer, and routed the existing variadic `warn`/`error`/`labeled` (WARN/ERROR) through the new record fan-out so errors ship. The window.AppLogger control API, localStorage config, and every existing variadic method signature are preserved (all 26 call sites untouched).
+  - `src/utils/axiomBrowserTransport.ts`: TS port of the browser transport — exact-key allowlist (incl. `err_msg` cap 200), sanitizer, batching, dedup, session cap, circuit breaker, keepalive hidden-flush. Inert unless injected/gated.
+  - `src/utils/axiomErrorSink.ts`: TS port of the sink — `scrubMessage` (emails / tokens&hex>=16 / digit-runs>=7, precap 1000 / cap 200), `shouldShip` (duplicate->false, alwaysShip->true, then WARN/ERROR policy), `mapRecordToEvent` (`ev.kind = domainKind ?? 'error'`, err_msg scrubbed-only), anchored browser `firstStackFrame`. `attachAxiomSink()` replays the ring buffer then registers; gated to PROD + `VITE_AXIOM_*`.
+  - `src/main.tsx`: `attachAxiomSink()` runs synchronously before `createRoot`.
+  - `src/utils/viewTracking.ts` + wiring: `view_open` once per session per view — `gantt` (GanttChart), `settings` (SettingsDialog, on first open), `welcome` (App unconfigured screen). Ref-based dims, React 19 StrictMode-safe.
+  - Boot health: one-shot `logger.health('boot_ok', { configured, ms })` at the App `[LOAD_FLOW] [5/5]` init-done point.
+  - API-latency health: `logger.health('api_latency', { bucket, ok })` at the single `apiQueue` retry funnel, bucketed and emitted on terminal outcomes only (retries folded in) so the transport dedups it.
+  - Tests: `src/utils/__tests__/telemetry-v2.test.ts` locks encodeDims / track / health / scrubMessage / shouldShip / mapRecordToEvent + a transport sanitizer/allowlist round-trip. Suite 315 -> 328 green; app typecheck + production build green.
+  - **Privacy hardening (follow-up):** `buildRecord` in `Logger.ts` now scrubs any Error-DERIVED `record.message` (an `Error` passed as the message-source, or a stringified non-string first arg — including a cross-realm `Error` that fails `instanceof` and stringifies to `"Error: <msg>"`) with the same `scrubMessage` the sink applies to `err_msg`, so a raw `error.message` can never reach `ev.message`; a developer-supplied string literal (the stable event id) still ships raw. `scrubMessage` was extracted to `src/utils/scrubMessage.ts` (single source of truth, re-exported from `axiomErrorSink.ts`) so `Logger.ts` shares it without a circular import. Added a lock test asserting an Error-derived message ships scrubbed end-to-end (328 -> 329 green). Also fixed the one live call site (`services/apiQueue.ts`) that interpolated `err.message` into a WARN message string — the error now flows as the error arg, so its text ships only scrubbed as `err_msg`, closing the last raw-message path. No version bump.
+
+## 2026-07
+
+### 🧪 Tests
+
+- **2026-07-17** — high-scale test round (joins the 2.2.0 candidate) — `fetchCriticalBundle` scale suite (1,200-allocation cursor drain, reported-hours aggregate 500-group-cap characterization #90, >100-project id chunking) backed by the new `@axis/scale-fixtures` deterministic generators; no runtime changes `04a96e6`
+
 ## 2026-06
 
 ### 🐛 Bug Fixes

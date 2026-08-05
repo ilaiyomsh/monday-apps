@@ -1,7 +1,7 @@
 {
   "name": "planner",
   "private": true,
-  "version": "2.1.4",
+  "version": "2.2.0",
   "type": "module",
   "scripts": {
     "start": "pnpm stop && concurrently -k \"vite --port 8301\" \"mapps tunnel:create -p 8301 \"",
@@ -36,9 +36,11 @@
     "react-dom": "^19.2.0",
     "react-i18next": "^17.0.6",
     "react-use-measure": "^2.1.7",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "@mapps/error-kit": "workspace:*"
   },
   "devDependencies": {
+    "@axis/scale-fixtures": "workspace:*",
     "@eslint/js": "^9.39.1",
     "@mondaycom/apps-cli": "^4.10.5",
     "@tailwindcss/postcss": "^4.1.18",

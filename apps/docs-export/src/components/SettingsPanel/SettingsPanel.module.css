@@ -1,0 +1,304 @@
+/*
+ * One stylesheet for the whole settings surface (panel + its five sections). They
+ * are a single visual surface rendered from one folder, so splitting the CSS per
+ * child would only spread the same tokens across five files.
+ *
+ * Everything uses LOGICAL properties (inline-start/end, not left/right): the app is
+ * RTL by default but flips to LTR for an LTR monday user, and physical sides would
+ * mirror wrongly for exactly that user.
+ */
+
+/*
+ * The inline padding is OURS, not Vibe's. Measured in the browser: this app's
+ * `ModalContent` renders with an empty className and `padding: 0`, so without this
+ * every label sits flush against the modal border (Vibe's own ModalFooter DOES carry
+ * its 20px/24px, which is why the footer alone looked right). If a future Vibe
+ * version starts padding ModalContent, this becomes double padding — drop it then.
+ */
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-inline: 24px;
+  padding-block: 4px 8px;
+}
+
+/* Same story as .sections — ModalHeader arrives unpadded here. */
+.header {
+  padding: 24px 24px 4px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* A hairline separator between sections — cheaper than a Divider per section. */
+.section + .section {
+  border-block-start: 1px solid var(--ui-border-color, #d0d4e4);
+  padding-block-start: 20px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rowLabel {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/*
+ * The column picker's TRIGGER. It is a <button>, not a <select>: a native select is
+ * drawn by the operating system, so it arrives in the OS's own chrome (a dark macOS
+ * popup with system checkmarks) and cannot be themed — next to the Vibe inputs in
+ * this same panel it read as a different application. The menu itself is a
+ * body-portal Popover, matching ReportView/CommitteeMultiPicker, so both pickers in
+ * the app share one visual language. See ColumnSelect.jsx for the full reasoning.
+ *
+ * Kept named `.select` so the class keeps describing its ROLE rather than its tag.
+ */
+.select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  inline-size: 100%;
+  min-block-size: 32px;
+  padding-inline: 8px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-small, 4px);
+  background-color: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  font-family: inherit;
+  font-size: var(--font-size-general-label, 14px);
+  text-align: start;
+  cursor: pointer;
+}
+
+.select:hover:not(:disabled) {
+  border-color: var(--primary-color, #0073ea);
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--primary-color, #0073ea);
+  outline-offset: -1px;
+}
+
+.select:disabled {
+  background-color: var(--disabled-background-color, #f5f6f8);
+  color: var(--disabled-text-color, #c3c6d4);
+  cursor: not-allowed;
+}
+
+/* Nothing chosen yet — muted, so a mapped role reads as different from an empty one
+ * at a glance rather than only on reading. */
+.select[data-placeholder='true'] .selectValue {
+  color: var(--secondary-text-color, #676879);
+}
+
+.selectValue {
+  flex: 1 1 auto;
+  /* A long column title must not push the caret out of the control. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectCaret {
+  flex: 0 0 auto;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--secondary-text-color, #676879);
+}
+
+/* ---- the portaled menu's CONTENTS. The panel frame (placement, shadow, z-index)
+ * belongs to components/shared/Popover.module.css, so the portal keeps one owner. ---- */
+
+.optionList {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-block-size: 300px;
+  overflow-y: auto;
+}
+
+.optionList:focus-visible {
+  /* The list itself takes DOM focus so it receives the arrow keys; a ring around the
+   * whole menu would be noise, and the active row is already marked. */
+  outline: none;
+}
+
+.optionHeading {
+  padding: 6px 8px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--secondary-text-color, #676879);
+}
+
+.option {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  inline-size: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  text-align: start;
+  color: var(--primary-text-color, #323338);
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+}
+
+/* Keyboard and mouse share ONE highlight, driven by data-active — so arrowing and
+ * hovering can never show two different "current" rows at the same time. */
+.option[data-active='true'] {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.option[aria-selected='true'] {
+  font-weight: 600;
+}
+
+.optionLabel {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionCheck {
+  flex: 0 0 auto;
+  color: var(--primary-color, #0073ea);
+}
+
+.boardRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.boardField {
+  flex: 1 1 220px;
+  min-inline-size: 180px;
+}
+
+.blockList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.block {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  background-color: var(--primary-background-color, #fff);
+}
+
+.blockBody {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.blockActions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+/* The table block is the one row the owner cannot edit — say so visually. */
+.tableBlock {
+  background-color: var(--allgrey-background-color, #f5f6f8);
+  border-style: dashed;
+}
+
+.tablePlaceholder {
+  display: flex;
+  align-items: center;
+  min-block-size: 32px;
+}
+
+.templateRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* The real file input: reachable by a11y tooling, driven by the Vibe button. */
+.fileInput {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.errors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/*
+ * WHY this exists (measured in the browser, not guessed):
+ *
+ * Vibe v4 components combine `width: 100%` with their own padding and rely on the
+ * HOST APP declaring `box-sizing: border-box` globally — monday's own shell does.
+ * This app's `src/index.css` does NOT, so every such component renders WIDER than
+ * its container: the stock ModalFooter overflowed by 48px (2 x 24px padding) and
+ * AttentionBox by 32px (2 x 16px), which pushed the whole settings surface out past
+ * the modal's edge.
+ *
+ * The modal is portaled to <body>, so there is no ancestor of ours to fix it on —
+ * hence this subtree rule, applied through the Modal's own className.
+ *
+ * The proper fix is one global rule in `src/index.css` (which is not this
+ * component's file to change, and which every other Vibe surface in the app needs
+ * just as much). When that lands, this block becomes redundant and should go.
+ */
+.modal,
+.modal *,
+.modal *::before,
+.modal *::after {
+  box-sizing: border-box;
+}
+
+/* The "we could not verify you own this board" notice, shown only when the gate
+ * opened an unconfigured instance without proving ownership. Sits above the sections
+ * with the same gutter they use, so it reads as part of the panel rather than as a
+ * floating alert. */
+.ownershipWarning {
+  margin-block-end: 16px;
+}

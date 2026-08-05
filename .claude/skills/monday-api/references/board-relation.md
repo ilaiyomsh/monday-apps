@@ -76,9 +76,18 @@ platform-side** — `any_of` by linked item id now returns the correct rows (pro
 by name works too, matching the docs table (any_of / not_any_of by id, contains_text /
 not_contains_text by name, is_empty / is_not_empty).
 
-Practical guidance: id-based `any_of` filtering is now legitimate — but this area has
-flipped once already, so on first use in new code run one scratch-board probe
-(`scripts/probe.sh`) before relying on it. The `linked_item_ids` + client-side-filter
+**Re-probed live 2026-07-29 (API 2026-04 and 2026-07) — the encoding is what decides:**
+`any_of` works when the linked item id is an **unquoted JSON number**
+(`compare_value: [12660747977]` → correct rows) and returns **`[]` with NO error** when the
+same id is a **string** (`compare_value: ["12660747977"]`). That string/number split almost
+certainly explains the June-2026 "silently returns nothing" observation. `contains_text` by
+linked item NAME and `is_empty`/`is_not_empty` both work. (Contrast with a **mirror** column,
+where every operator hard-errors — `InvalidColumnTypeException`, `actual_type: "lookup"`,
+inside a 200, nulling the whole board node. See column-formats.md → Mirror columns.)
+
+Practical guidance: id-based `any_of` filtering is legitimate — pass the ids as NUMBERS, never
+strings — but this area has flipped once already, so on first use in new code run one
+scratch-board probe (`scripts/probe.sh`) before relying on it. The `linked_item_ids` + client-side-filter
 pattern (Rule 7) remains the safe fallback and is still cheaper on large boards.
 `items_page_by_column_values` does NOT support board_relation columns at all — use
 `items_page` with `query_params`.

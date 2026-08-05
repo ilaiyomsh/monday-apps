@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, lazy } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GanttContent } from './components/Gantt/GanttContent';
 import { GanttProvider } from './components/Gantt/GanttProvider';
@@ -9,7 +9,13 @@ import { FreeFallLoader } from './components/ui';
 import { useLanguageSync } from './hooks/useLanguageSync';
 import { useLocale } from './hooks/useLocale';
 import { logger } from './utils/Logger';
+import { useViewTracking } from './utils/viewTracking';
+import { useUiErrorSink } from './hooks/useUiErrorSink';
+import { LazyBoundary } from './components/ui/LazyBoundary';
 import './App.css';
+
+// Boot health (D5) fires exactly once per page load, at the app's init-done point.
+let bootHealthSent = false;
 
 // Lazy-load SettingsDialog - only loaded when needed
 const SettingsDialog = lazy(() =>
@@ -90,6 +96,12 @@ const ConfiguredContent: React.FC = () => {
   const { isResolved: languageResolved } = useLanguageSync();
   const [showSettings, setShowSettings] = useState(false);
 
+  // Usage telemetry (D3): report the welcome (unconfigured) screen once per session — fires
+  // only once settings+language resolve without error and the app is NOT configured. Passing ''
+  // otherwise is ignored by the tracker, so navigating in/out never re-ships.
+  const welcomeShown = !settingsLoading && languageResolved && !settingsError && !isConfigured;
+  useViewTracking(logger, welcomeShown ? 'welcome' : '');
+
   // Auto-open settings if not configured and user has permissions
   useEffect(() => {
     if (!settingsLoading && !isConfigured && permissions?.canEditSettings) {
@@ -113,6 +125,15 @@ const ConfiguredContent: React.FC = () => {
     logger.info(isConfigured
       ? '[LOAD_FLOW] [5/5] Mounting GanttProvider — app fully loaded'
       : '[LOAD_FLOW] [5/5] Not configured — showing welcome screen');
+    // Boot health (D5): one-shot per page load, at the init-done point (settings + language
+    // resolved). ms = time-to-ready since navigation start; ships as domainKind='health'.
+    if (!bootHealthSent) {
+      bootHealthSent = true;
+      logger.health('boot_ok', {
+        configured: isConfigured,
+        ms: Math.round(typeof performance !== 'undefined' ? performance.now() : 0),
+      });
+    }
   }, [loadReady, settingsError, settingsErrorKind, isConfigured]);
 
   if (settingsLoading || !languageResolved) {
@@ -166,13 +187,13 @@ const ConfiguredContent: React.FC = () => {
           </GanttProvider>
         )}
 
-        <Suspense fallback={null}>
+        <LazyBoundary>
           <SettingsDialog
             isOpen={showSettings}
             onClose={() => setShowSettings(false)}
             boardId={context?.boardId}
           />
-        </Suspense>
+        </LazyBoundary>
       </div>
     </div>
   );
@@ -239,9 +260,44 @@ const AppContent: React.FC = () => {
   );
 };
 
+/**
+ * Always-mounted app-shell error toaster. Registers the UI error sink (one caught ERROR =
+ * one toast) and renders a single toast overlay for the app lifetime — so errors from any
+ * layer surface to the user even outside the Gantt (which has its own local toast for its
+ * direct actions). Render crashes are shown by the ErrorBoundary fallback, not here (the
+ * sink skips module==='ErrorBoundary').
+ */
+const AppErrorToaster: React.FC = () => {
+  const { t } = useTranslation();
+  const [toast, setToast] = useState<string | null>(null);
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onError = useCallback(() => {
+    // record.message is a stable English event id, not user copy — show a generic localized
+    // message (one toast per ERROR record; log-once dedup already happens in logger.emit).
+    setToast(t('app.error.title'));
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setToast(null), 5000);
+  }, [t]);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  useUiErrorSink({ onError });
+
+  if (!toast) return null;
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-2 px-5 py-2.5 rounded-lg shadow-xl text-sm font-medium bg-danger text-white">
+      {toast}
+    </div>
+  );
+};
+
 function App() {
   return (
     <MondayContextProvider>
+      <AppErrorToaster />
       <AppContent />
     </MondayContextProvider>
   );

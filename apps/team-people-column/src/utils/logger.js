@@ -347,6 +347,33 @@ const emit = (record) => {
   }
 };
 
+// ============================================
+// encodeDims — usage/health message encoder (D4)
+// ============================================
+
+/**
+ * Fold categorical/measured dims into a stable, queryable message suffix:
+ * `base key1=v1 key2=v2` with keys sorted. Only string/bool/finite-number values are
+ * included (objects, functions, NaN/Infinity dropped) so the shipped message stays flat
+ * and APL-parseable. Used by track()/health() to encode usage/health dims (D4). Identical
+ * spec across app-core, the error-guard templates, and tracker (single source of the wire format).
+ *
+ * @param {string} base - the event/signal name
+ * @param {Object} [dims] - categorical/measured dims
+ * @returns {string}
+ */
+export function encodeDims(base, dims) {
+  if (!dims) return base;
+  const parts = [];
+  for (const key of Object.keys(dims).sort()) {
+    const v = dims[key];
+    if (typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) {
+      parts.push(`${key}=${v}`);
+    }
+  }
+  return parts.length ? `${base} ${parts.join(' ')}` : base;
+}
+
 const logger = {
   /**
    * Set the console log level.
@@ -509,8 +536,17 @@ const logger = {
 
   /**
    * Error log. ERROR is forwarded to sinks even when the console is muted (production).
+   *
+   * The optional 4th `context` arg is attached to record.context so structured context a
+   * caller supplies — e.g. React's componentStack from ErrorBoundary's onError — rides the
+   * shipped ERROR record (@mapps/error-kit's Axiom sink reads componentStack ONLY from
+   * record.context.componentStack). A 3-arg call leaves context undefined.
+   * @param {string} module
+   * @param {string} message
+   * @param {Error|*} [error]
+   * @param {Object} [context] - structured diagnostic context (e.g. { componentStack })
    */
-  error: (module, message, error = null) => {
+  error: (module, message, error = null, context = null) => {
     emit({
       kind: 'error',
       level: 'ERROR',
@@ -519,7 +555,46 @@ const logger = {
       error: error instanceof Error ? error : undefined,
       // If error is not an Error instance (object/string), keep it on data for rendering/sinks.
       data: error instanceof Error ? undefined : error,
+      context: context || undefined,
       consoleEnabled: currentLevel <= LOG_LEVELS.ERROR
+    });
+  },
+
+  /**
+   * track — usage telemetry (D3). An INFO record carrying the DOMAIN kind 'usage' (as
+   * domainKind — the sink reconciles it to ev.kind) and alwaysShip:true, so it ships
+   * regardless of the WARN/ERROR policy. Dims fold into the message via encodeDims (D4).
+   * The rendering kind stays 'simple' (a plain INFO console line).
+   * @param {string} event - stable event id (e.g. 'view_open', 'settings_saved')
+   * @param {Object} [dims] - categorical/measured dims folded into the message
+   */
+  track: (event, dims = null) => {
+    emit({
+      kind: 'simple',
+      domainKind: 'usage',
+      alwaysShip: true,
+      level: 'INFO',
+      module: 'usage',
+      message: encodeDims(event, dims),
+      consoleEnabled: currentLevel <= LOG_LEVELS.INFO
+    });
+  },
+
+  /**
+   * health — health signal (D5). An INFO record, DOMAIN kind 'health', alwaysShip:true.
+   * Metrics fold into the message via encodeDims (D4).
+   * @param {string} signal - stable signal id (e.g. 'boot', 'api_latency')
+   * @param {Object} [metrics] - measured metrics folded into the message
+   */
+  health: (signal, metrics = null) => {
+    emit({
+      kind: 'simple',
+      domainKind: 'health',
+      alwaysShip: true,
+      level: 'INFO',
+      module: 'health',
+      message: encodeDims(signal, metrics),
+      consoleEnabled: currentLevel <= LOG_LEVELS.INFO
     });
   },
 

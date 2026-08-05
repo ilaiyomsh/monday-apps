@@ -1,0 +1,43 @@
+{
+  "name": "docs-export",
+  "private": true,
+  "version": "0.1.0",
+  "description": "monday.com board view — export a reporter's daily/weekly report to DOCX",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 8304",
+    "dev:mock": "VITE_MONDAY_MOCK=1 vite --port 8304",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "type-check": "echo no-typescript",
+    "tunnel": "mapps tunnel:create -p 8304 -a APP_ID"
+  },
+  "dependencies": {
+    "@mapps/error-kit": "workspace:*",
+    "@vibe/core": "4.2.5",
+    "@vibe/icons": "^4.1.0",
+    "docx": "^9.7.1",
+    "fflate": "^0.8.3",
+    "file-saver": "^2.0.5",
+    "i18next": "^26.3.0",
+    "monday-sdk-js": "^0.5.8",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-error-boundary": "^6.0.0",
+    "react-i18next": "^17.0.8"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^6.0.2",
+    "eslint": "^9.39.4",
+    "eslint-plugin-promise": "^7.3.0",
+    "jsdom": "^27.0.1",
+    "vite": "^8.0.16",
+    "vitest": "^3.2.6"
+  }
+}

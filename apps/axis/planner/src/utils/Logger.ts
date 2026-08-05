@@ -22,6 +22,8 @@
  *   window.AppLogger.reset()            // Reset to environment defaults
  */
 
+import { scrubMessage } from './scrubMessage';
+
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
 const LOG_LEVELS: Record<LogLevel, number> = {
@@ -32,6 +34,77 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 };
 
 const STORAGE_KEY = 'planner_logger_config';
+
+// Monotonic id for log-once correlation. Stamped (non-enumerable) on an Error the
+// first time it reaches emit(); a later pass of the SAME instance is marked duplicate
+// and skipped from sinks — so a create/edit failure logged by both the hook and the
+// modal's catch produces ONE Axiom record, not two. (Ports discussions' __loggedId.)
+let loggedIdCounter = 0;
+
+// Ring buffer capacity — retains the most recent records for sink replay (see attachAxiomSink).
+const RING_BUFFER_SIZE = 150;
+
+// ============================================
+// Axiom logging v2 — record shape + primitives
+// ============================================
+
+/**
+ * DOMAIN discriminator (travels on record.domainKind — NEVER the rendering kind).
+ * error (default) | usage (track) | health (health). The Axiom sink reads this to
+ * set ev.kind; the rendering kind stays 'simple' | 'error'.
+ */
+export type DomainKind = 'usage' | 'health' | 'error';
+
+/**
+ * Structured record fanned out to sinks (the Axiom sink maps it to the wire schema).
+ * Built by track()/health() (usage/health INFO records) and by warn()/error() (error
+ * records). The transport/sink only ever read this exact shape.
+ */
+export interface LogRecord {
+  /** rendering kind (stays 'simple'/'error'); the DOMAIN discriminator is domainKind */
+  kind: 'simple' | 'error';
+  level: LogLevel;
+  module: string;
+  message: string;
+  domainKind?: DomainKind;
+  /** usage/health INFO records bypass the WARN/ERROR ship policy (D3/D5) */
+  alwaysShip?: boolean;
+  error?: Error;
+  /**
+   * Structured context the sink may forward: numeric timings (duration → ms, totalMs, step)
+   * and the React `componentStack` (attached by the @mapps/error-kit ErrorBoundary via the
+   * bridge() entry, shipped as `component_stack`).
+   */
+  context?: { duration?: number; totalMs?: number; step?: number; componentStack?: string };
+  correlationId?: string;
+  duplicate?: boolean;
+  timestamp?: number;
+  timestampISO?: string;
+}
+
+export type LogSink = (record: LogRecord) => void;
+
+/**
+ * encodeDims — usage/health message encoder (D4). Folds categorical/measured dims into a
+ * stable, queryable suffix: `base key1=v1 key2=v2` with keys sorted. Only string/bool/finite
+ * number values are included (objects, functions, NaN/Infinity dropped) so the shipped message
+ * stays flat and APL-parseable. Identical spec across app-core, the template, and every app.
+ */
+export function encodeDims(base: string, dims?: Record<string, unknown> | null): string {
+  if (!dims) return base;
+  const parts: string[] = [];
+  for (const key of Object.keys(dims).sort()) {
+    const v = dims[key];
+    if (
+      typeof v === 'string' ||
+      typeof v === 'boolean' ||
+      (typeof v === 'number' && Number.isFinite(v))
+    ) {
+      parts.push(`${key}=${v}`);
+    }
+  }
+  return parts.length ? `${base} ${parts.join(' ')}` : base;
+}
 
 interface LoggerConfig {
   level: LogLevel;
@@ -54,6 +127,12 @@ declare global {
 
 class Logger {
   private config: LoggerConfig;
+
+  // v2 sink infrastructure (additive — the console pipeline above is untouched).
+  // The console is rendered directly by each method; these sinks are ADDITIONAL
+  // fan-out targets (the Axiom sink attaches here in main.tsx).
+  private sinks = new Set<LogSink>();
+  private ringBuffer: LogRecord[] = [];
 
   constructor() {
     this.config = this.loadConfig();
@@ -215,6 +294,179 @@ class Logger {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // v2 sink infrastructure (addSink / getBuffer / emit) + telemetry
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Register an additional sink that receives every non-duplicate record via fan-out.
+   * Returns an unsubscribe fn. The Axiom sink registers here (attachAxiomSink).
+   */
+  addSink(fn: LogSink): () => void {
+    if (typeof fn !== 'function') return () => {};
+    this.sinks.add(fn);
+    return () => {
+      this.sinks.delete(fn);
+    };
+  }
+
+  /** Remove a registered sink. */
+  removeSink(fn: LogSink): void {
+    this.sinks.delete(fn);
+  }
+
+  /** Shallow copy of the ring buffer (FIFO, cap = RING_BUFFER_SIZE) — for sink replay. */
+  getBuffer(): LogRecord[] {
+    return this.ringBuffer.slice();
+  }
+
+  /**
+   * The single record choke-point for sink fan-out: timestamp → ring buffer → sinks.
+   * Console rendering is NOT done here (each public method still owns its console output,
+   * so the existing variadic call-surface is untouched). Duplicate records are buffered
+   * but skipped from sinks. Each sink runs in its own try/catch (a failing sink can never
+   * throw back or recurse).
+   */
+  private emit(record: LogRecord): void {
+    // log-once dedup: the SAME Error instance ships to sinks exactly once. A repeat
+    // pass (e.g. a create/edit failure logged by the hook AND re-logged by the modal's
+    // catch) is buffered but marked duplicate so the sink fan-out below skips it —
+    // one Axiom record, not N. Records without an Error (usage/health/string-only) are
+    // never deduped. Stamp is non-enumerable so it can't pollute JSON/serialization.
+    const err = record.error;
+    if (err && typeof err === 'object') {
+      const stamped = (err as { __loggedId?: string }).__loggedId;
+      if (stamped !== undefined) {
+        record.duplicate = true;
+        record.correlationId = record.correlationId || stamped;
+      } else {
+        const id = record.correlationId || `log_${++loggedIdCounter}`;
+        try {
+          Object.defineProperty(err, '__loggedId', {
+            value: id,
+            enumerable: false,
+            configurable: true,
+            writable: true,
+          });
+        } catch {
+          // frozen/non-configurable Error — never blocks this record from shipping.
+        }
+        record.correlationId = id;
+      }
+    }
+    const ts = Date.now();
+    record.timestamp = ts;
+    record.timestampISO = new Date(ts).toISOString();
+    this.ringBuffer.push(record);
+    if (this.ringBuffer.length > RING_BUFFER_SIZE) {
+      this.ringBuffer.shift();
+    }
+    if (record.duplicate) return;
+    for (const sink of this.sinks) {
+      try {
+        sink(record);
+      } catch (sinkError) {
+        // A failing sink must not throw back nor be re-logged through the logger
+        // (that would recurse). Raw console.error so the failure is not lost.
+        console.error('[Logger] sink threw and was suppressed:', sinkError);
+      }
+    }
+  }
+
+  /**
+   * Build a structured record from the variadic call-surface (logger.error('[tag] msg', obj)).
+   * message = first string arg (the stable English event id); error = first Error found in args;
+   * module = an explicit label, else a leading `[tag]` parsed from the message, else 'app'.
+   */
+  private buildRecord(level: LogLevel, module: string | undefined, args: unknown[]): LogRecord {
+    let error: Error | undefined;
+    for (const a of args) {
+      if (a instanceof Error) {
+        error = a;
+        break;
+      }
+    }
+    // A developer-supplied string LITERAL is the stable English event id and ships raw. Any
+    // message DERIVED from a value we did not author (an Error's .message, or a stringified
+    // object — including a cross-realm Error that fails `instanceof` and stringifies to
+    // "Error: <msg>") is untrusted free text and is scrubbed with the SAME scrubMessage the
+    // sink applies to err_msg, so a raw error.message can never reach ev.message. (D2)
+    let message = '';
+    const first = args[0];
+    if (typeof first === 'string') {
+      message = first;
+    } else if (first instanceof Error) {
+      message = scrubMessage(first.message);
+    } else if (first !== undefined && first !== null) {
+      try {
+        message = scrubMessage(String(first));
+      } catch {
+        message = '';
+      }
+    }
+    let mod = module;
+    if (!mod) {
+      const m = /^\s*\[([^\]]+)\]/.exec(message);
+      mod = m ? m[1] : 'app';
+    }
+    return {
+      kind: error ? 'error' : 'simple',
+      level,
+      module: mod,
+      message,
+      error,
+    };
+  }
+
+  /**
+   * track — usage telemetry (D3). Emits an INFO record carrying domainKind 'usage' +
+   * alwaysShip:true, so it ships regardless of the WARN/ERROR policy. Dims fold into the
+   * message via encodeDims (D4). The rendering kind stays 'simple'. Inert until a sink attaches.
+   */
+  track(event: string, dims?: Record<string, unknown> | null): void {
+    const message = encodeDims(event, dims);
+    this.emit({
+      kind: 'simple',
+      domainKind: 'usage',
+      alwaysShip: true,
+      level: 'INFO',
+      module: 'usage',
+      message,
+    });
+    if (this.shouldLog('INFO')) {
+      console.info(
+        `%c${this.getTimestamp()} %c[usage]`,
+        'color: #64748b',
+        'color: #22c55e',
+        message
+      );
+    }
+  }
+
+  /**
+   * health — health signal (D5). Emits an INFO record, domainKind 'health', alwaysShip:true.
+   * Metrics fold into the message via encodeDims (D4). Inert until a sink attaches.
+   */
+  health(signal: string, metrics?: Record<string, unknown> | null): void {
+    const message = encodeDims(signal, metrics);
+    this.emit({
+      kind: 'simple',
+      domainKind: 'health',
+      alwaysShip: true,
+      level: 'INFO',
+      module: 'health',
+      message,
+    });
+    if (this.shouldLog('INFO')) {
+      console.info(
+        `%c${this.getTimestamp()} %c[health]`,
+        'color: #64748b',
+        'color: #22c55e',
+        message
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // Logging Methods
   // ─────────────────────────────────────────────────────────────
 
@@ -258,6 +510,8 @@ class Logger {
         ...args
       );
     }
+    // WARN is forwarded to sinks even when the console is muted (production).
+    this.emit(this.buildRecord('WARN', undefined, args));
   }
 
   /**
@@ -272,6 +526,8 @@ class Logger {
         ...args
       );
     }
+    // ERROR is forwarded to sinks even when the console is muted (production).
+    this.emit(this.buildRecord('ERROR', undefined, args));
   }
 
   /**
@@ -295,6 +551,61 @@ class Logger {
         `color: ${colors[level]}`,
         ...args
       );
+    }
+    // WARN/ERROR labeled records ship too (module = the label). INFO/DEBUG stay console-only.
+    if (level === 'WARN' || level === 'ERROR') {
+      this.emit(this.buildRecord(level, label, args));
+    }
+  }
+
+  /**
+   * bridge — the structured entry used by the @mapps/error-kit adapter
+   * (setupGlobalErrorHandlers + ErrorBoundary), whose Logger contract is
+   * `(module, message, payload?, context?)`. Unlike the variadic surface, bridge
+   * carries an explicit `context` object (e.g. the ErrorBoundary's componentStack)
+   * onto the record so the Axiom sink can ship it. Routes through the SAME choke-point
+   * as warn()/error(): console render at the given level, then WARN/ERROR fan out to
+   * sinks (INFO/DEBUG stay console-only, matching labeled()).
+   */
+  bridge(
+    level: LogLevel,
+    module: string,
+    message: string,
+    payload?: unknown,
+    context?: LogRecord['context']
+  ): void {
+    const error = payload instanceof Error ? payload : undefined;
+    if (this.shouldLog(level)) {
+      const colors: Record<LogLevel, string> = {
+        DEBUG: '#6366f1',
+        INFO: '#22c55e',
+        WARN: '#f59e0b',
+        ERROR: '#ef4444',
+      };
+      const method = level === 'DEBUG' ? 'debug'
+                   : level === 'INFO' ? 'info'
+                   : level === 'WARN' ? 'warn'
+                   : 'error';
+      // Include the payload in the console line only when it's present (Error or value).
+      const extras = payload === undefined ? [] : [payload];
+      console[method](
+        `%c${this.getTimestamp()} %c[${module}]`,
+        'color: #64748b',
+        `color: ${colors[level]}`,
+        message,
+        ...extras
+      );
+    }
+    // Only WARN/ERROR fan out to sinks (parity with labeled()); INFO/DEBUG stay console-only.
+    if (level === 'WARN' || level === 'ERROR') {
+      this.emit({
+        kind: error ? 'error' : 'simple',
+        level,
+        module,
+        message: typeof message === 'string' ? message : String(message),
+        error,
+        context,
+      });
     }
   }
 

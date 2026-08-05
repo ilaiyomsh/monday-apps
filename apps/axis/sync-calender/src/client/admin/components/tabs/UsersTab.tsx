@@ -6,6 +6,8 @@ import { UsersTable } from '../users/UsersTable';
 import { ConfirmDialog } from '../feedback/ConfirmDialog';
 import { Skeleton } from '../feedback/Skeleton';
 import { useToast } from '../feedback/ToastProvider';
+import logger from '../../lib/logger';
+import { useViewTracking } from '../../lib/viewTracking';
 import type { MondayUser, SyncConfig } from '../../types';
 
 interface Props {
@@ -35,6 +37,7 @@ export function UsersTab({
   onConnectGoogle, onConnectMicrosoft, onConnectMonday,
   onEnable, onPause, onBackfill, onCancelBackfill, refetch,
 }: Props) {
+  useViewTracking(logger, 'users');
   const toast = useToast();
   const [pending, setPending] = useState<Record<string, string | undefined>>({});
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);

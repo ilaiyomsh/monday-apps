@@ -10,6 +10,7 @@
 import express from 'express';
 import { hourInJerusalem, runDigestForAccount } from '../services/digest-run.js';
 import { formatOperatorSummary } from '../helpers/operator-summary.js';
+import { buildDigestSummaryReport } from '../helpers/digest-summary-report.js';
 import { currentSlot, MANIFEST_TIMEZONE } from '../services/manifest-signature.js';
 import { logError, logInfo } from '../helpers/logger.js';
 
@@ -58,6 +59,14 @@ export function createSchedulerRouter({ storage, api, env, emailSender, todayIso
           continue;
         }
 
+        // Wall time of this tenant's run. The platform kills the tick at its
+        // configured timeout (300s as stored — docs/scheduling.md §2), and the
+        // send loop is SERIAL: two board reads, then one SMTP connection per
+        // recipient. Whether that fits was unmeasurable before this line — §7.3
+        // asked the question and nothing in the logs could answer it. Everything
+        // else in a tick is a cached config read, so these numbers sum to
+        // essentially the whole request.
+        const startedAt = now();
         const result = await runDigestForAccount({
           accountId,
           storage,
@@ -66,12 +75,38 @@ export function createSchedulerRouter({ storage, api, env, emailSender, todayIso
           emailSender,
           todayIso,
           now: () => clock,
+          // ONLY the cron enforces the per-slot marker. The platform retries a
+          // failed or timed-out tick (measured 2026-08-05: maxRetries 3,
+          // minBackoffDuration 60s — and `-r 0` is silently ignored by the CLI),
+          // so without this a tick killed at the 300s timeout re-sends to
+          // everyone it had already emailed. The admin's manual send and
+          // resend-today deliberately pass nothing: re-sending inside the same
+          // slot is exactly what they are for.
+          skipAlreadySent: true,
         });
-        tenants.push({ accountId, ...result });
+        const durationMs = now() - startedAt;
+        logInfo(TAG, 'tenant run finished', {
+          accountId,
+          durationMs,
+          recipients: result.results?.length ?? 0,
+          skip: result.skip,
+        });
+        // `due` marks the ones past the sendHour gate — the summary's audience.
+        // It is stripped from the response so the wire shape stays what it was.
+        // `durationMs` is NOT stripped: `scheduler:run` prints the response, so
+        // the timeout question is answerable from one manual tick.
+        tenants.push({ accountId, ...result, durationMs, due: true });
       }
 
       let summarySent = false;
-      const dueTenants = tenants.filter((t) => !t.skip || t.skip !== 'wrong_hour');
+      // "Due" means the sendHour matched and the run was actually attempted — NOT
+      // merely "appeared in the list". The old filter was `!t.skip || t.skip !==
+      // 'wrong_hour'`, which is true for every possible value: `wrong_hour` is a
+      // skip reason no code produces, because the not-due branch `continue`s
+      // without pushing. So an account that had simply never configured a digest
+      // counted as due on EVERY tick, and with an hourly cron that is a summary
+      // mail every hour, all day (measured 2026-08-05).
+      const dueTenants = tenants.filter((t) => t.due);
       if (emailSender && env.operatorEmail && dueTenants.length > 0) {
         const slot =
           dueTenants.find((t) => t.slot)?.slot ??
@@ -97,12 +132,77 @@ export function createSchedulerRouter({ storage, api, env, emailSender, todayIso
         }
       }
 
+      // Per-employee summary FILE — one per due tenant, to that tenant's OWN
+      // sending mailbox (owner decision 2026-08-05, docs/scheduling.md §5.2).
+      // Deliberately not OPERATOR_EMAIL: the report follows whatever mailbox the
+      // admin screen connected, so rebinding a sender moves it along and there
+      // is no second setting to drift. Sent LAST, after the digests and the
+      // operator summary — the file describes a run that has already happened.
+      let reportsSent = 0;
+      if (emailSender) {
+        for (const tenant of dueTenants) {
+          // A tenant that skipped (no config / no secret / not connected) ran
+          // nothing, so there is nothing to report on.
+          if (!Array.isArray(tenant.summaryRows)) continue;
+          let senderAddress;
+          try {
+            senderAddress = (await storage.forAccount(tenant.accountId).getGoogleSender())
+              ?.senderAddress;
+          } catch (err) {
+            logError(TAG, 'sender read failed — no summary file for this tenant', {
+              accountId: tenant.accountId,
+              error: String(err?.message ?? err),
+            });
+            continue;
+          }
+          if (!senderAddress) {
+            logInfo(TAG, 'no connected mailbox — summary file skipped', {
+              accountId: tenant.accountId,
+            });
+            continue;
+          }
+          try {
+            const report = buildDigestSummaryReport({
+              slot: tenant.slot,
+              accountId: tenant.accountId,
+              sections: tenant.summarySections,
+              rows: tenant.summaryRows,
+            });
+            await emailSender.send({
+              accountId: tenant.accountId,
+              to: senderAddress,
+              subject: report.subject,
+              plain: report.plain,
+              mime: report.mime,
+            });
+            reportsSent += 1;
+          } catch (err) {
+            // The digests are already out. A failed report must never become a
+            // non-2xx tick, or the platform would retry the whole tenant over a
+            // file nobody is waiting on.
+            logError(TAG, 'summary file send failed', {
+              accountId: tenant.accountId,
+              error: String(err?.message ?? err),
+            });
+          }
+        }
+      }
+
       logInfo(TAG, 'cron_tick', {
         hour,
         tenants: tenants.length,
+        due: dueTenants.length,
         summarySent,
+        reportsSent,
       });
-      res.status(200).json({ ok: true, hour, tenants, summarySent });
+      // `due` is an internal marker for the summary audience, and the summary
+      // rows are the report's raw material (they carry every employee's name and
+      // address) — strip all three so the response keeps the exact shape its
+      // consumers already expect and the tick answer stays counts-only.
+      const reported = tenants.map(
+        ({ due: _due, summaryRows: _rows, summarySections: _sections, ...rest }) => rest
+      );
+      res.status(200).json({ ok: true, hour, tenants: reported, summarySent, reportsSent });
     } catch (err) {
       logError(TAG, 'cron_tick failed', { error: String(err?.message ?? err) });
       res.status(500).json({ error: 'digest-send failed' });

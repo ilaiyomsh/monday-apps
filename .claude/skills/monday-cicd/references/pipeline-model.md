@@ -187,6 +187,8 @@ Layout in the monorepo: `apps/<system>/<app>` per app, shared code under
 
 - `onboard-app.sh` flags: `--dest <system>/<app>` (target path),
   `--name <system>-<app>` (workflow filenames, job names, secret name),
+  `--no-push` (prepare and commit locally without publishing the branch),
+  `--no-secret` (defer GitHub App ID secret creation when CLI auth is unavailable),
   `--shared-paths "apps/<system>/services/**"` (appended to the default
   `packages/shared/**` trigger).
 - **Together and separately:** each app's two workflows trigger on its own

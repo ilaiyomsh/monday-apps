@@ -26,6 +26,7 @@ on:
     paths:
       - "apps/axis/planner/**"
       - "packages/shared/**"
+      - "packages/error-kit/**"
       - "apps/axis/services/**"
 
 jobs:
@@ -58,7 +59,35 @@ jobs:
         env:
           VITE_BUILD_SHA: ${{ github.sha }}
           VITE_IS_RELEASE: "true"
+          # Axiom activation gate (error-guard remote-monitoring): the ingest token is the
+          # only secret; dataset/app are literals; inert/fail-soft when the secret is unset.
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: planner
         run: pnpm --filter "./apps/axis/planner" build
+
+      # Sourcemaps ('hidden' in vite.config.ts) power stack symbolication but must
+      # NEVER reach the CDN — archive them keyed by commit SHA, then strip them
+      # from the deploy dir before code:push. Pull with:
+      #   .claude/skills/axiom-sre/scripts/symbolicate '<frame>' --app planner --ver <x.y.z+sha>
+      - name: Archive sourcemaps as build artifact (for stack symbolication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-planner-${{ github.sha }}
+          path: apps/axis/planner/dist/**/*.map
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Strip sourcemaps before deploy (never ship .map to the CDN)
+        run: |
+          set -euo pipefail
+          find apps/axis/planner/dist -name '*.map' -type f -delete
+          remaining="$(find apps/axis/planner/dist -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining .map files in deploy dir: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::sourcemaps still present in deploy dir — refusing to push (would leak source to the CDN)"
+            exit 1
+          fi
 
       - name: Install monday.com apps CLI
         run: npm install -g @mondaycom/apps-cli

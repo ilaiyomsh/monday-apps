@@ -14,6 +14,7 @@ import { extractStatusLabels } from '../../utils/statusLabelUtils';
 import { useLocale } from '../../hooks/useLocale';
 import { useDisplayUnit } from '../../hooks/useDisplayUnit';
 import { logger } from '../../utils/Logger';
+import { useViewTracking } from '../../utils/viewTracking';
 import { versionLabel } from '../../utils/versionLabel';
 
 interface SettingsDialogProps {
@@ -29,6 +30,9 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
 }) => {
   const { t } = useTranslation();
   const locale = useLocale();
+  // Usage telemetry (D3): report the settings view once per session, the first time it opens.
+  // Passing '' while closed is ignored by the tracker, so this fires only on the first open.
+  useViewTracking(logger, isOpen ? 'settings' : '');
   const { unit: displayUnit, setUnit: setDisplayUnit } = useDisplayUnit();
   const { settings, updateSettings: commitSettings } = useSettings();
   const [draftSettings, setDraftSettings] = useState<PlannerSettings | null>(null);
@@ -522,20 +526,27 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
 
   const handleRequestClose = async () => {
     if (isDirty) {
-      const { monday } = mondayService;
-      const result = await monday.execute("confirm", {
-        message: t('settings.unsavedConfirm.message'),
-        confirmButton: t('settings.unsavedConfirm.saveAndClose'),
-        cancelButton: t('settings.unsavedConfirm.closeWithoutSaving'),
-        excludeCancelButton: false
-      }) as any;
+      try {
+        const { monday } = mondayService;
+        const result = await monday.execute("confirm", {
+          message: t('settings.unsavedConfirm.message'),
+          confirmButton: t('settings.unsavedConfirm.saveAndClose'),
+          cancelButton: t('settings.unsavedConfirm.closeWithoutSaving'),
+          excludeCancelButton: false
+        }) as any;
 
-      if (result.data?.confirm) {
-        await handleSave();
-      } else if (result.data?.confirm === false) {
-        onClose();
+        if (result.data?.confirm) {
+          await handleSave();
+        } else if (result.data?.confirm === false) {
+          onClose();
+        }
+        // If user closes the confirm dialog without choosing, we stay in the settings
+      } catch (err) {
+        // The confirm SDK call was previously unguarded — a channel/SDK rejection was a
+        // silent unhandled promise rejection. Log it and keep the dialog open so the user's
+        // unsaved changes are never stranded by a failed confirm.
+        logger.error('[SettingsDialog] unsaved-changes confirm dialog failed; keeping dialog open:', err);
       }
-      // If user closes the confirm dialog without choosing, we stay in the settings
     } else {
       onClose();
     }

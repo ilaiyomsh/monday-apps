@@ -4,6 +4,7 @@ import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin';
 import type { EditorState } from 'lexical';
 import { $getRoot, $isTextNode } from 'lexical';
 import { $isVariableNode } from './VariableNode';
+import logger from '../../../../lib/logger';
 import type { ColumnMappingEntry, TemplateToken } from '../../../../types';
 
 type TemplateEntryType = Extract<
@@ -32,7 +33,8 @@ export function SerializePlugin({ entryType, onChange, lastSerializedRef }: Prop
     debounceRef.current = setTimeout(() => {
       debounceRef.current = null;
 
-      editorState.read(() => {
+      try {
+        editorState.read(() => {
         const root = $getRoot();
         const paragraphs = root.getChildren();
         const tokens: TemplateToken[] = [];
@@ -69,7 +71,12 @@ export function SerializePlugin({ entryType, onChange, lastSerializedRef }: Prop
           tokens.every((t) => t.kind === 'text' && t.value.trim() === '');
 
         onChange(isEmpty ? null : { type: entryType, tokens });
-      });
+        });
+      } catch (err) {
+        // Runs in a detached setTimeout callback — a throw here would be an unhandled
+        // exception with no boundary. Log so a silent template-save failure is visible.
+        logger.error('template_editor', 'serialize_failed', err);
+      }
     }, 500);
   };
 

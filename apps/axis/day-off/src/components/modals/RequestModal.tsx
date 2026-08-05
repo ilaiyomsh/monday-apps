@@ -12,6 +12,7 @@ import { ABSENCE_TYPES, TYPE_ORDER } from '../../domain/absence';
 import { todayKey, workdaysBetween, calDaysBetween } from '../../domain/dates';
 import { useL10n } from '../../domain/useL10n';
 import { useDayOffData } from '../../contexts/DayOffDataProvider';
+import { logger } from '../../core';
 import { Modal, Icon, MiniLoader, Rng } from '../ui';
 
 /** Human-readable file size — kept local, matches the prototype helper. */
@@ -32,7 +33,7 @@ interface RequestModalProps {
 
 export function RequestModal({ currentUser, initial, onClose, onSubmit, busy }: RequestModalProps) {
   const { t } = useL10n();
-  const { balanceFor, companyDays } = useDayOffData();
+  const { balanceFor, companyDays, toast } = useDayOffData();
 
   // No default type (change #76): a new request opens with NOTHING selected —
   // the required type must be a conscious choice. Editing keeps the saved type.
@@ -51,7 +52,14 @@ export function RequestModal({ currentUser, initial, onClose, onSubmit, busy }: 
 
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files && e.target.files[0];
-    if (f) setAttachment({ name: f.name, size: f.size, url: URL.createObjectURL(f), file: f });
+    if (f) {
+      try {
+        setAttachment({ name: f.name, size: f.size, url: URL.createObjectURL(f), file: f });
+      } catch (err) {
+        logger.error('RequestModal', 'failed to create an object URL for the selected file', err);
+        toast(t('toasts.attachmentPickFailed'), 'danger');
+      }
+    }
     e.target.value = '';
   }
 

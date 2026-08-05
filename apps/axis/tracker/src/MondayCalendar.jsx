@@ -20,6 +20,7 @@ import { isEventLocked } from './utils/editLockUtils';
 import { safeApi } from './utils/mondayApi';
 import lazyRetry, { prefetchLazy } from './utils/lazyRetry';
 import logger from './utils/logger';
+import { useViewTracking } from '@axis/app-core';
 
 // רכיבים - טעינה רגילה (נדרשים מיידית)
 import CalendarToolbar from './components/CalendarToolbar';
@@ -162,6 +163,9 @@ export default function MondayCalendar({ monday, onOpenSettings, onOpenProjectCo
         initMountLogged.current = true;
         logger.initDone(6, 'MondayCalendar mounted');
     }
+
+    // v2 usage telemetry — view_open once per session for the calendar view (inert until Axiom sink active)
+    useViewTracking(logger, 'calendar');
 
     const t = useStableT();
 
@@ -442,6 +446,8 @@ export default function MondayCalendar({ monday, onOpenSettings, onOpenProjectCo
                     setLoaderFading(false);
                     logger.initDone(9, 'Calendar fully interactive');
                     logger.initSummary(loaderStartRef.current);
+                    // v2 boot health — same elapsed initSummary reports (inert until Axiom sink active)
+                    logger.health('boot_ok', { ms: Date.now() - loaderStartRef.current });
                 }, 400);
             }, remaining);
             return;

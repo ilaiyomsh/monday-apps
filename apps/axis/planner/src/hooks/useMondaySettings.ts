@@ -283,6 +283,10 @@ export const useMondaySettings = () => {
         throw new Error(response.data?.error || 'Failed to save settings');
       }
     } catch (err) {
+      // Also ship to Axiom — a settings SAVE failure is a core user action and was previously
+      // display-only (setError), invisible to remote monitoring. logger.error + the existing
+      // in-dialog setError keep both the observability and the user-facing message.
+      logger.error('[useMondaySettings] saveSettings failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to save settings');
       return false;
     } finally {

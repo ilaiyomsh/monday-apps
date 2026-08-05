@@ -44,6 +44,7 @@ retry_in_seconds}`, top-level `extensions.request_id` and `extensions.warnings[]
 | `ColumnValueException` | 200 | Wrong column value format | ❌ fix format (column-formats.md) |
 | `CorrectedValueException` | 200 | Value type mismatch on column update | ❌ |
 | `InvalidColumnIdException` / `InvalidBoardIdException` / `InvalidUserIdException` | 200 | Bad/inaccessible id | ❌ |
+| `InvalidColumnTypeException` | 200 | `query_params` rule on a column type that cannot be filtered server-side — **mirror is the big one** (`error_data.actual_type: "lookup"`, `column_id: null`). Nulls the WHOLE board node (`data.boards: [null]`), so one bad rule in an `and` group kills every result. Verified 2026-07-29 at 2025-04/2026-04/2026-07 | ❌ filter that column client-side (column-formats.md → Mirror columns) |
 | `InvalidArgumentException` | 200 | Bad argument / pagination overrun / board missing | ❌ |
 | `InvalidVersionException` | 200 | Malformed API-Version header | ❌ (versioning.md) |
 | `ItemsLimitationException` | 200 | Board >10,000 items | ❌ |
@@ -134,3 +135,30 @@ Related: `team_subscribers` can return null / unauthorized at an app's OAuth sco
 ```
 
 Note: introspection fields and regular fields cannot be mixed in one query — split them.
+
+## Playbook: `USER_UNAUTHORIZED` on create_item while the monday UI ALLOWS the same action (new board-roles accounts)
+
+Verified live 2026-08-05 on a customer account (identifiers + monday request_ids kept in the
+owner's private incident notes — this repo is public, so no live account/board ids here):
+
+- The board carried the CLASSIC permission `permissions: "collaborators"` with a single
+  classic owner. A second full member (not guest, not viewer) was granted edit via the NEW
+  board-roles system (default role "Contributor") — and could create items **in the monday
+  UI**. The **API** (`create_item`, and even `add_users_to_board` to self-elevate) returned
+  `USER_UNAUTHORIZED` (403) for that same user. The two permission layers genuinely diverge:
+  the UI honours the new roles, the API enforces the classic subscribers/owners lists.
+- Through the seamless iframe this surfaced as the detail-stripped `"Graphql validation
+  errors"` envelope (see the seamless-variant playbook above) — the playground was what
+  exposed the real 403.
+- **Fix is classic-layer, and only a classic owner (or account admin) can apply it:** either
+  board ⋯ → Board permissions → "Everyone can edit", or add the affected user to the board's
+  members/owners. The blocked user cannot self-repair (`add_users_to_board` is refused too).
+- App-design consequence: an app whose writes run as the viewing user can fail for users who
+  look fully entitled in the UI. When provisioning creates boards, the INSTALLER becomes the
+  sole classic owner — other users of the same install hit this the moment the board's
+  classic permission is anything but "everyone". Diagnosis in the API playground as the
+  affected user — **read-only first**: `me { is_guest is_view_only }` +
+  `boards(ids:){ permissions owners { id } }` names the exact gap without touching data.
+  A WRITE reproduction (`create_item`) against a live customer board is a last resort:
+  only with the owner's explicit go-ahead, and the created test item must be deleted
+  immediately — otherwise reproduce on a sandbox clone (golden rule 4).

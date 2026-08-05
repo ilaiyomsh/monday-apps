@@ -3,6 +3,7 @@ import { Button, Flex } from '@vibe/core';
 import { Download, Upload } from '@vibe/icons';
 import { ConfirmDialog } from '../feedback/ConfirmDialog';
 import { useToast } from '../feedback/ToastProvider';
+import logger from '../../lib/logger';
 import type { Policy } from '../../types';
 
 // Subset of Policy fields safe to round-trip through the export/import path.
@@ -49,24 +50,29 @@ export function BackupRestoreBar({ policy, isOwner, onPatch }: Props) {
   const [importing, setImporting] = useState(false);
 
   const handleExport = () => {
-    const portable: PortablePolicy = {
-      boardId: policy.boardId,
-      linkColumnId: policy.linkColumnId,
-      lockColumnId: policy.lockColumnId,
-      peopleColumnId: policy.peopleColumnId,
-      itemNameSource: policy.itemNameSource,
-      columnMapping: policy.columnMapping ?? {},
-      conditionalEligibleColumns: policy.conditionalEligibleColumns ?? [],
-    };
-    const blob = new Blob([JSON.stringify(portable, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sync-setup-${ymd(new Date())}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      const portable: PortablePolicy = {
+        boardId: policy.boardId,
+        linkColumnId: policy.linkColumnId,
+        lockColumnId: policy.lockColumnId,
+        peopleColumnId: policy.peopleColumnId,
+        itemNameSource: policy.itemNameSource,
+        columnMapping: policy.columnMapping ?? {},
+        conditionalEligibleColumns: policy.conditionalEligibleColumns ?? [],
+      };
+      const blob = new Blob([JSON.stringify(portable, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sync-setup-${ymd(new Date())}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      logger.error('setup', 'export_setup_failed', err);
+      toast.error(`Export failed: ${(err as Error).message}`);
+    }
   };
 
   const handlePickFile = () => fileRef.current?.click();
@@ -93,6 +99,9 @@ export function BackupRestoreBar({ policy, isOwner, onPatch }: Props) {
       }
       setPending({ patch, unknownKeys });
     } catch (err) {
+      // Ship AND display: the toast tells the owner, logger.error ships it to Axiom so a
+      // malformed-import failure is observable (it was display-only before).
+      logger.error('backup_restore', 'import_parse_failed', err instanceof Error ? err : new Error(String(err)));
       toast.error(`Import failed: ${(err as Error).message}`);
     }
   };
@@ -105,6 +114,9 @@ export function BackupRestoreBar({ policy, isOwner, onPatch }: Props) {
       toast.success('Setup imported');
       setPending(null);
     } catch (err) {
+      // Ship AND display: a failed policy write (PATCH /api/policy) must reach Axiom, not
+      // just the owner's toast — it was display-only before.
+      logger.error('backup_restore', 'import_apply_failed', err instanceof Error ? err : new Error(String(err)));
       toast.error(`Import failed: ${(err as Error).message}`);
     } finally {
       setImporting(false);

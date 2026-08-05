@@ -49,10 +49,14 @@ const BASE64_LINE_LENGTH = 76;
 
 /**
  * UTF-8 → base64, wrapped at 76 characters with CRLF separators.
+ * Exported for helpers/mime-mixed.js (the attachment wrapper): both builders
+ * must encode part payloads identically, or a message that carries BOTH — a
+ * nested alternative plus a file — would ship two different encodings of the
+ * same rule.
  * @param {string} text
  * @returns {string}
  */
-function encodeBase64Body(text) {
+export function encodeBase64Body(text) {
   const encoded = Buffer.from(text, 'utf8').toString('base64');
   const lines = [];
   for (let offset = 0; offset < encoded.length; offset += BASE64_LINE_LENGTH) {

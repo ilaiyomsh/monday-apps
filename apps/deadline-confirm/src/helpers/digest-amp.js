@@ -1,33 +1,47 @@
 // V6 amp4email digest renderer (docs/v6-amp-only-decisions.md §3, §5, D9).
 //
-// Layout (owner 2026-07-27): ONE table per populated cluster (מקבץ).
-// Columns: name | that cluster's date | amp-bind dropdown (monday-colored
-// trigger + popup options). Native <select> popup cannot be styled; always-open
-// radio stacks are not a dropdown. Wire via hidden input [value] binding.
+// Layout (owner 2026-08-04): ONE FORM PER ROW, rendered as a card under its
+// cluster title (מקבץ). Superseded the 2026-07-27 table layout, and the reason
+// is mechanical, not aesthetic: amp-form's `submitting` / `submit-success` /
+// `submit-error` blocks must be CHILDREN of the form, so per-row feedback is
+// impossible with one form per message — and a <form> cannot span two <td>s.
+// Cards also stack cleanly on a phone, which the fixed-width table did not.
 //
-// Wire format unchanged:
-//   hidden: a, p, m, s, sig
-//   selection: <input type="hidden" name="item_<itemId>" [value]=btnId> ("" = no change)
-// Same item across clusters shares one state key + one hidden field — since the
-// section-priority dedup (2026-08-04) buildDigest no longer PRODUCES a duplicate
-// item, so this sharing is defence-in-depth for hand-built recipients only.
+// Picking a status SUBMITS THAT ROW IMMEDIATELY. There is no global submit
+// button any more (owner decision 2026-08-04, supersedes the bulk form).
+//
+// Wire format per row (unchanged field names, one item per POST):
+//   hidden: a, p, m, s, sig      — m/sig cover THIS ROW's pairs only
+//   selection: <input type="radio" name="item_<itemId>" value="<btnId>">
+//
+// Two decisions inside that are easy to "clean up" and must not be:
+//   - The selection rides a RADIO, not an amp-bind-bound hidden input.
+//     `AMP.setState(...)` followed by `form.submit` in one action chain is a
+//     race: amp-bind applies its DOM mutations on the next vsync frame, so the
+//     submit would carry the PREVIOUS value. A checked radio is serialized by
+//     the form itself — no binding, no frame to wait for. The setState in that
+//     chain is therefore cosmetic only (close the menu, repaint the trigger).
+//   - The submit fires on the radio's `change` (owner-confirmed 2026-08-04 as
+//     the supported AMP-for-Email pattern); `tap` only repaints and closes the
+//     menu. They are NOT interchangeable and must not be merged: both fire on a
+//     first pick, so submitting from each would double-post every selection.
 
 import { escapeHtml } from './html.js';
 import { buildManifest, signManifest, currentSlot } from '../services/manifest-signature.js';
 
 const AMP_ENDPOINT_PATH = '/amp/confirm';
 const DEFAULT_SEND_HOUR = 8;
-const SUBMIT_LABEL = 'אשר את המסומנות';
-const SUBMIT_COLOR = '#0073ea';
 const NEUTRAL_STATUS = '#c4c4c4';
 const TRIGGER_EMPTY = '—';
-const STATUS_HEADER = 'סטטוס';
+const STATUS_CAPTION = 'סטטוס';
 const NOTE_PLACEHOLDER = 'חובה למילוי';
+const SUBMITTING_LABEL = 'מעדכן…';
+const CHECK_GLYPH = '&#10003;';
 
 /**
  * A cluster requires a per-task note when it maps a text column.
  * @param {object} section
- * @returns {boolean}
+ * @returns {string|null}
  */
 function sectionNoteColumn(section) {
   const id = section?.noteColumnId;
@@ -127,6 +141,18 @@ function colorToClass(hex) {
 }
 
 /**
+ * The card's leading-edge stripe class. Taken from the CLUSTER's primary button,
+ * not from the row's current status: the pill already shows the status, so the
+ * stripe is free to do what it does in the monday mobile app — group the cards
+ * that belong together. Being per-cluster it is also static, needing no binding.
+ * @param {string} hex
+ * @returns {string} e.g. ac_fdab3d
+ */
+function accentToClass(hex) {
+  return `ac_${colorToClass(hex).slice(3)}`;
+}
+
+/**
  * @param {Iterable<string>} colors hex colors used in this message
  * @returns {string} CSS rules for .dd-trig.bg_*
  */
@@ -209,7 +235,8 @@ function collectColors(recipient) {
 /**
  * Initial amp-state — seeded with each item's current status (first occurrence
  * wins across clusters). c<id> is a CSS class name (AMP4EMAIL forbids [style]
- * on button). v<id> starts empty (= no write until the reader picks an option).
+ * on button). There is deliberately NO v<id> any more: the selection travels on
+ * a radio, so no state key carries a wire value.
  * @param {object} recipient
  */
 function buildDropdownState(recipient) {
@@ -229,23 +256,19 @@ function buildDropdownState(recipient) {
         palette,
         task.statusColor
       );
-      const cls = colorToClass(color);
-      state[`v${id}`] = '';
       state[`l${id}`] = label;
-      state[`c${id}`] = cls;
+      state[`c${id}`] = colorToClass(color);
     }
   }
-  // n<id> exists only for items whose cluster maps a text column — the gate
-  // expression reads these keys, and a key that is never seeded reads as
-  // undefined (not ''), which would leave the submit button stuck.
+  // n<id> exists only for items whose cluster maps a text column — the trigger
+  // lock reads these keys, and a key that is never seeded reads as undefined
+  // (not ''), which would leave the trigger locked shut.
   for (const id of noteRequiredItemIds(recipient)) state[`n${id}`] = '';
   return state;
 }
 
 /**
- * Item ids that owe a note, in first-appearance order. An item in two mapped
- * clusters appears ONCE: the wire carries one note per task, exactly like it
- * carries one status selection per task.
+ * Item ids that owe a note, in first-appearance order.
  * @param {object} recipient
  * @returns {string[]}
  */
@@ -277,6 +300,8 @@ function noteRequiredItemIds(recipient) {
 //     visibility (official value regex) — box-shadow is NOT among them, so
 //     the document ships no transition at all; hover/active box-shadow
 //     changes are instant.
+//   - No flex/grid: their property sets are not fully inside the strict list,
+//     so the card is plain block layout. It is also what stacks on a phone.
 // `npm run validate:amp` checks all of this against the official validator.
 const STYLES_BASE = `
       body { margin:0; padding:14px 10px; background:#F5F6F8; font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif; color:#323338; }
@@ -285,19 +310,24 @@ const STYLES_BASE = `
       .lead { font-size:14px; color:#676879; line-height:1.6; margin:0 0 18px; }
       .cluster { margin:0 0 22px; }
       .cluster-title { font-size:15px; font-weight:bold; color:#323338; margin:0 0 8px; line-height:1.4; }
-      table.board { width:100%; border-collapse:collapse; background:#ffffff; border:1px solid #E6E9EF; }
-      th { font-size:12px; color:#676879; font-weight:500; text-align:center; padding:8px; border-bottom:1px solid #E6E9EF; border-left:1px solid #D0D4E4; background:#FAFBFC; white-space:nowrap; }
-      th.name-h { text-align:right; }
-      th.status-h { min-width:200px; }
-      th:last-child { border-left:none; }
-      td { font-size:14px; font-weight:normal; padding:0 8px; border-bottom:1px solid #E6E9EF; border-left:1px solid #D0D4E4; vertical-align:middle; height:44px; text-align:center; }
-      td:last-child { border-left:none; }
-      td.name { text-align:right; padding-right:12px; white-space:nowrap; }
-      td.date { color:#676879; font-size:13px; white-space:nowrap; }
-      td.dd-cell { padding:8px; width:220px; vertical-align:middle; text-align:right; }
-      .dd-wrap { position:relative; display:inline-block; width:200px; max-width:100%; text-align:right; }
+      /* One card per task — and each card IS its own form. The card is the BASE
+         layout, not the fallback: a client that strips media queries shows it
+         everywhere, which is the layout that works at any width. The wide
+         layout is added in the min-width query at the end of this sheet. */
+      form.row { display:block; margin:0 0 10px; padding:12px 14px; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; text-align:right; border-right-width:4px; border-right-style:solid; border-right-color:#E6E9EF; }
+      /* Cells: stacked blocks on a phone, inline-block columns when wide. */
+      .c-name, .c-date, .c-note, .c-act { display:block; width:100%; box-sizing:border-box; }
+      .c-date { margin-top:6px; }
+      .c-note, .c-act { margin-top:10px; }
+      .row-name { display:block; font-size:15px; font-weight:bold; color:#323338; line-height:1.4; }
+      .chip { display:inline-block; padding:4px 10px; border-radius:6px; background:#F5F6F8; color:#676879; font-size:12px; line-height:1.4; }
+      .row-cap { display:block; margin-bottom:4px; font-size:12px; color:#676879; font-weight:500; }
+      /* Column headers — the wide layout's only extra markup. */
+      .thead { display:none; padding:0 18px 6px; }
+      .th { display:inline-block; box-sizing:border-box; font-size:12px; color:#676879; font-weight:500; text-align:right; }
+      .dd-wrap { position:relative; display:inline-block; width:100%; max-width:260px; text-align:right; }
       .dd-trig {
-        width:200px; max-width:100%; height:34px; box-sizing:border-box;
+        width:100%; height:38px; box-sizing:border-box;
         padding:0 12px; border:0; border-radius:4px; cursor:pointer;
         font-size:14px; font-weight:bold; color:#ffffff; text-align:center;
         font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
@@ -305,17 +335,21 @@ const STYLES_BASE = `
       }
       .dd-menu {
         position:absolute; top:100%; left:0; z-index:20;
-        width:200px; margin-top:4px; padding:8px; box-sizing:border-box;
+        width:100%; margin-top:4px; padding:8px; box-sizing:border-box;
         background:#ffffff; border:1px solid #E6E9EF; border-radius:8px;
         box-shadow:0 10px 25px rgba(0,0,0,0.15);
       }
+      /* The option is a LABEL wrapping the radio: the radio is what the form
+         serializes, the label is what the reader sees and taps. */
       .dd-opt {
         display:block; width:100%; box-sizing:border-box;
         margin:0 0 4px; padding:0 12px; border:0; border-radius:4px; cursor:pointer;
-        height:34px; line-height:34px; font-size:14px; font-weight:bold; color:#ffffff; text-align:center;
+        height:38px; line-height:38px; font-size:14px; font-weight:bold; color:#ffffff; text-align:center;
         font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
       }
       .dd-opt:last-child { margin-bottom:0; }
+      /* Hidden, but present and clickable — the label forwards the tap to it. */
+      .pick { position:absolute; width:1px; height:1px; opacity:0; margin:0; padding:0; border:0; }
       /* Tap-away catcher. Fixed positioning is outside the strict set, so the
          overlay is absolute inside the position:relative .wrap card — it
          covers the card (where every interactive element lives), not the
@@ -324,70 +358,137 @@ const STYLES_BASE = `
         position:absolute; top:0; right:0; bottom:0; left:0; z-index:10;
         background:transparent;
       }
-      .go { margin:8px 0 4px; }
-      .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; cursor:pointer; }
       /* Hover/active affordance is box-shadow ONLY — filter is outside the
          strict set. amp4email permits :hover; clients that ignore it simply
          render the base state, so this degrades to today's behaviour. */
       .dd-trig:hover, .dd-opt:hover { box-shadow:0 1px 4px rgba(0,0,0,0.18); }
-      .send:hover { box-shadow:0 2px 6px rgba(0,0,0,0.2); }
-      .dd-trig:active, .dd-opt:active, .send:active { box-shadow:inset 0 2px 4px rgba(0,0,0,0.22); }
-      /* In-flight state. amp-form stamps these classes on the <form> itself, so
-         no binding is needed and it cannot desync from the actual request.
-         Strict set: no cursor override (value-restricted), no input-freeze
-         property — the dropdown freeze is dropped (accepted), the dim stays. */
-      form.amp-form-submitting .send { opacity:0.55; box-shadow:none; }
+      .dd-trig:active, .dd-opt:active { box-shadow:inset 0 2px 4px rgba(0,0,0,0.22); }
+      /* In-flight state. amp-form stamps this class on the FORM that is
+         submitting — which is now one row — so the dim lands on that row only
+         and cannot desync from the actual request. Strict set: no cursor
+         override (value-restricted), no input-freeze property. */
       form.amp-form-submitting .dd-trig, form.amp-form-submitting .dd-opt { opacity:0.75; }
-      .sending { margin-top:10px; font-size:13px; color:#676879; }
-      .ok { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#E6F7EF; color:#00754A; font-size:13px; }
-      .err { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#FDECEE; color:#B4222F; font-size:13px; white-space:pre-wrap; word-break:break-word; }
+      /* Per-row outcome strip. One of the three at a time — amp-form clears the
+         previous rendering when the row is submitted again. */
+      .state { margin-top:10px; padding:8px 10px; border-radius:6px; font-size:13px; line-height:1.5; }
+      .state.wait { background:#F5F6F8; color:#676879; }
+      .state.ok { background:#E6F7EF; color:#00754A; }
+      .state.err { background:#FDECEE; color:#B4222F; white-space:pre-wrap; word-break:break-word; }
       .err-detail { display:block; margin-top:6px; font-size:11px; opacity:0.9; font-family:ui-monospace,Menlo,Consolas,monospace; }
       .foot { font-size:12px; color:#9699A6; line-height:1.6; border-top:1px solid #E6E9EF; padding-top:12px; margin-top:10px; }
+      /* WIDE LAYOUT — additive on purpose (see the card comment above). A media
+         query is the only width signal an amp4email document has: no JS, no
+         viewport API, and the media attribute applies to amp-* elements only.
+         Columns line up because every row is the same width and shares these
+         percentages: there is no table element to align them, since a form
+         cannot span two cells and per-row forms are what give each row its own
+         loader. The percentages deliberately stop short of 100% — inline-blocks
+         are separated by a whitespace gap, and a full 100% wraps the last
+         column. (No literal tag names in this comment: it ships inside the
+         document, where the suite asserts that no table markup exists.) */
+      @media (min-width:601px) {
+        .thead { display:block; }
+        form.row { margin:0 0 6px; padding:10px 14px; }
+        .c-name, .c-date, .c-act { display:inline-block; vertical-align:middle; margin-top:0; }
+        .row-cap { display:none; }
+        .chip { background:transparent; padding:0; font-size:13px; }
+        .th-name, .c-name { width:43%; }
+        .th-date, .c-date { width:21%; }
+        .th-act, .c-act { width:33%; }
+      }
 `;
 
 /**
  * Note-column styles. Emitted ONLY when this message actually requires a note —
- * a tenant that maps no text column ships neither the markup nor the rules, and
- * the document stays exactly the size it was before the feature.
+ * a tenant that maps no text column ships neither the markup nor the rules.
  */
 const STYLES_NOTES = `
-      td.note-cell { padding:8px; width:210px; text-align:right; }
       .note-in {
-        width:190px; max-width:100%; height:34px; box-sizing:border-box;
+        width:100%; max-width:320px; height:38px; box-sizing:border-box;
         padding:0 10px; border:1px solid #D0D4E4; border-radius:4px;
         font-size:13px; color:#323338; background:#ffffff; text-align:right;
         font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
       }
-      /* Bound class: a marked row with an empty note is the ONLY thing holding
-         the submit button down, so it has to be findable at a glance. */
-      .note-in.note-missing { border-color:#E2445C; background:#FDECEE; }
-      /* The submit's disabled state is bound, so this styles the gate itself.
-         Strict set: no filter, no cursor override. Opacity is what greys the
-         button — its background is an inline style, which no class rule can
-         beat without !important, and AMP forbids !important. */
-      .send[disabled] { opacity:0.45; box-shadow:none; }
+      /* A status trigger locked until its note is typed. Opacity is what greys
+         it — the background is an inline/class style that no rule can beat
+         without !important, and AMP forbids !important. No hover shadow: a
+         locked row must not look tappable. */
+      .dd-trig[disabled] { opacity:0.45; box-shadow:none; }
+      .dd-trig[disabled]:hover { box-shadow:none; }
+      /* A fourth column has to come out of the other three. Same breakpoint as
+         the base sheet — two different ones would let the header strip and the
+         rows switch at different widths. */
+      @media (min-width:601px) {
+        .c-note { display:inline-block; vertical-align:middle; margin-top:0; }
+        .th-name, .c-name { width:29%; }
+        .th-date, .c-date { width:15%; }
+        .th-note, .c-note { width:25%; }
+        .th-act, .c-act { width:27%; }
+      }
 `;
 
 /**
- * amp-bind dropdown: closed trigger shows CURRENT status; tap opens colored
- * options. Selecting updates the cell via [text]/[class] and sets the wire
- * value. Leaving the trigger untouched keeps v="" (= no write for that item).
- * Trigger color via [class] (AMP4EMAIL forbids [style] on button).
- * @param {string} fieldName escaped name="item_<id>"
- * @param {Array<{ id: string, label: string, color: string }>} buttons section options
- * @param {Array<{ id: string, label: string, color: string }>} palette all digest buttons (color match)
- * @param {object} task
- * @param {boolean} includeHidden emit the wire hidden input once per item
+ * Build the signed manifest for ONE row: every (this item × this cluster's
+ * buttons) pair, and nothing else. A form that leaks authorizes one item.
+ * @param {{ secret: string, accountId: string, personId: string, itemId: string,
+ *           buttons: Array<{ id: string }>, slot: string }} p
  */
-function renderLabelDropdown(fieldName, buttons, palette, task, includeHidden, clusterIndex) {
+function signRow({ secret, accountId, personId, itemId, buttons, slot }) {
+  const manifest = buildManifest(buttons.map((button) => ({ itemId, btnId: button.id })));
+  const signature = signManifest({
+    secret,
+    accountId: String(accountId),
+    personId: String(personId),
+    slot,
+    manifest,
+  });
+  return { manifest, signature };
+}
+
+/**
+ * The note field for one row. The typed input carries the name itself: the
+ * value used to ride a bound hidden twin fed by input-throttled → AMP.setState,
+ * and in Gmail that state never updated, so every note reached the server EMPTY
+ * while the status (fed by tap:) arrived intact (measured 2026-08-04). A named
+ * input needs no event and no binding to be submitted.
+ *
+ * The state mirror still matters — the trigger lock reads `dd.n<id>` — and it
+ * matters MORE than before: an event that never fires now means a dropdown that
+ * never opens. So the value is mirrored from `change` (fired when the field is
+ * left) as well as `input-throttled`; whichever the client implements unlocks
+ * the row.
+ *
+ * `required` is deliberately NOT used: it would block a row the reader never
+ * intended to mark. The gate is the trigger lock plus the server's refusal.
+ *
+ * @param {object} task
+ * @param {string} caption note column title
+ */
+function renderNoteField(task, caption) {
   const id = String(task.itemId);
-  // The OPEN/CLOSED key is per CELL, not per item: an item may legitimately
-  // appear in two clusters (it is due to start and due to finish), and keying
-  // `dd.o` by itemId alone made both menus open on one tap. The selection keys
-  // (v/l/c) stay per ITEM on purpose — one wire value per task is what makes
-  // two conflicting statuses impossible.
-  const idBind = escapeBindStr(`${clusterIndex}_${id}`);
-  const vKey = `v${id}`;
+  const mirror = `AMP.setState({dd:{n${id}:event.value}})`;
+  return `        <div class="c-note">
+          <span class="row-cap">&#8207;${escapeHtml(caption)}</span>
+          <input type="text" name="${escapeHtml(`note_${id}`)}" class="note-in" placeholder="${escapeHtml(NOTE_PLACEHOLDER)}"
+                 on="change:${mirror};input-throttled:${mirror}">
+        </div>`;
+}
+
+/**
+ * The status control for one row: closed trigger showing the CURRENT status,
+ * tap opens the colored options. Each option is a label-wrapped radio; tapping
+ * it repaints the trigger, closes the menu and SUBMITS THAT ROW.
+ *
+ * @param {object} p
+ * @param {string} p.formId the row's form id — the submit action's target
+ * @param {string} p.menuKey per-CELL open/closed key (`<clusterIndex>_<itemId>`)
+ * @param {object} p.task
+ * @param {Array<{ id: string, label: string, color: string }>} p.buttons
+ * @param {Array<{ label: string, color: string }>} p.palette
+ * @param {boolean} p.noteGated locked until this row's note holds text
+ */
+function renderStatusControl({ formId, menuKey, task, buttons, palette, noteGated }) {
+  const id = String(task.itemId);
   const lKey = `l${id}`;
   const cKey = `c${id}`;
 
@@ -399,169 +500,157 @@ function renderLabelDropdown(fieldName, buttons, palette, task, includeHidden, c
   );
   const curCls = colorToClass(curColor);
 
+  // No text, no status (owner decision 2026-08-04). A disabled <button> fires no
+  // click, so `tap:` never runs and the menu cannot be opened — the ONLY way to
+  // express this here: strict amp4email CSS forbids `pointer-events`.
+  //
+  // The STATIC `disabled` is not belt-and-braces, it is the initial state:
+  // amp-bind does not evaluate bindings on load, so a trigger carrying only
+  // `[disabled]` would be tappable until the reader's first state change.
+  const lock = noteGated
+    ? ` disabled\n                    [disabled]="dd.n${id} == ''"`
+    : '';
+
   const options = buttons
     .map((button) => {
       const color = button.color || NEUTRAL_STATUS;
       const cls = colorToClass(color);
-      const label = button.label;
-      return `                <button type="button" class="dd-opt" style="background:${escapeHtml(color)}"
-                        on="tap:AMP.setState({dd:{o:'', ${vKey}:'${escapeBindStr(button.id)}', ${lKey}:'${escapeBindStr(label)}', ${cKey}:'${escapeBindStr(cls)}'}})">&#8207;${escapeHtml(label)}</button>`;
+      // The setState here is COSMETIC (close the menu, repaint the trigger).
+      // The submitted value is the radio's, so the vsync delay cannot lose it.
+      const paint = `AMP.setState({dd:{o:'', ${lKey}:'${escapeBindStr(button.label)}', ${cKey}:'${escapeBindStr(cls)}'}})`;
+      // The two events are split on purpose:
+      //   change → submit. This is the documented AMP-for-Email pattern for a
+      //     form control (owner-confirmed 2026-08-04), and it fires AFTER the
+      //     radio is checked, so the form serializes the right value.
+      //   tap → paint. Repainting on tap (not change) also closes the menu on a
+      //     tap of the already-selected option, which fires no change event.
+      // Consequence to know: re-tapping the SAME option does not resubmit, so a
+      // row whose request failed is retried by picking a different status (or
+      // from the board). Putting submit on tap as well would double-post every
+      // first pick, since both events fire on it.
+      // role + tabindex are REQUIRED by the validator on any element carrying
+      // `on` ("required by attribute 'on'"); <button> is exempt, <input> is not,
+      // which is why the trigger has neither and the overlay has both. They are
+      // also what keeps a visually hidden radio reachable by keyboard.
+      return `              <label class="dd-opt" style="background:${escapeHtml(color)}">
+                <input type="radio" class="pick" name="${escapeHtml(`item_${id}`)}" value="${escapeHtml(button.id)}"
+                       role="radio" tabindex="0"
+                       on="tap:${paint};change:${formId}.submit">
+                <span>&#8207;${escapeHtml(button.label)}</span>
+              </label>`;
     })
     .join('\n');
 
-  const hidden = includeHidden
-    ? `\n              <input type="hidden" name="${fieldName}" value="" [value]="dd.${vKey}">`
-    : '';
-
-  return `              <td class="dd-cell">
-              <div class="dd-wrap">
-                <button type="button" class="dd-trig ${curCls}"
-                        [class]="'dd-trig ' + dd.${cKey}"
-                        on="tap:AMP.setState({dd:{o: dd.o == '${idBind}' ? '' : '${idBind}'}})">
-                  <span [text]="dd.${lKey}">&#8207;${escapeHtml(curLabel)}</span>
-                </button>
-                <div class="dd-menu" hidden [hidden]="dd.o != '${idBind}'">
+  return `        <div class="c-act">
+          <span class="row-cap">&#8207;${STATUS_CAPTION}</span>
+          <div class="dd-wrap">
+            <button type="button" class="dd-trig ${curCls}"${lock}
+                    [class]="'dd-trig ' + dd.${cKey}"
+                    on="tap:AMP.setState({dd:{o: dd.o == '${menuKey}' ? '' : '${menuKey}'}})">
+              <span [text]="dd.${lKey}">&#8207;${escapeHtml(curLabel)}</span>
+            </button>
+            <div class="dd-menu" hidden [hidden]="dd.o != '${menuKey}'">
 ${options}
-                </div>
-              </div>${hidden}
-            </td>`;
-}
-
-/**
- * The note cell for one row. The VISIBLE input is deliberately nameless: two
- * named inputs for one item (a task listed in two mapped clusters) would submit
- * the key twice. It writes to shared state instead, and one hidden field per
- * item carries that state to the wire — the same split the dropdown uses.
- *
- * `required` is NOT used. This is one bulk form for the whole message, so a
- * required attribute would block submission over rows the reader never marked;
- * the gate has to be conditional, which is what the submit binding does.
- *
- * @param {object} task
- * @param {boolean} includeHidden emit the wire hidden input once per item
- */
-function renderNoteCell(task, includeName) {
-  const id = String(task.itemId);
-  const nKey = `n${id}`;
-  const vKey = `v${id}`;
-  // THE TYPED INPUT CARRIES THE NAME. It used to be nameless, with the value
-  // riding a hidden twin bound `[value]="dd.n<id>"` and fed by
-  // input-throttled:AMP.setState — the same split the dropdown uses. Measured
-  // live 2026-08-04: that state never updated in Gmail, so every note reached
-  // the server EMPTY while the status (fed by `tap:`) arrived intact. The
-  // difference is the EVENT, not the binding: `tap` is honoured in AMP4EMAIL,
-  // `input-throttled` on a text input is not. A named input needs no event and
-  // no binding to submit, so the value no longer depends on either.
-  // Emitted once per item (an item listed in two mapped clusters would
-  // otherwise submit the key twice); later cells render read-only-ish twins
-  // with no name, which simply do not participate in the submission.
-  const name = includeName ? ` name="${escapeHtml(`note_${id}`)}"` : '';
-  return `              <td class="note-cell">
-                <input type="text"${name} class="note-in" placeholder="${escapeHtml(NOTE_PLACEHOLDER)}"
-                       [class]="dd.${vKey} != '' && dd.${nKey} == '' ? 'note-in note-missing' : 'note-in'"
-                       on="input-throttled:AMP.setState({dd:{${nKey}:event.value}})">
-              </td>`;
-}
-
-/**
- * @param {object} section
- * @param {Set<string>} emittedHidden
- * @param {Array<{ id: string, label: string, color: string }>} palette
- * @param {number} clusterIndex
- * @param {Set<string>} emittedNotes item ids whose hidden note field already exists
- * @param {Record<string, Record<string, string>>} [statusColumnColors] real board label colors
- */
-function renderClusterTable(section, emittedHidden, palette, clusterIndex, emittedNotes, statusColumnColors) {
-  const buttons = resolveSectionButtons(section, statusColumnColors);
-  if (buttons.length === 0) return '';
-
-  const dateHeader =
-    section.dateColumnTitle && String(section.dateColumnTitle).length > 0
-      ? String(section.dateColumnTitle)
-      : 'תאריך';
-  const notesRequired = Boolean(sectionNoteColumn(section));
-  const noteHeader =
-    section.noteColumnTitle && String(section.noteColumnTitle).length > 0
-      ? String(section.noteColumnTitle)
-      : 'הערה';
-
-  const rows = section.tasks
-    .map((task) => {
-      const itemId = String(task.itemId);
-      const fieldName = escapeHtml(`item_${itemId}`);
-      const includeHidden = !emittedHidden.has(itemId);
-      if (includeHidden) emittedHidden.add(itemId);
-      let noteCell = '';
-      if (notesRequired) {
-        const includeNoteHidden = !emittedNotes.has(itemId);
-        if (includeNoteHidden) emittedNotes.add(itemId);
-        noteCell = `\n${renderNoteCell(task, includeNoteHidden)}`;
-      }
-      return `            <tr>
-              <td class="name">&#8207;${escapeHtml(task.name)}</td>
-              <td class="date">${formatDate(task.date) || '—'}</td>${noteCell}
-${renderLabelDropdown(fieldName, buttons, palette, task, includeHidden, clusterIndex)}
-            </tr>`;
-    })
-    .join('\n');
-
-  const noteHeaderCell = notesRequired
-    ? `\n              <th class="note-h">&#8207;${escapeHtml(noteHeader)}</th>`
-    : '';
-
-  return `        <div class="cluster">
-          <p class="cluster-title">&#8207;${escapeHtml(section.title)}</p>
-          <table class="board">
-            <tr>
-              <th class="name-h">&#8207;שם הפעולה</th>
-              <th>&#8207;${escapeHtml(dateHeader)}</th>${noteHeaderCell}
-              <th class="status-h">&#8207;${STATUS_HEADER}</th>
-            </tr>
-${rows}
-          </table>
+            </div>
+          </div>
         </div>`;
 }
 
 /**
- * amp-bind expression for the submit button's [disabled], or '' when nothing in
- * this message requires a note. Reads: "some row is marked but has no note".
- * @param {object} recipient
+ * The cluster's column-header strip — the wide layout's only extra markup, and
+ * a plain div OUTSIDE the row forms (nothing may nest a form). It is
+ * `display:none` until the min-width query, where the per-field captions inside
+ * the cards switch off and these take over.
+ *
+ * @param {object} section
  * @returns {string}
  */
-function buildNoteGate(recipient) {
-  const clauses = noteRequiredItemIds(recipient).map(
-    (id) => `(dd.v${id} != '' && dd.n${id} == '')`
-  );
-  return clauses.join(' || ');
+function renderColumnHeader(section) {
+  const dateCaption =
+    section.dateColumnTitle && String(section.dateColumnTitle).length > 0
+      ? String(section.dateColumnTitle)
+      : 'תאריך';
+  const noteCell = sectionNoteColumn(section)
+    ? `<span class="th th-note">&#8207;${escapeHtml(
+        section.noteColumnTitle && String(section.noteColumnTitle).length > 0
+          ? String(section.noteColumnTitle)
+          : 'הערה'
+      )}</span>`
+    : '';
+  return `        <div class="thead"><span class="th th-name">&#8207;שם הפעולה</span><span class="th th-date">&#8207;${escapeHtml(
+    dateCaption
+  )}</span>${noteCell}<span class="th th-act">&#8207;${STATUS_CAPTION}</span></div>`;
 }
 
 /**
- * Build the signed-manifest bundle for the single form in one message.
- * Every (itemId × section button) pair is authorized.
- * @param {{ secret: string, accountId: string, personId: string, recipient: object, sendHour: number, now: Date }} p
+ * One row = one card = one form. The three amp-form state blocks are DIRECT
+ * children of the form (that is where amp-form looks for them), which is what
+ * puts the loader, the confirmation and the error on this row and no other.
+ *
+ * @param {object} p
+ * @param {object} p.task
+ * @param {object} p.section
+ * @param {number} p.clusterIndex
+ * @param {Array<{ id: string, label: string, color: string }>} p.buttons
+ * @param {Array<{ label: string, color: string }>} p.palette
+ * @param {string} p.baseUrl
+ * @param {string} p.accountId
+ * @param {string} p.personId
+ * @param {string} p.slot
+ * @param {string} p.secret
+ * @param {string} p.accentClass the cluster's stripe class (`ac_<hex>`)
  */
-function buildSignedManifest({ secret, accountId, personId, recipient, sendHour, now }) {
-  /** @type {Array<{ itemId: string, btnId: string }>} */
-  const pairs = [];
-  for (const section of recipient.sections) {
-    if (!section.tasks || section.tasks.length === 0) continue;
-    const buttons = resolveSectionButtons(section);
-    for (const task of section.tasks) {
-      for (const button of buttons) {
-        pairs.push({ itemId: String(task.itemId), btnId: button.id });
-      }
-    }
-  }
-  const manifest = buildManifest(pairs);
-  const slot = currentSlot({ sendHour, now });
-  const signature = signManifest({
+function renderRowForm({
+  task,
+  section,
+  clusterIndex,
+  buttons,
+  palette,
+  baseUrl,
+  accountId,
+  personId,
+  slot,
+  secret,
+  accentClass,
+}) {
+  const id = String(task.itemId);
+  const formId = `f${clusterIndex}_${id}`;
+  const menuKey = escapeBindStr(`${clusterIndex}_${id}`);
+  const { manifest, signature } = signRow({
     secret,
-    accountId: String(accountId),
-    personId: String(personId),
+    accountId,
+    personId,
+    itemId: id,
+    buttons,
     slot,
-    manifest,
   });
-  return { manifest, slot, signature };
+
+  const noteColumn = sectionNoteColumn(section);
+  const dateCaption =
+    section.dateColumnTitle && String(section.dateColumnTitle).length > 0
+      ? String(section.dateColumnTitle)
+      : 'תאריך';
+  const noteCaption =
+    section.noteColumnTitle && String(section.noteColumnTitle).length > 0
+      ? String(section.noteColumnTitle)
+      : 'הערה';
+  const noteField = noteColumn ? `\n${renderNoteField(task, noteCaption)}` : '';
+
+  return `      <form class="row ${accentClass}" id="${formId}" method="post"
+            action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
+            enctype="application/x-www-form-urlencoded">
+        <input type="hidden" name="a" value="${escapeHtml(String(accountId))}">
+        <input type="hidden" name="p" value="${escapeHtml(String(personId))}">
+        <input type="hidden" name="m" value="${escapeHtml(manifest)}">
+        <input type="hidden" name="s" value="${escapeHtml(slot)}">
+        <input type="hidden" name="sig" value="${escapeHtml(signature)}">
+        <div class="c-name"><span class="row-name">&#8207;${escapeHtml(task.name)}</span></div>
+        <div class="c-date"><span class="chip">&#8207;${escapeHtml(dateCaption)}: ${formatDate(task.date) || '—'}</span></div>${noteField}
+${renderStatusControl({ formId, menuKey, task, buttons, palette, noteGated: Boolean(noteColumn) })}
+        <div submitting><div class="state wait">&#8207;${SUBMITTING_LABEL}</div></div>
+        <div submit-success><template type="amp-mustache"><div class="state ok">${CHECK_GLYPH} {{message}}</div></template></div>
+        <div submit-error><template type="amp-mustache"><div class="state err">{{message}}{{#detail}}<span class="err-detail">{{detail}}</span>{{/detail}}</div></template></div>
+      </form>`;
 }
 
 /**
@@ -589,32 +678,56 @@ export function renderDigestAmp({
     throw new Error('renderDigestAmp: recipient.personId is required');
   }
 
-  const signed = buildSignedManifest({ secret, accountId, personId, recipient, sendHour, now });
+  const slot = currentSlot({ sendHour, now });
   const ddState = buildDropdownState(recipient);
   const palette = allRecipientButtons(recipient);
-  const colorCss = buildColorClassCss(collectColors(recipient));
   const notesInPlay = noteRequiredItemIds(recipient).length > 0;
-  const styles = `${STYLES_BASE}${notesInPlay ? STYLES_NOTES : ''}\n      ${colorCss}`;
-  const emittedHidden = new Set();
-  const emittedNotes = new Set();
+
+  /** Stripe rules, one per distinct cluster accent actually rendered. */
+  const accentRules = new Map();
+
   const clusters = (recipient.sections ?? [])
     .filter((section) => section.tasks && section.tasks.length > 0)
-    .map((section, clusterIndex) =>
-      renderClusterTable(
-        section,
-        emittedHidden,
-        palette,
-        clusterIndex,
-        emittedNotes,
-        recipient.statusColumnColors
-      )
-    )
+    .map((section, clusterIndex) => {
+      const buttons = resolveSectionButtons(section, recipient.statusColumnColors);
+      if (buttons.length === 0) return '';
+      const accent = buttons[0].color || NEUTRAL_STATUS;
+      const accentClass = accentToClass(accent);
+      accentRules.set(
+        accentClass,
+        `.row.${accentClass} { border-right-color:#${escapeHtml(accentClass.slice(3))}; }`
+      );
+      const rows = section.tasks
+        .map((task) =>
+          renderRowForm({
+            task,
+            section,
+            clusterIndex,
+            buttons,
+            palette,
+            baseUrl,
+            accountId,
+            personId,
+            slot,
+            secret,
+            accentClass,
+          })
+        )
+        .join('\n');
+      return `      <div class="cluster">
+        <p class="cluster-title">&#8207;${escapeHtml(section.title)}</p>
+${renderColumnHeader(section)}
+${rows}
+      </div>`;
+    })
     .filter((html) => html.length > 0)
     .join('\n');
-  const noteGate = buildNoteGate(recipient);
-  const submitBinding = noteGate ? ` [disabled]="${noteGate}"` : '';
-  const noteHint = noteGate
-    ? '<p class="lead">&#8207;בשורות שיש בהן שדה טקסט — חובה למלא אותו כדי לסמן את המשימה. כפתור האישור נשאר מנוטרל עד שכל שורה מסומנת מולאה.</p>'
+
+  const colorCss = buildColorClassCss(collectColors(recipient));
+  const styles = `${STYLES_BASE}${notesInPlay ? STYLES_NOTES : ''}\n      ${colorCss}\n      ${[...accentRules.values()].join('\n      ')}`;
+
+  const noteHint = notesInPlay
+    ? '<p class="lead">&#8207;בשורות שיש בהן שדה טקסט — קודם ממלאים את השדה. לא ניתן לבחור סטטוס לפני שיש בו טקסט: התגית נעולה, ומשתחררת ברגע שהשדה מולא.</p>'
     : '';
 
   return `<!doctype html>
@@ -634,23 +747,10 @@ export function renderDigestAmp({
       <div class="dd-overlay" hidden [hidden]="dd.o == ''" role="button" tabindex="0"
            on="tap:AMP.setState({dd:{o:''}})"></div>
       <p class="hi">&#8207;שלום ${escapeHtml(recipient.name)},</p>
-      <p class="lead">&#8207;לחצו על תגית הסטטוס לבחירה מהתפריט הנפתח, ואז על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
+      <p class="lead">&#8207;בכל משימה: לחצו על תגית הסטטוס ובחרו מהתפריט. העדכון נשמר בלוח מיד — בלי כפתור שליחה ובלי לצאת מהמייל — וליד המשימה יופיע סימון אישור.</p>
       ${noteHint}
-      <form method="post"
-            action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
-            enctype="application/x-www-form-urlencoded">
-        <input type="hidden" name="a" value="${escapeHtml(String(accountId))}">
-        <input type="hidden" name="p" value="${escapeHtml(String(personId))}">
-        <input type="hidden" name="m" value="${escapeHtml(signed.manifest)}">
-        <input type="hidden" name="s" value="${escapeHtml(signed.slot)}">
-        <input type="hidden" name="sig" value="${escapeHtml(signed.signature)}">
 ${clusters}
-        <div class="go"><input class="send" type="submit" style="background:${SUBMIT_COLOR}" value="${SUBMIT_LABEL}"${submitBinding}></div>
-        <div submitting><div class="sending">שולח את העדכונים…</div></div>
-        <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
-        <div submit-error><template type="amp-mustache"><div class="err">{{message}}{{#detail}}<span class="err-detail">{{detail}}</span>{{/detail}}</div></template></div>
-      </form>
-      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה בתפריט לא משתנות · כל משימה מופיעה פעם אחת, במקבץ בעל העדיפות הגבוהה · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
+      <p class="foot">&#8207;מייל אוטומטי · משימות שלא בחרתם בהן סטטוס לא משתנות · כל משימה מופיעה פעם אחת, במקבץ בעל העדיפות הגבוהה · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
     </div>
   </body>
 </html>`;

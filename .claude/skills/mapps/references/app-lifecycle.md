@@ -341,3 +341,24 @@ mapps app-features:list -a 11459177 -i 15124901   # verify: build URL set, statu
 
 Real-session cost of the traps this page removes: ~14 minutes of
 reconnaissance and 5 failed calls for what is under one minute of API time.
+
+## 10. Feature lifecycle subscriptions — verified facts (2026-07-24)
+
+- `update_app_lifecycle_subscription` accepts **only `entity_type: "appFeature"`**
+  (error-echo probe: `allowedEntityTypes: ["appFeature"]`). App-level webhooks
+  (install/uninstall/subscription) have **no API** — they are set manually in
+  the Developer Center per app.
+- **Live versions are immutable**: mutating a live version's feature fails with
+  403 `"Lifecycle subscriptions cannot be modified for live app versions"`.
+  Register the DRAFT version's features; live coverage arrives when that draft
+  is promoted. Live registrations that existed earlier (2026-07-19) were wiped
+  server-side when this model landed.
+- `get_app_lifecycle_subscriptions(app_id, version_id)` — `version_id` is
+  undocumented (schema-introspected) but **required in practice**: without it
+  the result is NOT the union of all versions (a draft registered seconds
+  earlier came back empty). Always query per version.
+- Full event catalog per feature kind (incl. `hard_delete`,
+  `multiple_duplicate` missing from docs): see
+  `apps/telemetry-dashboard/scripts/lifecycle-kinds.mjs` — live-verified enum.
+- Working registration/verification tooling: `apps/telemetry-dashboard/scripts/
+  {resolve-lifecycle-features,register-lifecycle-subscriptions}.mjs`.

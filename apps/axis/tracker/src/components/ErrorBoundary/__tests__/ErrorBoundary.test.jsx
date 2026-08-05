@@ -61,6 +61,25 @@ describe('ErrorBoundary (גבול שורש)', () => {
         );
     });
 
+    it('מצרף את componentStack של React לשגיאה הנרשמת (כדי שיישלח ל-Axiom כ-component_stack)', () => {
+        render(
+            <ErrorBoundary>
+                <Boom />
+            </ErrorBoundary>
+        );
+        // ה-boundary חייב להעביר את errorInfo.componentStack הלאה — logger.error של tracker
+        // נעול-טסטים ואינו נושא context bag, לכן ה-componentStack מוטבע על אובייקט השגיאה
+        // וה-sink קורא אותו משם (mapRecordToEvent → component_stack).
+        const loggedError = logger.error.mock.calls.find(
+            (c) => c[0] === 'ErrorBoundary' && c[1] === 'React error caught'
+        )?.[2];
+        expect(loggedError).toBeDefined();
+        expect(typeof loggedError.componentStack).toBe('string');
+        expect(loggedError.componentStack.length).toBeGreaterThan(0);
+        // ה-componentStack של React מפרט את עץ הרכיבים שקרס (מכיל את שם הרכיב הזורק)
+        expect(loggedError.componentStack).toContain('Boom');
+    });
+
     it('כפתור "פרטים" קורא ל-onError עם אובייקט שגיאה (לפי לחיצה, לא אוטומטית)', () => {
         const onError = vi.fn();
         render(

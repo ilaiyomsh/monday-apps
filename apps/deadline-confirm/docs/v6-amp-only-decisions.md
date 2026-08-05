@@ -100,9 +100,18 @@ and the slot. **Counts and addresses only — no task content and no signatures.
 A "resend today" action re-runs the send for **all** recipients using the current
 slot. Selective resend is out of scope for this round.
 
-### D9 — Email redesign: multi-button table, one global submit. **IMPLEMENTED
+### D9 — Email redesign: multi-button rows. **IMPLEMENTED
 (T15 → LabelPicker 0.8.3–0.8.4 → cluster tables + multi-button 0.9.0 →
-`<select>` 0.9.1 → amp-bind colored dropdown 0.9.2).**
+`<select>` 0.9.1 → amp-bind colored dropdown 0.9.2 → per-row cards + immediate
+write 0.13.0).**
+
+> **SUPERSEDED IN PART (owner decision 2026-08-04).** "One table + one global
+> submit" is dead: every ROW is now its own form, a status pick writes that item
+> immediately, and the reader gets a loader + confirmation on that row. The
+> table became a card per row. See "Per-row immediate write" below — the briefs
+> and rejected alternatives from 2026-07-27 are kept because they explain the
+> parts that did NOT change (colored closed trigger, popup options, per-cluster
+> grouping, that cluster's date only).
 
 Owner briefs:
 - (2026-07-27) one table + **one** approve button — not one form per section.
@@ -123,13 +132,66 @@ Owner briefs:
   popup of colored options; overlay closes; wire via hidden `[value]` binding.
   Same item across clusters shares one state key + one hidden field.
 
-Behaviour:
+Behaviour (0.9.2 — superseded by "Per-row immediate write"):
 - One AMP form. Populated sections → separate tables (title + date + dropdown).
 - Options = section `buttonIds` (fallback `[buttonId]`). Wire `item_<id>=btnId`.
 - **One global submit** (`אשר את המסומנות`) applies every chosen status.
 - Tasks with no new status chosen (empty `item_<id>`) are unchanged.
 
 Admin: multi-select "כפתורי פעולה"; primary (first) drives status filter column.
+
+#### Per-row immediate write (owner decision 2026-08-04, 0.13.0)
+
+- **No global submit button.** Picking a status in a row submits THAT row.
+- **One `<form>` per row**, rendered as a card under its cluster title. This is
+  forced, not stylistic: amp-form looks for `submitting` / `submit-success` /
+  `submit-error` among the form's own children, so per-row feedback is
+  impossible with one form per message — and a `<form>` cannot span two `<td>`s.
+  Cards also stack on a phone, which the fixed-width table did not.
+- **The selection rides a radio** (`<input type="radio" name="item_<id>"
+  value="<btnId>">` inside a colored `<label>`), NOT an amp-bind-bound hidden
+  input. `AMP.setState(...)` followed by `form.submit` in one action chain is a
+  race: amp-bind mutates the DOM on the next vsync frame and the submit does not
+  wait, so the POST would carry the previous value. The setState in that chain is
+  cosmetic (close the menu, repaint the trigger) and cannot lose a selection.
+- **`change` on the radio submits; `tap` only repaints and closes the menu.**
+  `change:<formId>.submit` is the supported AMP-for-Email pattern for a form
+  control (owner, 2026-08-04) and fires after the radio is checked. Splitting the
+  two is required, not tidy: both fire on a first pick, so submitting from each
+  would double-post every selection and the duplicate would answer
+  `already_done`, replacing the row's ✓. Accepted cost: re-tapping the SAME
+  option fires no `change`, so a failed row is retried by choosing a different
+  status (or from the board).
+- **A status cannot be picked before a mapped text field is filled** — the
+  trigger carries `disabled` + `[disabled]="dd.n<id> == ''"` (owner decision
+  2026-08-04, same day, shipped first). The static attribute IS the initial
+  state: amp-bind does not evaluate bindings on load.
+- **Signature per ROW**, over that row's pairs only (refines D10 for the
+  rendered email: still one signature per form, now one form per row). Least
+  privilege — a leaked form authorizes one item — and smaller than repeating the
+  message-wide manifest N times. `/amp/confirm` needed no change: it verifies
+  whatever manifest arrives and checks every pair against it.
+- **Responsive, card-first (owner decision 2026-08-04, same round):** the card
+  is the BASE layout and `@media (min-width:601px)` ADDS the wide one — aligned
+  columns plus a per-cluster header strip, with the in-card field captions
+  switched off. A media query is the only width signal available (no JS, no
+  viewport API, `media` attribute is amp-* only), so the fallback for a client
+  that strips queries has to be the layout that survives any width. The card
+  chrome follows the monday mobile app: rounded bordered card, a 4px stripe on
+  the inline-start edge in the CLUSTER's primary color (the pill already carries
+  the row's status, so the stripe groups instead of repeating), name on top, date
+  as a chip. The wide layout is a visual table only — same reason as always: a
+  form cannot span two cells.
+- **Rate limits re-tuned:** one POST per task instead of one per message, so
+  bucket B (per `accountId:ip`) went 30 → 120/min to match bucket A. The monday
+  workload is unchanged — same tasks, same writes, same complexity budget.
+- **`change:<form>.submit` is CONFIRMED supported in Gmail** (owner,
+  2026-08-04), so the write path itself is not a risk and the per-row confirm
+  button contingency is dropped. Still unverified, and narrower: `change` on a
+  TEXT input, which only the note lock depends on — without it a mapped row's
+  trigger stays locked, while clusters with no mapped text column are unaffected.
+  A native `<select>` (whose `change` is the same pattern) stays rejected for the
+  2026-07-27 reason: the OS popup cannot be styled.
 
 ### D10 — One signature per message, over a signed manifest.
 

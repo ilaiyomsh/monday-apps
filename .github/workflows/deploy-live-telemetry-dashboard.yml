@@ -1,0 +1,131 @@
+name: Deploy LIVE - telemetry-dashboard
+
+# Spec section 7.2: merges into main force-deploy to the app's LATEST LIVE
+# version. main is protected (PR + approval + status checks), so this only ever
+# runs after a reviewed, approved merge — never on a direct push.
+#
+# Server-side (monday-code) app: `mapps code:push` WITHOUT -c.
+#
+# NOTE: cannot succeed until the monday app exists, has a LIVE version, and
+# secrets.APP_TELEMETRY_DASHBOARD_ID is added — see the app README.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/telemetry-dashboard/**"
+      - "packages/shared/**"
+
+jobs:
+  deploy-live:
+    name: "🚨 FORCE DEPLOY telemetry-dashboard TO LIVE 🚨"
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-live-telemetry-dashboard
+      cancel-in-progress: false
+    # The mapps steps skip (job stays green) until the App ID secret is added.
+    env:
+      APP_ID: ${{ secrets.APP_TELEMETRY_DASHBOARD_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # VITE_AXIOM_* are baked into the client bundle at build time to activate the
+      # browser error sink (src/client/utils/axiomErrorSink.ts), gated on import.meta.env.PROD.
+      # VITE_AXIOM_TOKEN is an Axiom ingest token (secret); an absent secret builds an inert
+      # sink (Boolean('') === false), so the client never ships until the secret is added.
+      - name: Build telemetry-dashboard (client)
+        run: pnpm --filter "./apps/telemetry-dashboard" build
+        env:
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: telemetry-dashboard
+
+      # The dashboard CLIENT bundle ('hidden' sourcemaps) is served to browsers, so its
+      # maps must NEVER reach the deploy — archive them keyed by commit SHA, then
+      # strip them from public/ before code:push. (Server runs from source and is
+      # already readable — not symbolicated.) Pull with:
+      #   .claude/skills/axiom-sre/scripts/symbolicate '<frame>' --app telemetry-dashboard --ver <x.y.z+sha>
+      - name: Archive client sourcemaps as build artifact (for stack symbolication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-telemetry-dashboard-${{ github.sha }}
+          path: apps/telemetry-dashboard/public/**/*.map
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Strip client sourcemaps before deploy (never ship .map to the browser)
+        run: |
+          set -euo pipefail
+          find apps/telemetry-dashboard/public -name '*.map' -type f -delete
+          remaining="$(find apps/telemetry-dashboard/public -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining client .map files: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::client sourcemaps still present — refusing to push (would leak source)"
+            exit 1
+          fi
+
+      - name: Install monday.com apps CLI
+        if: ${{ env.APP_ID != '' }}
+        run: npm install -g @mondaycom/apps-cli
+
+      - name: Authenticate mapps CLI (non-interactive)
+        if: ${{ env.APP_ID != '' }}
+        run: mapps init -t "$MONDAY_TOKEN"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+
+      # `code:push --force -a <app>` resolves the NEWEST version (the draft above
+      # live), not live — incident-verified 2026-07-15. Resolve the LIVE version
+      # id and push pinned with -i.
+      - name: Resolve LIVE version id (pin the target)
+        id: live
+        if: ${{ env.APP_ID != '' }}
+        run: |
+          set -euo pipefail
+          LIVE_ID="$(mapps app-version:list -i "$APP_ID" 2>/dev/null \
+            | awk -F'│' '$7 ~ /live/ { gsub(/[^0-9]/, "", $3); print $3; exit }')"
+          if [ -z "$LIVE_ID" ]; then
+            echo "::error::app $APP_ID has no LIVE version — first go-live is a deliberate promote; this workflow only refreshes an existing live version."
+            exit 1
+          fi
+          echo "Resolved LIVE version id: $LIVE_ID"
+          echo "live_id=$LIVE_ID" >> "$GITHUB_OUTPUT"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          APP_ID: ${{ secrets.APP_TELEMETRY_DASHBOARD_ID }}
+
+      # Server app: no -c, ships the app root. Retry once on the transient
+      # remote-server error.
+      - name: "🚨 FORCE push to LIVE version (pinned id) 🚨"
+        if: ${{ env.APP_ID != '' }}
+        run: |
+          set -uo pipefail
+          for attempt in 1 2; do
+            if mapps code:push --force \
+                 -d apps/telemetry-dashboard \
+                 -i "${{ steps.live.outputs.live_id }}"; then
+              exit 0
+            fi
+            echo "push attempt $attempt failed; retrying once in 15s (transient remote error)…"
+            sleep 15
+          done
+          echo "::error::code:push to live version ${{ steps.live.outputs.live_id }} failed after retry"
+          exit 1
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}

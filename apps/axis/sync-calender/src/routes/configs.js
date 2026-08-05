@@ -219,10 +219,18 @@ router.delete('/api/configs/:configId', sessionTokenMiddleware, async (req, res)
       logger.warn('subscription_stop_failed', TAG, { ...buildSyncCtx(config), error: err.message });
     }
 
-    try { await syncConfigStorage.removeActiveConfig(config.configId); } catch { /* */ }
-    try { await syncConfigStorage.removeInstanceConfig(config.objectId, config.configId); } catch { /* */ }
-    try { await syncConfigStorage.removeUserConfig(config.userId, config.configId); } catch { /* */ }
-    try { await syncConfigStorage.removeAccountConfig(config.accountId, config.configId); } catch { /* */ }
+    // Best-effort index cleanups: the row is being deleted regardless, so a
+    // failed index prune must not abort the delete — but it is still logged so a
+    // leaked index entry (which the cron would later flag as stale) is traceable.
+    const pruneIndex = async (op, fn) => {
+      try { await fn(); } catch (e) {
+        logger.warn('index_cleanup_failed', TAG, { ...buildSyncCtx(config), op, cause: e?.message || String(e) });
+      }
+    };
+    await pruneIndex('removeActiveConfig', () => syncConfigStorage.removeActiveConfig(config.configId));
+    await pruneIndex('removeInstanceConfig', () => syncConfigStorage.removeInstanceConfig(config.objectId, config.configId));
+    await pruneIndex('removeUserConfig', () => syncConfigStorage.removeUserConfig(config.userId, config.configId));
+    await pruneIndex('removeAccountConfig', () => syncConfigStorage.removeAccountConfig(config.accountId, config.configId));
     await syncConfigStorage.deleteSyncConfig(config.configId);
 
     logger.info('row_deleted', TAG, buildSyncCtx(config));
@@ -288,7 +296,9 @@ router.delete('/api/configs/:configId/connection', sessionTokenMiddleware, async
       lastError: null,
       ...wipe,
     });
-    try { await syncConfigStorage.removeActiveConfig(config.configId); } catch { /* */ }
+    try { await syncConfigStorage.removeActiveConfig(config.configId); } catch (e) {
+      logger.warn('index_cleanup_failed', TAG, { ...buildSyncCtx(config), op: 'removeActiveConfig', cause: e?.message || String(e) });
+    }
 
     logger.info('disconnected', TAG, buildSyncCtx(config));
     return res.json({ row: projectConfig(updated) });
@@ -336,6 +346,16 @@ router.post('/api/configs/:configId/force-sync', sessionTokenMiddleware, async (
       if (refreshFailed) status = `${providerName}_disconnected`;
       else if (/401|unauthorized/i.test(msg)) status = 'monday_disconnected';
       else if (msg === 'policy_not_configured') status = 'pending_policy';
+      // This is the COMMON sync-failure path. It classifies + persists the
+      // status but previously never logged, so the failure reached nobody. Ship
+      // it before responding (the outer catch only fires on a secondary throw).
+      logger.error('error', TAG, {
+        ...buildSyncCtx(config),
+        stage: 'force_sync_run',
+        status,
+        cause: msg?.slice(0, 200),
+        error: err,
+      });
       await syncConfigStorage.updateSyncConfig(config.configId, { status, lastError: msg.slice(0, 500) });
       return res.status(500).json({ error: 'sync_failed', message: msg, status });
     }
@@ -404,7 +424,9 @@ router.post('/api/configs/:configId/pause', sessionTokenMiddleware, async (req, 
       status: 'paused',
       ...subscriptionPatch,
     });
-    try { await syncConfigStorage.removeActiveConfig(config.configId); } catch { /* */ }
+    try { await syncConfigStorage.removeActiveConfig(config.configId); } catch (e) {
+      logger.warn('index_cleanup_failed', TAG, { ...buildSyncCtx(config), op: 'removeActiveConfig', cause: e?.message || String(e) });
+    }
     logger.info('paused', TAG, buildSyncCtx(config));
     return res.json({ row: projectConfig(updated) });
   } catch (err) {

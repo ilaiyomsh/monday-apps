@@ -1,0 +1,301 @@
+// Client-side aggregation — the same grouping the 11 APL queries perform on the
+// server, run over the synthetic seed records so the dashboard is fully
+// functional (and fully re-filterable) before Axiom is wired up. The output
+// shape is byte-for-byte the server payload's panels, so one set of panel
+// components renders either source.
+//
+// It also carries applyLivePresentationFilters(): when REAL server data is
+// showing and the user narrows the app/account filters, we re-slice the
+// pre-aggregated arrays and recompute the KPI row from the crosstab, so the
+// filter bar stays responsive without a server round-trip.
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+export const WINDOW_MS = {
+  '24h': DAY_MS,
+  '7d': 7 * DAY_MS,
+  '30d': 30 * DAY_MS,
+  '90d': 90 * DAY_MS,
+};
+
+function percentile(sortedAsc, p) {
+  if (sortedAsc.length === 0) return 0;
+  const idx = Math.min(sortedAsc.length - 1, Math.floor((p / 100) * sortedAsc.length));
+  return sortedAsc[idx];
+}
+
+/**
+ * Apply the global filters to raw records.
+ * @param {Array} records
+ * @param {{window:string, apps:string[], accounts:string[], kinds:string[], focusError:(string|null)}} filters
+ * @param {number} now epoch ms (window is measured back from here)
+ */
+/**
+ * The display name / cross-filter / drill-down key for an error record. Mirrors
+ * the server's ERR_NAME_EXPR (queries.js): many error records carry no err_name
+ * (warn-level logs put the text in `message`), so fall back
+ * err_name → err_msg → message → '(unnamed)'. Keeping this identical to the
+ * server keeps seed mode and live mode grouping/drill-down consistent.
+ * @param {{err_name?:string, err_msg?:string, message?:string}} r
+ * @returns {string}
+ */
+export function errorLabel(r) {
+  return r.err_name || r.err_msg || r.message || '(unnamed)';
+}
+
+export function filterRecords(records, filters, now) {
+  const span = WINDOW_MS[filters.window] ?? WINDOW_MS['7d'];
+  const floor = now - span;
+  const appSet = filters.apps.length ? new Set(filters.apps) : null;
+  const accSet = filters.accounts.length ? new Set(filters.accounts) : null;
+  const kindSet = filters.kinds.length ? new Set(filters.kinds) : null;
+  return records.filter((r) => {
+    const t = Date.parse(r._time);
+    if (t < floor || t > now) return false;
+    if (appSet && !appSet.has(r.app)) return false;
+    if (accSet && !accSet.has(r.acc)) return false;
+    if (kindSet && !kindSet.has(r.kind)) return false;
+    if (filters.focusError && errorLabel(r) !== filters.focusError) return false;
+    return true;
+  });
+}
+
+function countBy(records, keyFn) {
+  const m = new Map();
+  for (const r of records) {
+    const k = keyFn(r);
+    m.set(k, (m.get(k) || 0) + 1);
+  }
+  return m;
+}
+
+/**
+ * Aggregate raw records into the full panel payload (mirrors the APL queries).
+ * @returns {import('./types').TelemetryPanels}
+ */
+export function aggregateAll(allRecords, filters, now) {
+  const rows = filterRecords(allRecords, filters, now);
+  const errors = rows.filter((r) => r.kind === 'error');
+  const usage = rows.filter((r) => r.kind === 'usage');
+  const health = rows.filter((r) => r.kind === 'health');
+
+  // kpi_summary
+  const accountsSeen = new Set(rows.map((r) => r.acc));
+  const appsSeen = new Set(rows.map((r) => r.app));
+  const total = rows.length;
+  const kpi_summary = {
+    total,
+    errors: errors.length,
+    usage: usage.length,
+    health: health.length,
+    distinct_accounts: accountsSeen.size,
+    distinct_apps: appsSeen.size,
+    error_rate: total ? Math.round((10000 * errors.length) / total) / 100 : 0,
+  };
+
+  // errors_by_app / errors_by_account
+  const errors_by_app = [...countBy(errors, (r) => r.app)]
+    .map(([app, count]) => ({ app, count }))
+    .sort((a, b) => b.count - a.count);
+  // Full sorted list; the account-bar panel folds beyond top-15 into "Other".
+  const errors_by_account = [...countBy(errors, (r) => r.acc)]
+    .map(([acc, count]) => ({ acc, count }))
+    .sort((a, b) => b.count - a.count);
+
+  // errors_over_time — bin the window into ~24 buckets, stacked by app.
+  const span = WINDOW_MS[filters.window] ?? WINDOW_MS['7d'];
+  const binCount = 24;
+  const binSize = Math.max(1, Math.floor(span / binCount));
+  const floor = now - span;
+  const otMap = new Map(); // `${binStart}|${app}` -> count
+  for (const r of errors) {
+    const t = Date.parse(r._time);
+    const binStart = floor + Math.floor((t - floor) / binSize) * binSize;
+    const key = `${binStart}|${r.app}`;
+    otMap.set(key, (otMap.get(key) || 0) + 1);
+  }
+  const errors_over_time = [...otMap]
+    .map(([key, count]) => {
+      const [binStart, app] = key.split('|');
+      const ms = Number(binStart);
+      // A record with an unparseable _time yields Date.parse -> NaN -> a NaN binStart key;
+      // new Date(NaN).toISOString() throws a RangeError that would drop the whole dashboard
+      // to the ErrorBoundary. Guard it: drop the unbucketable point instead of crashing.
+      return { _time: Number.isFinite(ms) ? new Date(ms).toISOString() : null, app, count };
+    })
+    .filter((row) => row._time !== null)
+    .sort((a, b) => Date.parse(a._time) - Date.parse(b._time));
+
+  // top_errors — group by name+msg.
+  const teMap = new Map();
+  for (const r of errors) {
+    const name = errorLabel(r);
+    const key = `${name}\u0000${r.err_msg ?? ''}`;
+    let e = teMap.get(key);
+    if (!e) {
+      e = { err_name: name, err_msg: r.err_msg, count: 0, apps: new Set(), err_code: r.err_code ?? null };
+      teMap.set(key, e);
+    }
+    e.count += 1;
+    e.apps.add(r.app);
+  }
+  const top_errors = [...teMap.values()]
+    .map((e) => ({ err_name: e.err_name, err_msg: e.err_msg, count: e.count, apps_affected: e.apps.size, err_code: e.err_code }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
+
+  // usage_by_app / usage_by_account
+  const usage_by_app = [...countBy(usage, (r) => r.app)]
+    .map(([app, count]) => ({ app, count }))
+    .sort((a, b) => b.count - a.count);
+  const usage_by_account = [...countBy(usage, (r) => r.acc)]
+    .map(([acc, count]) => ({ acc, count }))
+    .sort((a, b) => b.count - a.count);
+
+  // top_usage_events — by message, event_kind from view_open prefix.
+  const ueMap = new Map();
+  for (const r of usage) {
+    const message = r.message ?? '';
+    let e = ueMap.get(message);
+    if (!e) {
+      e = { message, event_kind: message.startsWith('view_open') ? 'view_open' : 'track', count: 0 };
+      ueMap.set(message, e);
+    }
+    e.count += 1;
+  }
+  const top_usage_events = [...ueMap.values()].sort((a, b) => b.count - a.count).slice(0, 20);
+
+  // health_boot — p50/p95 of total_ms per app.
+  const bootMap = new Map();
+  for (const r of health) {
+    if (r.tag !== 'boot') continue;
+    if (!bootMap.has(r.app)) bootMap.set(r.app, []);
+    bootMap.get(r.app).push(r.total_ms ?? 0);
+  }
+  const health_boot = [...bootMap]
+    .map(([app, samples]) => {
+      const sorted = samples.slice().sort((a, b) => a - b);
+      return { app, p50_ms: percentile(sorted, 50), p95_ms: percentile(sorted, 95), samples: sorted.length };
+    })
+    .sort((a, b) => b.p95_ms - a.p95_ms);
+
+  // health_api_latency — count by app+bucket.
+  const latMap = new Map();
+  for (const r of health) {
+    const m = /bucket=([a-z_]+)/.exec(r.message ?? '');
+    if (!m) continue;
+    const key = `${r.app}\u0000${m[1]}`;
+    latMap.set(key, (latMap.get(key) || 0) + 1);
+  }
+  const health_api_latency = [...latMap].map(([key, count]) => {
+    const [app, bucket] = key.split('\u0000');
+    return { app, bucket, count };
+  });
+
+  // app_account_crosstab
+  const ctMap = new Map();
+  for (const r of rows) {
+    const key = `${r.app}\u0000${r.acc}`;
+    let c = ctMap.get(key);
+    if (!c) {
+      c = { app: r.app, acc: r.acc, count: 0, errors: 0, usage: 0 };
+      ctMap.set(key, c);
+    }
+    c.count += 1;
+    if (r.kind === 'error') c.errors += 1;
+    if (r.kind === 'usage') c.usage += 1;
+  }
+  const app_account_crosstab = [...ctMap.values()].sort((a, b) => b.count - a.count);
+
+  return {
+    kpi_summary,
+    errors_by_app,
+    errors_by_account,
+    errors_over_time,
+    top_errors,
+    usage_by_app,
+    usage_by_account,
+    top_usage_events,
+    health_boot,
+    health_api_latency,
+    app_account_crosstab,
+  };
+}
+
+/**
+ * Seed-mode drill-down: the raw error occurrences for ONE err_name, newest
+ * first, capped at `limit`. Mirrors the server's buildErrorDetailQuery but runs
+ * entirely client-side over the bundled records — in seed mode the raw rows are
+ * already in the browser, so clicking an error needs no round-trip. The active
+ * window/app/account scope carries in (kind is forced to 'error' so a usage/
+ * health kind filter can't empty the drill-down).
+ * @param {Array} allRecords
+ * @param {string} errName
+ * @param {{window:string, apps:string[], accounts:string[], kinds:string[], focusError:(string|null)}} filters
+ * @param {number} now epoch ms
+ * @param {number} [limit]
+ * @returns {Array}
+ */
+export function errorOccurrences(allRecords, errName, filters, now, limit = 200) {
+  const scoped = filterRecords(allRecords, { ...filters, kinds: ['error'], focusError: errName }, now);
+  return scoped
+    .slice()
+    .sort((a, b) => Date.parse(b._time) - Date.parse(a._time))
+    .slice(0, limit);
+}
+
+/**
+ * Presentation-level re-filter of a REAL server payload by app/account. Used in
+ * live mode so narrowing the filter bar re-slices the pre-aggregated arrays
+ * (and recomputes the KPI row from the crosstab) without another server call.
+ * When no app/account filter is active the payload passes through untouched.
+ * @param {import('./types').TelemetryPanels} panels
+ * @param {{apps:string[], accounts:string[]}} filters
+ */
+export function applyLivePresentationFilters(panels, filters) {
+  const appSet = filters.apps.length ? new Set(filters.apps) : null;
+  const accSet = filters.accounts.length ? new Set(filters.accounts) : null;
+  if (!appSet && !accSet) return panels;
+
+  const byApp = (arr) => (appSet ? arr.filter((r) => appSet.has(r.app)) : arr);
+  const byAcc = (arr) => (accSet ? arr.filter((r) => accSet.has(r.acc)) : arr);
+
+  const crosstab = panels.app_account_crosstab
+    .filter((r) => (!appSet || appSet.has(r.app)) && (!accSet || accSet.has(r.acc)));
+
+  // Recompute the KPI row from the filtered crosstab (health = count-errors-usage).
+  let total = 0;
+  let errors = 0;
+  let usage = 0;
+  const accs = new Set();
+  const apps = new Set();
+  for (const r of crosstab) {
+    total += r.count;
+    errors += r.errors;
+    usage += r.usage;
+    accs.add(r.acc);
+    apps.add(r.app);
+  }
+  const kpi_summary = {
+    total,
+    errors,
+    usage,
+    health: Math.max(0, total - errors - usage),
+    distinct_accounts: accs.size,
+    distinct_apps: apps.size,
+    error_rate: total ? Math.round((10000 * errors) / total) / 100 : 0,
+  };
+
+  return {
+    kpi_summary,
+    errors_by_app: byApp(panels.errors_by_app),
+    errors_by_account: byAcc(panels.errors_by_account),
+    errors_over_time: byApp(panels.errors_over_time),
+    top_errors: panels.top_errors, // no app/acc dimension to slice on
+    usage_by_app: byApp(panels.usage_by_app),
+    usage_by_account: byAcc(panels.usage_by_account),
+    top_usage_events: panels.top_usage_events,
+    health_boot: byApp(panels.health_boot),
+    health_api_latency: byApp(panels.health_api_latency),
+    app_account_crosstab: crosstab,
+  };
+}

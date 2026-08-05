@@ -122,8 +122,22 @@ export const AppErrorBoundary = ({ children, scope = 'root', FallbackComponent, 
         // Canonical render-throw record. Pass the component stack in context so a
         // remote sink can attribute the crash; do NOT also toast here — the
         // fallback screen is the single user-facing surface for render throws.
-        logger.error(`ErrorBoundary:${scope}`, 'React render error caught', error);
-        logger.debug(`ErrorBoundary:${scope}`, 'Component stack', { componentStack: info?.componentStack });
+        //
+        // The message is a CONSTANT event id, NOT error.message: the transport ships
+        // `message` verbatim (only err_msg is scrubbed), so folding a raw error.message
+        // here would leak PII past the D2 privacy scrub. The Error still travels as the
+        // payload (scrubbed err_msg + err_name + stack), and the shared @mapps/error-kit
+        // transport's dedup key already includes err_name + err_msg (fix 5), so distinct
+        // render crashes still get distinct keys without the raw message.
+        //
+        // ONE shipped ERROR record carrying React's componentStack in the context channel
+        // so it rides record.context.componentStack — the exact path @mapps/error-kit's
+        // Axiom sink reads (browser/axiomSink.ts). The previous separate logger.debug record
+        // never shipped (shouldShip drops DEBUG) and put the stack in record.data, not
+        // record.context, so the component tree was lost from every shipped crash.
+        logger.error(`ErrorBoundary:${scope}`, 'render_error', error, {
+            componentStack: info?.componentStack,
+        });
     };
 
     return (

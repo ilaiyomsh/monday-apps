@@ -1,0 +1,12 @@
+# Archive excludes for mapps code:push (takes precedence over .gitignore).
+# CRITICAL: src/client/ MUST ship — monday-code's buildpack runs `npm install`
+# + `npm run build` in /workspace and rebuilds the dashboard SPA there.
+# public/ need NOT ship — the remote build regenerates it.
+node_modules/
+public/
+.dev/
+coverage/
+docs/
+*.log
+.env
+.env.local

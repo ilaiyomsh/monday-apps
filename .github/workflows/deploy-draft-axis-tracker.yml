@@ -16,6 +16,7 @@ on:
     paths:
       - "apps/axis/tracker/**"
       - "packages/shared/**"
+      - "packages/error-kit/**"
       - "apps/axis/services/**"
 
 jobs:
@@ -45,9 +46,38 @@ jobs:
 
       - name: Build axis-tracker
         # Version layer: stamp the exact commit into the bundle (__BUILD_SHA__).
+        # Bake the Axiom activation gate into the bundle (error-guard remote-monitoring
+        # standard). Only the ingest token is a secret; dataset/app are literals. When
+        # the secret is unset the gate stays inert (fail-soft) — nothing ships.
         env:
           VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: tracker
         run: pnpm --filter "./apps/axis/tracker" build
+
+      # Sourcemaps ('hidden' in vite.config.js) power stack symbolication but must
+      # NEVER reach the CDN — archive them keyed by commit SHA, then strip them
+      # from the deploy dir before code:push. Pull with:
+      #   .claude/skills/axiom-sre/scripts/symbolicate '<frame>' --app tracker --ver <x.y.z+sha>
+      - name: Archive sourcemaps as build artifact (for stack symbolication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-tracker-${{ github.sha }}
+          path: apps/axis/tracker/build/**/*.map
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Strip sourcemaps before deploy (never ship .map to the CDN)
+        run: |
+          set -euo pipefail
+          find apps/axis/tracker/build -name '*.map' -type f -delete
+          remaining="$(find apps/axis/tracker/build -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining .map files in deploy dir: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::sourcemaps still present in deploy dir — refusing to push (would leak source to the CDN)"
+            exit 1
+          fi
 
       - name: Install monday.com apps CLI
         run: npm install -g @mondaycom/apps-cli

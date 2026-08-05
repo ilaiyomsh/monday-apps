@@ -9,7 +9,9 @@
 #   spotcheck-fire <src-file> <test-file> "<mutation description>"
 #                                          mutated src must FAIL the tests; restores src; verifies
 #                                          restore; records KILLED/SURVIVED
-#   waive  <test-file> "<objective reason>"  record a triviality waiver (visible in status)
+#   waive  <test-file> "<objective reason>"  record a triviality waiver (visible in status);
+#                                          a path that no longer exists on disk is accepted
+#                                          (state-only) so a deleted module can still be waived
 #   status <test-file>                     gate state + definition-of-done verdict
 #   reset  <test-file>                     clear recorded state
 #   amend-intent <test-file> "<reason>"    arm a ONE-shot unlock of a locked test file (green
@@ -260,6 +262,14 @@ cmd_fire() {
     tail -n 15 "$mut_out"; rm -f "$mut_out"; exit 1
   fi
   printf 'KILLED|%s\n' "$DESC" >> "$STATE_DIR/kills.log"
+  # Append-only record of every SOURCE this gate has killed a mutation in (contract
+  # amendment 11). `armed.src` holds only the LAST arm, so one test file gating several
+  # modules lost the mapping for the earlier ones and the stop gate called them
+  # "untracked" despite their kills sitting in this very dir (known gap 9, hit three
+  # times). Written on KILL, not on arm: an armed-but-never-fired source proves nothing.
+  if ! grep -qxF "$abs_src" "$STATE_DIR/gated-srcs.txt" 2>/dev/null; then
+    printf '%s\n' "$abs_src" >> "$STATE_DIR/gated-srcs.txt"
+  fi
   echo "MUTATION KILLED by:"; printf '%s\n' "$mut_fails" | head -n 5 | sed 's/^/  ✗ /'
   echo "Restore verified green. Recorded: KILLED — $DESC"
   rm -f "$mut_out"; exit 0
@@ -268,11 +278,29 @@ cmd_fire() {
 # ---------------------------------------------------------------- waive / status / reset
 cmd_waive() {
   TEST_FILE="${1:-}"; REASON="${2:-}"; [[ -z "$TEST_FILE" || -z "$REASON" ]] && usage
-  resolve_env; mkdir -p "$STATE_DIR"
+  # A path that no longer exists on disk resolves STATE-ONLY (amendment 13): resolve_env
+  # stats the file and dies, which used to make a waiver — the one recorded, auditable exit
+  # the stop gate points at — impossible for a module deleted within the session. Nothing is
+  # weakened: this records a reason, exactly as the existing-file path does, and a waiver on
+  # a path no product code lives at covers no product code. `status-all` annotates such a
+  # test.path as "(missing)", so the absence stays visible. Existing behaviour for a file
+  # that DOES exist is untouched (runner detection and preflight still apply).
+  local missing=""
+  if [[ -f "$TEST_FILE" ]]; then
+    resolve_env
+  else
+    missing=1
+    resolve_state_only "$TEST_FILE"
+  fi
+  mkdir -p "$STATE_DIR"
   printf '%s\n' "$ABS_TEST" > "$STATE_DIR/test.path"   # v2 reverse index (§4.6.2)
   printf '%s\n' "$REASON" >> "$STATE_DIR/waiver.txt"
   echo "WAIVER RECORDED (must satisfy Iron rule 2's objective criteria — no conditionals, no"
   echo "arithmetic, no key mapping): $REASON"
+  if [[ -n "$missing" ]]; then
+    echo "NOTE: $ABS_TEST does not exist on disk — recorded as a waiver for a deleted/absent"
+    echo "path. The stop gate already skips touched paths that are gone; this is the audit trail."
+  fi
 }
 
 cmd_status() {

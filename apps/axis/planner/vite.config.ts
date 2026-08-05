@@ -26,6 +26,12 @@ export default defineConfig({
     __IS_RELEASE__: JSON.stringify(process.env.VITE_IS_RELEASE === 'true'),
   },
   build: {
+    // Emit sourcemaps as SEPARATE .map files WITHOUT the //# sourceMappingURL
+    // comment ('hidden') so CI can archive them for stack symbolication
+    // (axiom-sre scripts/symbolicate) while the browser never fetches them.
+    // The deploy workflow archives + deletes dist/**/*.map before code:push.
+    // See docs/LOGGING-ARCHITECTURE.md §6.
+    sourcemap: 'hidden',
     outDir: 'dist',
     // The app runs only inside the monday iframe (modern Chrome), so skip
     // legacy transpilation — smaller output + faster parse on boot.

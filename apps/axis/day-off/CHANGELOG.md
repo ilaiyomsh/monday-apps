@@ -2,6 +2,37 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2026-07-22 — Stack symbolication (hidden sourcemaps)
+
+### 🔧 Infrastructure
+
+- **2026-07-22** — Build now emits `sourcemap: 'hidden'` (maps written without the `//# sourceMappingURL` comment). CI archives the maps as artifact `sourcemaps-day-off-<sha>` (90d) then deletes them from the deploy dir before `mapps code:push`, so maps are never served to the browser. Minified `stack1` frames in the shared `app-errors` dataset are now resolvable to source via `.claude/skills/axiom-sre/scripts/symbolicate '<frame>' --app day-off --ver <x.y.z+sha>`. No version bump. (#354)
+  - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
+  - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
+- **2026-07-22** — Doc-debt: corrected `CLAUDE.md` §5, which still described the pre-migration GitHub Pages / `gh-pages` / no-CI deploy model — day-off is on the monorepo pipeline (monday-code, `deploy-{draft,live}-axis-day-off.yml`, App ID 11459177). (separate PR)
+
+## 2.2.0 — 2026-07-17
+
+- Axiom logging v2 telemetry call sites (app-core primitives; no logger port).
+- View-tracking: `useViewTracking(logger, …)` at the top of each tab view — `mine` (EmployeeView), `approvals` (ApprovalsView), `team` (TeamView), `dashboard` (DashboardView). One `view_open` per view per session.
+- Boot health: one-shot `logger.health('boot_ok', { year, requests, configured })` at the first init-done in DayOffDataProvider, guarded by a ref so year-change reloads don't re-ship.
+- API-latency health: `logger.health('api_call', { ms, ok: true })` on terminal success and `logger.health('api_call', { ok: false, code })` on terminal failure in `mondayApi.query()`, outside the retry loop; ms bucketed (rounded to 250ms) so the transport dedups on a hot path.
+
+## 2026-07
+
+### 🔒 Security
+
+- **2026-07-17** — Land the unified Axiom error pipeline for day-off: retire the naive unsanitized log shipper (a latent privacy leak) and route all client error shipping through the shared hardened, sanitized, circuit-broken transport via attachAxiomSink; populate account id (acc) on every event. `f968644`
+  - _Why:_ develop's app-core logger.ts still carried a naive shipAxiom that POSTed raw records (data/error/context, any level) with no sanitizer; day-off was wired to it, inert only until an Axiom token is baked into the bundle, at which point it would leak. It also never populated acc. Stage 1 (built earlier, stranded unmerged ~502 commits behind, no PR) fixes both; this lands it.
+  - _Requested:_ להנחית את Stage 1 של צנרת ה-Axiom על develop (Phase 0 בתוכנית v2) — מתקן באג פרטיות חי ומהווה תנאי מקדים לכל שאר השלבים.
+  - _Done:_ Landed the stranded Stage 1 Axiom work onto a fresh feature branch off origin/develop via cherry-pick (not rebase, to avoid replaying 502 commits). Day-off's main.tsx now attaches the shared hardened Axiom sink before render, retiring the naive per-record shipAxiom that had no batching, sanitizer, or circuit breaker; app-core's logger drops that path entirely, closing the latent privacy leak that would activate the moment a token was baked in. Resolved conflicts in main.tsx (kept both the version-label boot line and the sink attach), settings.json plus the error-guard hook (kept develop's richer versions), the four deploy workflows (merged both env families), and CLAUDE.md (appended the Error handling and observability section). Folded in the account-id gap Stage 1 omitted: MondayProvider now passes accountId and runs a one-time me account id fallback (gated on an active sink) so every row carries acc. Bumped day-off 2.1.0 to 2.1.1. Verified against CI: type-check, lint and build all green across the workspace, app-core 58/58 tests pass, corridor-guard passes with day-off as the only touched app. Shipping stays inert until the AXIOM_INGEST_TOKEN GitHub secret is set.
+
+## 2026-07
+
+### 🧪 Tests
+
+- **2026-07-17** — high-scale test round (joins the 2.2.0 candidate) — `computeBalance`/`pendingDaysFor` 30×4×1000 reference sweep with cross-year boundary pins, and `listEntries` multi-page drain + window rules + client overlap backstop; no runtime changes `04a96e6`
+
 ## 2026-06
 
 ### 🐛 Bug Fixes
@@ -21,6 +52,9 @@
 
 ### ✨ New Features
 
+- **2026-06-10** — Deep-link URL into a specific absence: external link ?app[itemId]=<id> opens the app inside monday and auto-opens the request's detail modal (replicating a My-absences calendar-day click, asManager:false). Reads the param via monday.get('location') with a window.location.search fallback; looks up the request in the loaded year and falls back to a single-item fetch (new getRequestById service fn) for items outside the loaded year.
+  - _Why:_ Let an external source that has an itemId + the base URL build a link that takes the user straight to that specific day-off inside the Day-off app.
+  - _Requested:_ feature: deep-link URL into a specific absence — external link of the form https://yomsheni-il.monday.com/custom_objects/18417140187?app[itemId]=<id> opens the app inside monday and auto-opens the RequestDetailModal for that item (exactly replicating a calendar-day click in My absences tab, asManager:false). Reads the param via monday.get('location') (with window.location.search fallback for local dev); looks up the request in the loaded year's data and falls back to a single-item fetch (new getRequestById service fn) when the item is outside the loaded year.
 - **2026-06-09** — W1.5: warn in SettingsDialog that external consumers (Planner, tracker) cache vacations-board label IDs when personal-type labels are edited via update_status_column `77b2dd5`
   - _Why:_ Day-off integration plan W1.5 — silent label drift invalidates tracker/Planner cached label-ID settings; pre-approved execution protocol
   - _Requested:_ Guard label edits: Day-off Settings can rewrite the vacations-board status labels via update_status_column. Add a clear SettingsDialog warning that external consumers (Planner, tracker) cache label IDs and board re-mapping may be needed after label edits. i18n he+en, no Hebrew literals outside t(). Ref: DAY-OFF-INTEGRATION W1.5
@@ -44,6 +78,9 @@
 
 ### 🔧 Feature Changes
 
+- **2026-06-11** — Day-off UI refinement batch — (1) add company-days swatch to every legend (ChartLegend + TypeLegend); (2) by-employee chart hover: drop name+total tooltip, add per-segment type+count hover (e.g. 'חופשה 12'); (3) move dashboard Employee filter left next to Month and drop its label; (4) make My-absences summary cards interactive: month dropdown when scope=month (independent of calendar), filter the request list by scope/month and by clicked card type, pending on top, default = all / current month.
+  - _Why:_ UX cleanup — clearer legends, less redundant hover info, tidier filter layout, and an interactive summary→list drill in the employee view.
+  - _Requested:_ Day-off UI refinement batch (4 items): (1) Add company-days swatch to the legend everywhere a legend appears, alongside vacation/sick/reserves. (2) by-employee chart: on hover remove the employee:total tooltip (name already visible), add per-segment hover showing type + count (e.g. חופשה 12) instead of the total. (3) Dashboard filters: move Employee filter left next to Month, remove its עובד label. (4) EmployeeView summary cards left of calendar: keep year/month toggle; when month selected show an INDEPENDENT months dropdown (does not move the calendar); filter rows below cards by the toggle/dropdown selection; clicking a card filters rows to that absence type; pending on top; default = show all for current month.
 - **2026-06-10** — Relocate the W1.5 consumer label warning to where it is true: REMOVE it from the personal-type values editor (consumers never store type label IDs - the type set is open per D1, read live, display-only) and ADD it to the kind (general/personal) and approval-status mapping sections, shown when the draft LABEL SELECTION diverges from the saved one - those label IDs ARE cached in Planner/tracker settings and a semantic re-pick silently breaks their filtering `1e40c04`
   - _Why:_ User correctly flagged the warning as misplaced: it fired on the one column whose labels consumers do not map, and was absent from the two mappings they do cache
   - _Requested:_ האזהרה לא צריכה להופיע על סיווג אישי כי את הלייבלים האלה לא ממפים בפלאנר ובטראקר; היא צריכה להופיע על אישי/כללי ועל אישור מנהל

@@ -7,8 +7,13 @@ it points to — link-following is expected, duplication is not.
 **This repo:** pnpm-workspace monorepo of monday.com apps — client-side (CDN)
 **and** server-side (monday-code) — wired to one CI/CD pipeline.
 
+**Other agents:** Codex (and anything else following the `AGENTS.md` convention)
+enters through **`AGENTS.md`** at the repo root, which mirrors this file's rules
+and adds the Codex-specific wiring. See "Codex sessions" below.
+
 **Authority chain (higher wins on conflict):**
-1. This file — repo-wide rules.
+1. This file — repo-wide rules. `AGENTS.md` mirrors it; on drift, this file wins
+   and `AGENTS.md` is the bug.
 2. `.claude/skills/monday-cicd/references/pipeline-model.md` — the pipeline spec.
 3. `.claude/skills/` — the in-repo skill copies (authoritative for this repo).
 4. Per-app `CLAUDE.md`/`README.md` — app-internal facts only.
@@ -64,15 +69,18 @@ it points to — link-following is expected, duplication is not.
   promotion of the tested draft — the release freeze is what keeps draft ≈ live.
 - Workflows: `.github/workflows/deploy-{draft,live}-<slug>.yml` per app + one
   shared `ci.yml`. Slugs: `discussions`, `axis-planner`, `axis-tracker`,
-  `axis-day-off`, `axis-sync-calender`, `team-people-column`, `deadline-confirm`
-  (slug ≠ directory name for axis apps).
+  `axis-day-off`, `axis-sync-calender`, `team-people-column`, `deadline-confirm`,
+  `telemetry-dashboard`, `twyst-your-status` (slug ≠ directory name for axis apps).
 - Secrets: `MONDAY_TOKEN` + one `APP_<SLUG_UPPERCASE_UNDERSCORED>_ID` per app.
   **No version IDs anywhere** — the CLI resolves latest draft/live itself.
 - Client vs server apps differ ONLY in the `-c` flag and pushed directory.
   Build output dirs vary per app (`dist` / `build` / app root) — **read the
   app's workflow file, never assume**.
 - Shared-path fan-out: `packages/shared/**` redeploys ALL apps;
-  `apps/axis/services/**` redeploys the four axis apps.
+  `apps/axis/services/**` redeploys the four axis apps;
+  `packages/error-kit/**` redeploys the five apps that IMPORT it (tracker, day-off,
+  planner, discussions, team-people-column) via their workflow path triggers — the
+  server/SPA apps vendor a copy instead, so they are unaffected (drift-tested, not imported).
 - `workflow_dispatch` exists on draft workflows only (post-detach redeploys).
   A draft deploy that fails after merge is fixed FORWARD on a new feature branch.
 - **Never run `mapps code:push` from a machine — with or without ship.sh.**
@@ -92,15 +100,67 @@ it points to — link-following is expected, duplication is not.
   workspace globs shipped first, numeric App ID resolved and surfaced (a wrong
   ID silently deploys to another app).
 
+### GitHub Pages — a SECOND target, `docs-export` only
+
+`docs-export` also publishes to **GitHub Pages** via
+`.github/workflows/pages-docs-export.yml`. This is an additional target beside the
+monday CDN, not a replacement, and it is the ONLY app that uses it.
+
+- **URL: <https://ilaiyomsh.github.io/monday-apps/docs-export/>.** A repository gets
+  exactly ONE Pages site, so the workflow stages each app into its own subdirectory
+  (`_site/<app>/`) instead of spending the whole site on one app. The site root is a
+  small static index listing the apps; add a line there when a second app joins.
+- **`base: './'` in `vite.config.js` is load-bearing.** Relative asset URLs resolve at
+  any depth, which is what let the app move from `/` to `/docs-export/` with no rebuild
+  and no app-code change. An absolute `/` breaks every asset outside the root.
+- **`404.html` only works at the SITE ROOT.** Pages does NOT look for the nearest
+  `404.html` per directory (that is Apache/nginx behaviour) — verified live: an unknown
+  path under `/docs-export/` got GitHub's own error page, not the app. The workflow
+  therefore writes the site index to `_site/404.html`, so any unknown path lands on the
+  directory. It deliberately is NOT one app's index, which would hand every unknown path
+  to `docs-export`. An app that ever needs real deep links cannot get them this way.
+- Triggers on push to `develop` under `apps/docs-export/**` (plus
+  `packages/error-kit/**`), publishes **only** `apps/docs-export/dist`, and has
+  `workflow_dispatch`. Keep the path filter narrow: nothing else in this monorepo
+  may be built or published by it.
+- Requires the repository's Pages **Source = GitHub Actions** (a repo setting, not a
+  file). With the legacy "Deploy from a branch" source it builds the repo root as
+  Jekyll and silently ignores this workflow's artifact.
+- Same sourcemap contract as the CDN workflows: `sourcemap: 'hidden'`, archived as a
+  90-day artifact keyed by commit SHA, then hard-deleted from the publish dir with a
+  check that FAILS the run if any `.map` survives. Serving a `.map` publishes source.
+- **What Pages does and does not give you.** It proves the bundle builds, loads and
+  degrades correctly, and it is a link you can send. It is **not** a usable instance:
+  outside monday there is no context, so no board, no user, no ownership — the app
+  correctly lands on its "not configured" surface and stops. Driving the app needs
+  either `dev:mock` locally or a real monday board view.
+- The repo is public, so the Pages build bakes `AXIOM_INGEST_TOKEN` into a publicly
+  readable bundle. Write-only and scoped to one dataset — the same exposure every CDN
+  client build already has — but now at a trivially discoverable URL.
+
+**`docs-export` is NOT on the monday CDN pipeline yet.** It has no
+`deploy-{draft,live}-docs-export.yml`, no `APP_DOCS_EXPORT_ID` secret, and no
+`SURFACES` entry in `scripts/error-wiring-audit.mjs` (its source IS scanned via
+`APP_SRC_DIRS`, but the structural boot-wiring and `VITE_AXIOM_*` checks are not
+enforced for it). So merging to `develop` updates Pages ONLY, and merging to `main`
+does nothing for it. Completing the onboarding is blocked on the owner creating the
+app in the Developer Center and supplying the numeric App ID.
+
 ## Structure & app IDs
 
 ```
 apps/discussions                    flat app (client, build/)
 apps/team-people-column             flat app (client, dist/)
 apps/deadline-confirm               flat app (server, app root; admin SPA served from it)
+apps/telemetry-dashboard            flat app (server, app root; dashboard SPA served from it)
+apps/docs-export                    flat app (client, dist/) — NOT on the CDN pipeline;
+                                    publishes to GitHub Pages only (see Deploys)
 apps/axis/{planner,tracker,day-off,sync-calender}   nested system
 apps/axis/services/{app-core,monday-api}            axis shared runtime code
 apps/axis/docs/FOLLOW-UPS.md        onboarding-debt ledger
+packages/error-kit                  canonical error→Axiom shipping (@mapps/error-kit): clients
+                                    import it, axis via the app-core facade, servers+SPAs
+                                    vendor a copy that drift.test.ts keeps in sync
 packages/shared                     EMPTY STUB — see below
 ```
 
@@ -119,13 +179,27 @@ packages/shared                     EMPTY STUB — see below
   | axis-sync-calender | `apps/axis/sync-calender` | 11666315 | server, app root |
   | team-people-column | `apps/team-people-column` | 11689948 | client, `dist/` |
   | deadline-confirm | `apps/deadline-confirm` | 11704868 | server, app root |
+  | telemetry-dashboard | `apps/telemetry-dashboard` | secret `APP_TELEMETRY_DASHBOARD_ID` set — numeric ID lives in the secret, not mirrored here (slug `telemetry-dashboard`) | server, app root |
+  | twyst-your-status | `apps/twyst-your-status` | secret `APP_TWYST_YOUR_STATUS_ID` set — numeric ID lives in the secret, not mirrored here (slug `twyst-your-status`) | server, `server/` app root; SPA served from `server/public` (round324 same-origin unification — one monday-code push, no CDN `-c`) |
+  | docs-export | `apps/docs-export` | **none yet** — no App ID, no `APP_DOCS_EXPORT_ID` secret, no `deploy-{draft,live}` workflow. Ships to **GitHub Pages** only (slug `docs-export`) | client, `dist/` |
+
+- **`docs-export` local dev:** `pnpm --filter ./apps/docs-export dev:mock` on port
+  **8304** renders it OUTSIDE the monday iframe against `src/dev-harness/`, so it needs
+  no token and no App ID. Every app in this repo owns a distinct dev port so several can
+  run at once; 8304 was the first free one after 5173/5180/8301/8302/8303. Also declared
+  in `.claude/launch.json` for the in-app browser pane. Board-view app; RTL/Hebrew-first;
+  its own `apps/docs-export/CLAUDE.md` carries the app-internal rules (the five column
+  roles, the one-query-per-interaction rule, the RTL `.docx` recipe).
 
 ## Quality gates
 
 - **CI (every PR into develop/main):** type-check → lint → build across the
   whole workspace (`pnpm -r --if-present`) — blocking. Tests run as a separate
   **non-blocking visibility job**; read its summary on the PR and treat any new
-  red as yours until proven otherwise.
+  red as yours until proven otherwise. One more blocking job, `test-guard hook
+  fixtures`, runs the enforcement layer's own fixture verifier
+  (`.claude/skills/test-guard/hooks/tests/verify-stop-gate.sh`, checkout-only) —
+  a broken stop gate would otherwise remove enforcement silently.
 - **Known-red baseline:** tracker carries 2 deferred failing tests
   (FOLLOW-UPS F1). Not your breakage — do not "fix" them without the owner.
 - **test-guard:** red gate for new code; retrofits prove themselves with ≥2
@@ -142,6 +216,8 @@ packages/shared                     EMPTY STUB — see below
   `.claude/hooks/` + the skill-internal hooks): deploy-guard, test-guard's
   lock/nudge/stop-gate, error-guard's per-edit check, GraphQL write reminder.
   They also load in cloud sessions. Approve them on first run; never bypass.
+  The same scripts serve Codex via `.codex/hooks.json` + `.codex/hooks/codex-adapter.py`
+  — fix hook behaviour in `.claude/hooks/` only, never in a forked Codex copy.
 
 ## Secrets & env
 
@@ -162,7 +238,7 @@ packages/shared                     EMPTY STUB — see below
   **monday-api** (any code touching the monday API — validate against the live
   schema, probe in the sandbox), **test-guard** + **error-guard** (every change).
 - Situational: monday-ops, monday-scaffold, integration-scaffold,
-  add-to-status-hub, axiom-sre.
+  add-to-status-hub, axiom-sre, monday-oauth (any monday auth/OAuth work).
 - A platform quirk discovered while working is appended to the owning skill's
   `references/` in the same session.
 
@@ -187,6 +263,34 @@ packages/shared                     EMPTY STUB — see below
 - Cloud sessions base on `develop` (the default branch) and PR into `develop`.
   They have no `MONDAY_TOKEN` and must not attempt deploys or `mapps` auth —
   merging their PR is what triggers the draft deploy.
+- **Error triage from a cloud session:** a cloud session MAY carry a **read-only**
+  Axiom token (scoped to `app-errors`) to query telemetry — set `AXIOM_URL`/
+  `AXIOM_TOKEN`/`AXIOM_ORG_ID` in the cloud environment; the `axiom-sre` skill reads
+  them from env (no local config file needed). Read-only, single-dataset only — this
+  is the sole token exception for cloud, and does not extend to `MONDAY_TOKEN` or any
+  write/ingest token. See `.claude/skills/axiom-sre/reference/app-errors.md`.
+
+## Codex sessions (OpenAI Codex CLI / IDE extension)
+
+- Codex reads **`AGENTS.md`** at the repo root, not this file. Both state the same
+  rules; **a PR that changes a rule in one must change it in the other.**
+- **Skills are not auto-selected in Codex.** They are exposed at Codex's project
+  skill paths (`.codex/skills`, `.agents/skills` — both symlinks to
+  `.claude/skills`), but the agent must open the relevant `SKILL.md` itself.
+  `AGENTS.md` carries the task→skill routing table that makes this happen.
+- **The guards are wired, with one gap.** `.codex/hooks.json` runs the same
+  `.claude/hooks/` scripts through `.codex/hooks/codex-adapter.py`, which
+  translates Codex's payload shape (`tool_name: "shell"`, `command` as an argv
+  array, `apply_patch` covering N files). Shell guards fire; **`apply_patch`
+  coverage is version-dependent upstream**, so error-guard and test-guard must be
+  treated as self-enforced under Codex until verified. Details, caveats, and setup:
+  `.codex/README.md`.
+- **Two prerequisites, or nothing runs:** `[features] codex_hooks = true` in
+  `~/.codex/config.toml`, and the project `.codex/` layer trusted. Verify with
+  `bash .codex/verify.sh` plus `/hooks` inside Codex — an unloaded hook fails
+  silently and is indistinguishable from one that passed.
+- A standing briefing (`.codex/briefing.md`) is injected at SessionStart, so the
+  house rules do not depend on a human pasting them each session.
 
 ## One-time developer setup
 
@@ -208,8 +312,30 @@ packages/shared                     EMPTY STUB — see below
 9. After your first draft deploy of an app: monday Developer Center → that app →
    "Set as active for me" (manual, per developer per app; no CLI exists for it).
 
+## Error handling & observability
+
+One unified standard, from catching an error to shipping it to Axiom:
+**`docs/ERROR-AXIOM-STANDARD.md`** (authority: the `error-guard` skill). The canonical
+shipping layer is **`packages/error-kit` (`@mapps/error-kit`)** — pure clients import it,
+axis apps consume it via the `@axis/app-core` facade, and server apps + embedded SPAs
+vendor a copy that `packages/error-kit/test/drift.test.ts` keeps behaviorally in sync.
+Never a raw fetch. Shared dataset `app-errors`, discriminated by `app`. Wiring is enforced
+in CI by `scripts/error-wiring-audit.mjs` + the error-kit test suite (both blocking).
+
+**Axiom is not live until the owner activates it.** The wiring is complete and fail-soft, so a
+missing token silently means "nothing ships" rather than a broken build. What is still required —
+per surface, with the exact commands and what breaks without each — is tracked in
+**`docs/ERROR-AXIOM-STANDARD.md` → "Activation status"**. Agents never set these (see Secrets &
+env); read that section before concluding an app "isn't reporting errors".
+
+To **query/triage** `app-errors` (send an agent to check errors), use the `axiom-sre`
+skill — agent playbook with the live schema, conventions/gotchas (e.g. `err_name` is
+often empty; there is no `err_code` column), and ready-to-run APL queries:
+**`.claude/skills/axiom-sre/reference/app-errors.md`**.
+
 ## Maintaining this file
 
 This file changes via PR into `develop` like everything else. Keep it short:
 state the rule, link the detail. Any PR that changes a rule stated here must
-update this file in the same PR.
+update this file in the same PR — **and `AGENTS.md` in the same PR too**, since
+Codex sessions read only that one. Two agents, one rule set.

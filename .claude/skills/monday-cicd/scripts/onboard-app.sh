@@ -10,6 +10,7 @@
 #        [--repo owner/name] [--dir monorepo-path] [--dist <dir>] [--branch <name>] [--force-copy]
 #        [--name <workflow/secret name>] [--dest <subpath under apps/>]
 #        [--shared-paths <comma-separated extra path globs for the deploy triggers>]
+#        [--no-push] [--no-secret]
 #
 # Nested-system support (e.g. the Axis multi-app system):
 #   --dest axis/planner            → source lands at apps/axis/planner/
@@ -26,7 +27,7 @@ SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Monorepo working copy: the repo this skill is checked into (the skill lives at
 # <repo-root>/.claude/skills/monday-cicd). Override with --dir.
 DIR="$(git -C "$SKILL_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SKILL_DIR/../../.." && pwd))"
-APP_SRC=""; APP_ID=""; DIST=""; BRANCH=""; FORCE_COPY=0; TYPE=""; NAME_OVERRIDE=""; DEST=""; SHARED_PATHS="packages/shared/**"
+APP_SRC=""; APP_ID=""; DIST=""; BRANCH=""; FORCE_COPY=0; TYPE=""; NAME_OVERRIDE=""; DEST=""; SHARED_PATHS="packages/shared/**"; PUSH=1; SET_SECRET=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,6 +42,8 @@ while [[ $# -gt 0 ]]; do
     --dest) DEST="$2"; shift 2 ;;
     --shared-paths) SHARED_PATHS="packages/shared/**,$2"; shift 2 ;;
     --force-copy) FORCE_COPY=1; shift ;;
+    --no-push) PUSH=0; shift ;;
+    --no-secret) SET_SECRET=0; shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -48,7 +51,7 @@ done
 [[ -n "$APP_SRC" && -n "$APP_ID" ]] || { echo "ERROR: --app and --id are required" >&2; exit 2; }
 [[ -d "$APP_SRC" ]] || { echo "ERROR: source dir not found: $APP_SRC" >&2; exit 2; }
 [[ "$APP_ID" =~ ^[0-9]+$ ]] || { echo "ERROR: --id must be the numeric monday App ID" >&2; exit 2; }
-[[ -d "$DIR/.git" ]] || { echo "ERROR: monorepo not found at $DIR — run bootstrap-monorepo.sh first" >&2; exit 2; }
+git -C "$DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "ERROR: monorepo not found at $DIR — run bootstrap-monorepo.sh first" >&2; exit 2; }
 
 TPL="$SKILL_DIR/templates"
 
@@ -85,43 +88,59 @@ TARGET="$DIR/apps/$DEST"
 if [[ -d "$TARGET" && $FORCE_COPY -eq 0 ]]; then
   echo ">> [skip] $TARGET already exists (use --force-copy to overwrite)"
 else
-  mkdir -p "$TARGET"
-  rsync -a --delete \
-    --exclude .git --exclude node_modules --exclude dist --exclude build \
-    --exclude .env --exclude '.env.*' --exclude .DS_Store \
-    "$APP_SRC/" "$TARGET/"
+  node - "$APP_SRC" "$TARGET" "$DIR/apps" <<'EOF'
+const fs = require('fs');
+const path = require('path');
+const [source, target, appsRoot] = process.argv.slice(2).map((value) => path.resolve(value));
+if (!target.startsWith(`${appsRoot}${path.sep}`)) {
+  process.stderr.write(`ERROR: refusing to replace target outside apps/: ${target}\n`);
+  process.exit(2);
+}
+const excludedNames = new Set(['.git', 'node_modules', 'dist', 'build', '.DS_Store']);
+const shouldCopy = (candidate) => {
+  if (candidate === source) return true;
+  const relative = path.relative(source, candidate);
+  const parts = relative.split(path.sep);
+  if (parts.some((part) => excludedNames.has(part))) return false;
+  const basename = path.basename(candidate);
+  return basename !== '.env' && !basename.startsWith('.env.');
+};
+fs.rmSync(target, { recursive: true, force: true });
+fs.mkdirSync(path.dirname(target), { recursive: true });
+fs.cpSync(source, target, { recursive: true, filter: shouldCopy });
+EOF
   echo ">> [done] source copied to apps/$DEST/ (git, node_modules, builds, env excluded)"
 fi
 
 # ---- 4. Normalize package.json ---------------------------------------------------
-python3 - "$TARGET/package.json" <<'EOF'
-import json, sys
-path = sys.argv[1]
-with open(path) as f:
-    pkg = json.load(f)
-scripts = pkg.setdefault("scripts", {})
-if "build" not in scripts:
-    sys.exit("ERROR: app has no build script - cannot onboard (the pipeline deploys build output)")
-for s, noop in (("lint", "echo no-lint-configured"), ("type-check", "echo no-typescript")):
-    scripts.setdefault(s, noop)
-with open(path, "w") as f:
-    json.dump(pkg, f, indent=2, ensure_ascii=False)
-    f.write("\n")
-print(">> [done] scripts normalized (build present, lint/type-check stubs ensured)")
+node - "$TARGET/package.json" <<'EOF'
+const fs = require('fs');
+const path = process.argv[2];
+const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+const scripts = pkg.scripts ||= {};
+if (!scripts.build) {
+  process.stderr.write('ERROR: app has no build script - cannot onboard (the pipeline deploys build output)\n');
+  process.exit(1);
+}
+scripts.lint ||= 'echo no-lint-configured';
+scripts['type-check'] ||= 'echo no-typescript';
+fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
+process.stdout.write('>> [done] scripts normalized (build present, lint/type-check stubs ensured)\n');
 EOF
 
 # ---- 5. Detect dist dir ----------------------------------------------------------
 if [[ -z "$DIST" ]]; then
-  DIST="$(python3 - "$TARGET" <<'EOF'
-import glob, re, sys
-target = sys.argv[1]
-out = "dist"
-for cfg in glob.glob(f"{target}/vite.config.*"):
-    text = open(cfg).read()
-    m = re.search(r"outDir\s*:\s*['\"]([^'\"]+)['\"]", text)
-    if m:
-        out = m.group(1)
-print(out)
+  DIST="$(node - "$TARGET" <<'EOF'
+const fs = require('fs');
+const path = require('path');
+const target = process.argv[2];
+let out = 'dist';
+for (const name of fs.readdirSync(target).filter((entry) => /^vite\.config\./.test(entry))) {
+  const text = fs.readFileSync(path.join(target, name), 'utf8');
+  const match = text.match(/outDir\s*:\s*['\"]([^'\"]+)['\"]/);
+  if (match) out = match[1];
+}
+process.stdout.write(out);
 EOF
 )"
 fi
@@ -152,27 +171,30 @@ for kind in draft live; do
   WF="$DIR/.github/workflows/deploy-$kind-$NAME.yml"
   TPL_FILE="$TPL/deploy-$kind.yml" WF_OUT="$WF" NAME="$NAME" DEST="$DEST" \
   SECRET_NAME="$SECRET_NAME" DIST="$DIST" PUSH_FLAGS="$PUSH_FLAGS" SHARED_PATHS="$SHARED_PATHS" \
-  python3 - <<'EOF'
-import os
-tpl = open(os.environ["TPL_FILE"]).read()
-name, dest = os.environ["NAME"], os.environ["DEST"]
-shared = [p.strip() for p in os.environ["SHARED_PATHS"].split(",") if p.strip()]
-shared_block = "\n".join(f'      - "{g}"' for g in shared)
-out = (tpl
-       .replace('      - "packages/shared/**"', shared_block)
-       .replace("apps/__APP_NAME__", f"apps/{dest}")
-       .replace("__APP_NAME__", name)
-       .replace("__APP_ID_SECRET__", os.environ["SECRET_NAME"])
-       .replace("__DIST_DIR__", os.environ["DIST"])
-       .replace("__PUSH_FLAGS__", os.environ["PUSH_FLAGS"]))
-open(os.environ["WF_OUT"], "w").write(out)
+  node <<'EOF'
+const fs = require('fs');
+const template = fs.readFileSync(process.env.TPL_FILE, 'utf8');
+const shared = process.env.SHARED_PATHS.split(',').map((value) => value.trim()).filter(Boolean);
+const sharedBlock = shared.map((glob) => `      - "${glob}"`).join('\n');
+const output = template
+  .replace('      - "packages/shared/**"', sharedBlock)
+  .replaceAll('apps/__APP_NAME__', `apps/${process.env.DEST}`)
+  .replaceAll('__APP_NAME__', process.env.NAME)
+  .replaceAll('__APP_ID_SECRET__', process.env.SECRET_NAME)
+  .replaceAll('__DIST_DIR__', process.env.DIST)
+  .replaceAll('__PUSH_FLAGS__', process.env.PUSH_FLAGS);
+fs.writeFileSync(process.env.WF_OUT, output);
 EOF
   echo ">> [done] $(basename "$WF") ($TYPE-side)"
 done
 
 # ---- 7. App ID secret --------------------------------------------------------------
-gh secret set "$SECRET_NAME" --repo "$REPO" --body "$APP_ID"
-echo ">> [done] secret $SECRET_NAME set on $REPO"
+if [[ $SET_SECRET -eq 1 ]]; then
+  gh secret set "$SECRET_NAME" --repo "$REPO" --body "$APP_ID"
+  echo ">> [done] secret $SECRET_NAME set on $REPO"
+else
+  echo ">> [skip] --no-secret requested; set $SECRET_NAME on $REPO before merging"
+fi
 
 # ---- 8. Standing-draft check (incident-verified quirk) ------------------------------
 # A plain code:push FAILS when the app's latest version is live (no draft on top).
@@ -213,8 +235,12 @@ else
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>" >/dev/null
   echo ">> [done] committed"
 fi
-git push -u origin "$BRANCH" >/dev/null 2>&1
-echo ">> [done] pushed $BRANCH"
+if [[ $PUSH -eq 1 ]]; then
+  git push -u origin "$BRANCH" >/dev/null 2>&1
+  echo ">> [done] pushed $BRANCH"
+else
+  echo ">> [skip] --no-push requested; branch remains local"
+fi
 
 # ---- Next steps -------------------------------------------------------------------------
 cat <<NEXT
@@ -226,5 +252,9 @@ cat <<NEXT
 2. CI (Gate 1) must pass, then merge to develop.
 3. Watch the draft deploy:  gh run list --repo $REPO --workflow deploy-draft-$NAME.yml
 4. Confirm the draft advanced:  mapps app-version:list -i $APP_ID
+5. Error-wiring (docs/ERROR-AXIOM-STANDARD.md): wire the entry, add a SURFACES
+   entry in scripts/error-wiring-audit.mjs, inject VITE_AXIOM_* into the workflow
+   Build step (clients), add a drift entry if the app vendors a copy. The audit
+   ('node scripts/error-wiring-audit.mjs') must exit 0.
 ====================================================
 NEXT

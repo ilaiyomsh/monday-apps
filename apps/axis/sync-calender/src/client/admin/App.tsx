@@ -47,6 +47,7 @@ function AppInner() {
   const {
     rows,
     loading: configsLoading,
+    error: configsError,
     refetch: refetchConfigs,
     forceSync,
     remove,
@@ -152,6 +153,15 @@ function AppInner() {
 
   return (
     <Shell>
+      {configsError && (
+        <div style={{ marginBottom: 12 }}>
+          <AttentionBox
+            type="danger"
+            title="Couldn't load sync configurations"
+            text={`${configsError} — try refreshing the page.`}
+          />
+        </div>
+      )}
       {policy && (
         <StatusIdMigrationDialog
           objectId={objectId}

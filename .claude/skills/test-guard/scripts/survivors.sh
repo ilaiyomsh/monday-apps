@@ -124,6 +124,16 @@ cmd_record() {
 
   echo "SURVIVOR RECORDED: $seq  $src:$line"
   echo "  hypothesis: $hypothesis"
+  # Amendment 12 (record side) — the same trap, caught one step earlier. A survivor
+  # that came from spotcheck-fire is ALREADY in kills.log under the fire's wording,
+  # and only a --desc that matches it can be closed later. Say so here, while the
+  # agent still has the wording in front of them, instead of at resolve time.
+  if [[ -z "$desc" && -f "$STATE_DIR/kills.log" ]] && grep -q '^SURVIVED|' "$STATE_DIR/kills.log"; then
+    echo "  NOTE: no --desc given, so resolve will look for 'SURVIVED|<hypothesis>'." >&2
+    echo "  kills.log has unresolved line(s) that will NOT be closed by it:" >&2
+    grep '^SURVIVED|' "$STATE_DIR/kills.log" | sed 's/^SURVIVED|/    - /' >&2
+    echo "  If this record is one of them, re-record with --desc \"<that exact line>\"." >&2
+  fi
   [[ -n "$log_kills" ]] && echo "  logged to kills.log as SURVIVED|$logdesc"
   exit 0
 }
@@ -241,7 +251,26 @@ cmd_resolve() {
     if [[ -n "$done_rewrite" ]]; then
       echo "kills.log: rewrote matching SURVIVED line to SURVIVED-RESOLVED."
     else
-      echo "kills.log: no matching unresolved 'SURVIVED|$desc' line found (fine if this record was never logged with --log-kills)."
+      # Amendment 12 — this branch used to print one reassuring line and exit 0.
+      # That is correct ONLY when the survivor was never logged; when it came from
+      # spotcheck-fire (the common path) kills.log holds the line under the FIRE's
+      # description, the record's desc defaults to the hypothesis, no line matches,
+      # and the verdict silently stays NOT DONE with the reason buried in a message
+      # that reads like an all-clear. Now it names the open lines and the exact way
+      # to close them, and FAILS — a resolve that resolved nothing is not a success.
+      # `grep -q`, not `grep -c`: with no match `-c` prints 0 AND exits 1, so the
+      # obvious `$(grep -c … || echo 0)` yields the two-line string "0\n0" and the
+      # arithmetic test then dies with a syntax error (caught by the fixture below).
+      if grep -q '^SURVIVED|' "$STATE_DIR/kills.log" 2>/dev/null; then
+        echo "SURVIVORS ERROR: record $seq is KILLED, but no kills.log line matched its desc:" >&2
+        echo "  desc: $desc" >&2
+        echo "The spot-check verdict reads kills.log, so it still counts these as unresolved:" >&2
+        grep '^SURVIVED|' "$STATE_DIR/kills.log" | sed 's/^SURVIVED|/  - /' >&2
+        echo "Re-record with the EXACT description spotcheck-fire logged, then resolve that record:" >&2
+        echo "  survivors.sh record <test> --src <src> --line <N> --hypothesis \"...\" --desc \"<line above>\"" >&2
+        exit 1
+      fi
+      echo "kills.log: nothing to close — this record was never logged with --log-kills."
     fi
   fi
   exit 0

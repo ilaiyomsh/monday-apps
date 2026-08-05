@@ -46,6 +46,9 @@ export function todayInJerusalem(now = new Date()) {
  * @param {{ send(p: object): Promise<{ id: string }> } | undefined} p.emailSender
  * @param {string} [p.todayIso]
  * @param {() => Date} [p.now]
+ * @param {boolean} [p.skipAlreadySent=false] enforce the per-slot send marker —
+ *   the CRON passes this. The admin's "send now" and resend-today deliberately
+ *   do not: re-sending inside the same slot is the whole point of those.
  * @returns {Promise<object>}
  */
 export async function runDigestForAccount({
@@ -56,6 +59,7 @@ export async function runDigestForAccount({
   emailSender,
   todayIso,
   now = () => new Date(),
+  skipAlreadySent = false,
 }) {
   if (!emailSender) return { skip: 'email_not_configured' };
 
@@ -102,7 +106,7 @@ export async function runDigestForAccount({
     throw err;
   }
 
-  const { recipients, skippedUsers } = buildDigest({
+  const { recipients, skippedUsers, emptyRecipients } = buildDigest({
     config,
     tasks: tasksRead.items,
     users: usersRead.items,
@@ -115,9 +119,48 @@ export async function runDigestForAccount({
   const buttonsById = new Map((config.buttons ?? []).map((b) => [b.id, b]));
   const withButtons = (recipient) => decorateRecipientSections(recipient, buttonsById);
 
+  // Who this slot has already been sent to. Loaded ONCE, as a snapshot: within a
+  // single run the behaviour must stay exactly what it was, including D16's "the
+  // same person on two users-board rows gets two messages". The snapshot only
+  // ever suppresses sends that a PREVIOUS invocation already performed.
+  const sentSnapshot = new Set();
+  let sentPersonIds = [];
+  if (skipAlreadySent) {
+    const marker = await scoped.getDigestSent();
+    // The stored slot is the expiry: a record from an earlier slot is a clean
+    // slate, so yesterday's run can never block today's.
+    if (marker?.slot === slot && Array.isArray(marker.personIds)) {
+      for (const id of marker.personIds) sentSnapshot.add(String(id));
+      sentPersonIds = [...marker.personIds];
+    }
+  }
+
   const results = [];
+  // One row per EMPLOYEE for the summary file (§5.2), built as the run happens
+  // so each row records what actually became of that person — not a count
+  // reconstructed afterwards. Cluster counts come from the recipient's own
+  // sections, keyed by section id, so the file's columns line up with config
+  // order no matter how the settings change.
+  const summaryRows = [];
+  const clusterCounts = (recipient) =>
+    Object.fromEntries((recipient.sections ?? []).map((s) => [s.sectionId, s.tasks.length]));
+
+  let alreadySent = 0;
   for (const recipient of recipients) {
     const base = { email: recipient.email, name: recipient.name, taskCount: recipient.taskCount };
+    const summaryBase = {
+      name: recipient.name,
+      email: recipient.email,
+      counts: clusterCounts(recipient),
+      total: recipient.taskCount,
+    };
+    if (skipAlreadySent && sentSnapshot.has(String(recipient.personId))) {
+      alreadySent += 1;
+      // A skipped-because-already-sent employee has to stay visible: a retry
+      // that resumes mid-slot must not read as a run that lost half its people.
+      summaryRows.push({ ...summaryBase, kind: 'already_sent' });
+      continue;
+    }
     try {
       const decorated = withButtons(recipient);
       const plain = renderDigestPlain({ recipient: decorated });
@@ -142,6 +185,14 @@ export async function runDigestForAccount({
         mime,
       });
       results.push({ ...base, ok: true });
+      summaryRows.push({ ...summaryBase, kind: 'sent' });
+      if (skipAlreadySent) {
+        // Persisted after EVERY successful send, not once at the end: a run
+        // killed mid-loop (the 300s scheduler timeout) must leave behind exactly
+        // who already has the mail, so the retry resumes instead of repeating.
+        sentPersonIds.push(String(recipient.personId));
+        await scoped.setDigestSent({ slot, personIds: sentPersonIds });
+      }
     } catch (err) {
       logError('digest', 'send failed for recipient', {
         accountId,
@@ -149,7 +200,34 @@ export async function runDigestForAccount({
         error: String(err?.message ?? err),
       });
       results.push({ ...base, ok: false, error: String(err?.message ?? err) });
+      summaryRows.push({ ...summaryBase, kind: 'failed', error: String(err?.message ?? err) });
     }
+  }
+
+  // Employees with tasks first, then those with none, then users-board rows that
+  // never became a recipient at all: the file opens on the rows that carry news,
+  // and every row of the users board is accounted for exactly once.
+  for (const empty of emptyRecipients) {
+    summaryRows.push({
+      name: empty.name,
+      email: empty.email,
+      kind: 'no_tasks',
+      counts: {},
+      total: 0,
+    });
+  }
+  for (const skipped of skippedUsers) {
+    summaryRows.push({
+      name: skipped.name,
+      // A row skipped for `no_email` has no address by definition, and one
+      // skipped for `no_person`/`multi_person` was never resolved to an
+      // employee — so the address column stays empty rather than guessing.
+      email: '',
+      kind: 'skipped',
+      reason: skipped.reason,
+      counts: {},
+      total: 0,
+    });
   }
 
   const failedAddresses = results.filter((r) => !r.ok).map((r) => r.email);
@@ -161,6 +239,7 @@ export async function runDigestForAccount({
     recipients: results.length,
     sent,
     failed,
+    alreadySent,
     skipped: skippedUsers.length,
   });
 
@@ -173,5 +252,18 @@ export async function runDigestForAccount({
     sent,
     failed,
     failedAddresses,
+    // Recipients this slot had already been sent to, so the operator summary can
+    // say "nothing to do" instead of looking like a run that found nobody.
+    alreadySent,
+    // The summary file's columns are DERIVED from the configured clusters, in
+    // config order (which is also priority order — owner 2026-08-04), so the
+    // file always matches the settings instead of a snapshot of them.
+    summarySections: (config.digest.sections ?? []).map((s) => ({
+      id: s.id,
+      title: s.title ?? '',
+    })),
+    // Emitted for every caller; only the cron mails them (§5.2 — the admin
+    // screen already shows its own result, so a manual send makes no file).
+    summaryRows,
   };
 }

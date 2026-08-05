@@ -9,8 +9,10 @@ APP_SLUGS=(
   axis-planner
   axis-sync-calender
   axis-tracker
+  deadline-confirm
   discussions
   team-people-column
+  telemetry-dashboard
   twyst-your-status
 )
 
@@ -20,8 +22,10 @@ app_path() {
     axis-planner)        echo "apps/axis/planner" ;;
     axis-sync-calender)  echo "apps/axis/sync-calender" ;;
     axis-tracker)        echo "apps/axis/tracker" ;;
+    deadline-confirm)    echo "apps/deadline-confirm" ;;
     discussions)         echo "apps/discussions" ;;
     team-people-column)  echo "apps/team-people-column" ;;
+    telemetry-dashboard) echo "apps/telemetry-dashboard" ;;
     twyst-your-status)   echo "apps/twyst-your-status" ;;
     *) echo "unknown app slug: $1" >&2; return 1 ;;
   esac

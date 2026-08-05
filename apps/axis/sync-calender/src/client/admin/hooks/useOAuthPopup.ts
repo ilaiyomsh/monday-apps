@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { apiFetch } from '../services/api';
+import logger from '../lib/logger';
 import type { OAuthProvider, OAuthStartResponse } from '../types';
 
 interface PopupMessage {
@@ -93,6 +94,11 @@ export function useOAuthPopup(provider: OAuthProvider, options: OAuthPopupOption
           reject(new Error('oauth_timeout'));
         }, timeoutMs);
       });
+    } catch (err) {
+      // Preserve the caller contract (App's connect* handlers rely on the rejection to
+      // surface a toast) — log so the failure also reaches Axiom, then rethrow.
+      logger.error('useOAuthPopup', 'oauth_popup_failed', err);
+      throw err;
     } finally {
       inFlight.current = false;
     }

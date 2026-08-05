@@ -28,12 +28,17 @@
  * re-enter the logger (recursion hazard).
  */
 /* global globalThis */
-import { createAxiomBrowserTransport } from '@axis/app-core';
+import { createAxiomBrowserTransport, scrubMessage } from '@axis/app-core';
 import logger from './logger';
 
 // §4.2 rank table — DEBUG < INFO < WARN < ERROR
 const RANK = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
 const REMOTE_LEVEL_KEY = 'axis:remoteLogLevel';
+
+// Tracker's rendering `kind` → the unified DOMAIN discriminator shipped as ev.kind
+// (matches @axis/app-core: error | usage | health). Boot-lifecycle renders are health;
+// everything else defaults to 'error'. track()/health() set record.domainKind directly.
+const RENDER_TO_DOMAIN = { init: 'health', initSummary: 'health' };
 
 // ============================================
 // §4.1 — gate + transport construction (module scope)
@@ -93,6 +98,8 @@ try {
  */
 export function shouldShip(record, remoteLevel) {
     if (!record) return false;
+    if (record.duplicate === true) return false;   // duplicates never ship (checked first)
+    if (record.alwaysShip === true) return true;    // usage/health (INFO) bypass the level policy (D3/D5)
     const rank = RANK[String(record.level ?? '').toUpperCase()];
     const remoteRank = remoteLevel != null ? RANK[String(remoteLevel).toUpperCase()] : undefined;
     if (remoteRank !== undefined) {
@@ -107,7 +114,6 @@ export function shouldShip(record, remoteLevel) {
     } else {
         return false; // DEBUG (and unknown levels) never ship by default
     }
-    if (record.duplicate === true) return false;
     return true;
 }
 
@@ -126,9 +132,44 @@ function firstStackFrame(stack) {
     let sigilLine;
     for (const line of stack.split('\n')) {
         if (/^\s*at /.test(line)) return line.trim();
-        if (sigilLine === undefined && line.includes('@')) sigilLine = line;
+        // Anchored Firefox/Safari frame `name@url:line[:col]` — REQUIRE no whitespace before
+        // '@'. A prose message that merely contains '@' (an email), even one ending in
+        // ':<digits>', is never mistaken for a frame and can never leak error.message.
+        if (sigilLine === undefined && /^\s*\S*@\S+:\d+(?::\d+)?\s*$/.test(line)) sigilLine = line;
     }
     return sigilLine === undefined ? undefined : sigilLine.trim();
+}
+
+// fix 3 caps — parity with the shared @axis/app-core / @mapps/error-kit sink.
+const STACK_MAXLEN = 1500;            // joined top-5 frames
+const COMPONENT_STACK_MAXLEN = 1000;  // React componentStack
+
+/**
+ * The top `max` stack frames — same anchored frame detection as firstStackFrame (V8 `at `
+ * or a real Firefox/Safari `name@url:line[:col]` frame), so a prose header or an '@'-bearing
+ * message can never masquerade as a frame and leak error.message content.
+ */
+function topFrames(stack, max) {
+    if (typeof stack !== 'string' || stack === '') return [];
+    const out = [];
+    for (const line of stack.split('\n')) {
+        if (/^\s*at /.test(line) || /^\s*\S*@\S+:\d+(?::\d+)?\s*$/.test(line)) {
+            out.push(line.trim());
+            if (out.length >= max) break;
+        }
+    }
+    return out;
+}
+
+/**
+ * componentStack scrubbed to `cap`. React's componentStack is newline-delimited component
+ * frames; scrubbing each line via scrubMessage (its per-line 200 cap is ample) then joining
+ * and slicing to `cap` gives the same privacy guarantee as the shared sink's uncapped redact,
+ * without needing a second scrubber export.
+ */
+function scrubComponentStack(raw, cap) {
+    if (typeof raw !== 'string' || raw === '') return '';
+    return raw.split('\n').map((line) => scrubMessage(line)).join('\n').slice(0, cap);
 }
 
 /**
@@ -145,7 +186,8 @@ export function mapRecordToEvent(record) {
         tag: String(r.module || 'app').toLowerCase(),
         message: r.message, // as-is (stable English event id); transport truncates at 300
     };
-    if (r.kind != null) ev.kind = r.kind;                            // pass-through (allowlisted, §3.3)
+    // DOMAIN discriminator (matches @axis/app-core): NEVER ship tracker's rendering `kind`.
+    ev.kind = r.domainKind ?? RENDER_TO_DOMAIN[r.kind] ?? 'error';
     if (r.correlationId != null) ev.corr = String(r.correlationId);  // key OMITTED when absent
     const err = r.error;
     if (err != null) {
@@ -154,6 +196,13 @@ export function mapRecordToEvent(record) {
         if (code != null) ev.err_code = String(code);
         const stack1 = firstStackFrame(err.stack);
         if (stack1 !== undefined) ev.stack1 = stack1;                // transport truncates at 400
+        // Extended stack (fix 3): top-5 frames, each scrubbed, joined by newline, total cap 1500.
+        // Shipped IN ADDITION to stack1 (which stays the single-frame query field) — parity with
+        // every other client so tracker render crashes carry the full stack, not one frame.
+        const frames = topFrames(err.stack, 5);
+        if (frames.length > 0) ev.stack = frames.map((f) => scrubMessage(f)).join('\n').slice(0, STACK_MAXLEN);
+        // error.message ships ONLY scrubbed, as err_msg (D2) — single source scrubMessage from @axis/app-core
+        if (typeof err.message === 'string' && err.message !== '') ev.err_msg = scrubMessage(err.message);
     }
     const ctx = r.context;
     if (ctx != null && typeof ctx === 'object') {
@@ -163,6 +212,16 @@ export function mapRecordToEvent(record) {
         if (typeof ctx.totalMs === 'number' && Number.isFinite(ctx.totalMs)) ev.total_ms = ctx.totalMs;
         if (typeof ctx.step === 'number' && Number.isFinite(ctx.step)) ev.step = ctx.step;
     }
+    // React componentStack (fix 3): scrubbed, cap 1000. From context.componentStack (the canonical
+    // path, parity with the shared sink) OR — since tracker's test-locked logger.error carries no
+    // context bag — from the error object, where ErrorBoundary stamps errorInfo.componentStack.
+    const rawComponentStack =
+        (ctx != null && typeof ctx === 'object' && typeof ctx.componentStack === 'string' && ctx.componentStack !== '')
+            ? ctx.componentStack
+            : (err != null && typeof err === 'object' && typeof err.componentStack === 'string' && err.componentStack !== '')
+                ? err.componentStack
+                : undefined;
+    if (rawComponentStack !== undefined) ev.component_stack = scrubComponentStack(rawComponentStack, COMPONENT_STACK_MAXLEN);
     return ev;
 }
 

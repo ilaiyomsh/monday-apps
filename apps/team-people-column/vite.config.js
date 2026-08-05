@@ -24,7 +24,12 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: false,
+    // Emit sourcemaps as SEPARATE .map files WITHOUT the //# sourceMappingURL
+    // comment ('hidden') so CI can archive them for stack symbolication
+    // (axiom-sre scripts/symbolicate) while the browser never fetches them.
+    // The deploy workflow archives + deletes dist/**/*.map before code:push.
+    // See docs/LOGGING-ARCHITECTURE.md §6.
+    sourcemap: 'hidden',
     rollupOptions: {
       output: {
         // Stable vendor chunks: the dialog iframe reloads on every cell click,
@@ -45,7 +50,7 @@ export default defineConfig({
     global: 'globalThis',
     // Version layer (docs/monday-cicd-spec.md): package.json is the source of
     // truth; CI injects the commit SHA (draft) and the release flag (live).
-    // __APP_VERSION__ also stamps remote error records (utils/axiomErrorSink.js).
+    // __APP_VERSION__ also stamps remote error records (index.jsx's attachAxiomSink wiring).
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_SHA__: JSON.stringify(process.env.VITE_BUILD_SHA ?? 'local'),
     __IS_RELEASE__: JSON.stringify(process.env.VITE_IS_RELEASE === 'true'),

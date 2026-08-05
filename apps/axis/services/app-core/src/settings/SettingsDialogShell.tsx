@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { Logger } from '../logger';
 import './SettingsDialogShell.css';
 
 /**
@@ -50,15 +51,24 @@ export interface SettingsDialogShellProps<T extends object> {
   tabs: SettingsTabDef<T>[];
   title?: string;
   validate?: (draft: T) => Record<string, string>;
-  labels?: { save?: string; cancel?: string; export?: string; import?: string; invalid?: string };
+  labels?: { save?: string; cancel?: string; export?: string; import?: string; invalid?: string; saveError?: string };
   allowExportImport?: boolean;
+  /**
+   * Logger for save failures (standard #6/error-guard). Optional — defaults to a
+   * no-op so app-core stays usable without wiring one, but every real consumer
+   * should pass its app logger so save failures ship as ERROR records.
+   */
+  logger?: Pick<Logger, 'error'>;
 }
 
+const noopLogger: Pick<Logger, 'error'> = { error: () => undefined };
+
 export function SettingsDialogShell<T extends object>(props: SettingsDialogShellProps<T>) {
-  const { isOpen, onClose, settings, onSave, tabs, title = 'Settings', validate, labels = {}, allowExportImport } = props;
+  const { isOpen, onClose, settings, onSave, tabs, title = 'Settings', validate, labels = {}, allowExportImport, logger = noopLogger } = props;
   const [draft, setDraft] = useState<T>(settings);
   const [activeId, setActiveId] = useState<string>(tabs[0]?.id);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // reset draft each time the dialog opens
@@ -66,6 +76,7 @@ export function SettingsDialogShell<T extends object>(props: SettingsDialogShell
     if (isOpen) {
       setDraft(settings);
       setActiveId(tabs[0]?.id);
+      setSaveError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -87,9 +98,20 @@ export function SettingsDialogShell<T extends object>(props: SettingsDialogShell
   const handleSave = async () => {
     if (!isValid || saving) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const ok = await onSave(draft);
       if (ok) onClose();
+    } catch (err) {
+      // The app's own onSave may already have caught + displayed a known domain
+      // error (e.g. day-off's PersonalTypeInUseError) and returned false instead
+      // of throwing — that path never reaches here, so there is no double
+      // display. Anything that DOES throw is unexpected: log it (the logger's
+      // own log-once dedup keeps an already-logged/shipped error, e.g. a
+      // MondayApiError from the API funnel, from double-shipping) and surface
+      // one inline banner without closing the dialog.
+      logger.error('SettingsDialogShell', 'save failed', err);
+      setSaveError(labels.saveError ?? 'Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -166,7 +188,11 @@ export function SettingsDialogShell<T extends object>(props: SettingsDialogShell
         </div>
 
         <footer className="axsd-footer">
-          {!isValid && <span className="axsd-invalid">{labels.invalid ?? 'Fix the highlighted fields'}</span>}
+          {saveError ? (
+            <span className="axsd-save-error" role="alert">{saveError}</span>
+          ) : (
+            !isValid && <span className="axsd-invalid">{labels.invalid ?? 'Fix the highlighted fields'}</span>
+          )}
           <button className="axsd-btn axsd-btn--secondary" onClick={onClose} type="button">
             {labels.cancel ?? 'Cancel'}
           </button>

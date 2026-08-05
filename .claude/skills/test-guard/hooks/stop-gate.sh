@@ -85,6 +85,14 @@ build_index() {
     if [ -n "$tp" ]; then PATH_KEYS+=("$tp"); PATH_DIRS+=("$d"); fi
     as=""; [ -f "$d/armed.src" ] && IFS= read -r as < "$d/armed.src" 2>/dev/null
     if [ -n "$as" ]; then ARMED_KEYS+=("$as"); ARMED_DIRS+=("$d"); fi
+    # Every source this gate has KILLED a mutation in, not just the last one armed
+    # (amendment 11 — closes known gap 9: one test file gating several modules used to
+    # lose the mapping for all but the last, reporting DONE modules as untracked).
+    if [ -f "$d/gated-srcs.txt" ]; then
+      while IFS= read -r as; do
+        [ -n "$as" ] && { ARMED_KEYS+=("$as"); ARMED_DIRS+=("$d"); }
+      done < "$d/gated-srcs.txt"
+    fi
   done
 }
 
@@ -181,6 +189,19 @@ uncovered_desc() {
   echo "tracked, no DONE verdict"
 }
 
+# --- informational Stop context (never blocks) --------------------------------
+# Same shape the loop-guard yield uses (§4.3 step 5): additionalContext only, no
+# `decision`, so the stop proceeds. Kept as one helper so both callers agree.
+emit_context() { # $1 = message
+  if command -v jq >/dev/null 2>&1; then
+    jq -n --arg c "$1" \
+      '{hookSpecificOutput:{hookEventName:"Stop",additionalContext:$c}}'
+  else
+    printf '{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"%s"}}\n' \
+      "$(json_escape "$1")"
+  fi
+}
+
 # --- shorten an abs path for display (strip cwd, then apps-root) --------------
 relpath() {
   local p="$1"
@@ -215,9 +236,21 @@ main() {
   build_index
 
   # Collect uncovered modules (§4.2 step 4 coverage rule; deduped input).
-  local uncovered="" count=0 s d verdict cov desc rp
+  local uncovered="" count=0 deleted=0 deleted_list="" s d verdict cov desc rp
   while IFS= read -r s; do
     [ -z "$s" ] && continue
+    # Amendment 13: a touched path that no longer exists on disk is NOT gated.
+    # touched.txt is append-only, so a module created and then deleted within the
+    # same session (superseded by a real in-suite test, scratch script removed)
+    # stayed listed forever with no sanctioned way out — every exit redgreen.sh
+    # offers needs the file to exist (green runs it, spotcheck-arm mutates it,
+    # waive's resolve_env stats it). A deleted module has no code left to cover,
+    # so there is nothing to gate. Paths that still exist are unaffected.
+    if [ ! -e "$s" ]; then
+      deleted=$((deleted + 1))
+      deleted_list="${deleted_list}$(relpath "$s")"$'\n'
+      continue
+    fi
     d="$(gate_dir_for_src "$s")"
     cov=0
     if [ -n "$d" ]; then
@@ -240,8 +273,19 @@ main() {
 $(sort -u "$touched")
 EOF
 
-  # All touched modules are covered/waived -> allow the stop silently.
-  [ "$count" -eq 0 ] && return 0
+  # Deleted-path skips are always REPORTED, never silent: the skip is a decision the
+  # gate made on the agent's behalf, so it belongs in the session record.
+  local deleted_note=""
+  if [ "$deleted" -gt 0 ]; then
+    deleted_note="test-guard stop-gate: skipped ${deleted} touched path(s) that no longer exist on disk (deleted this session — no code left to cover):
+${deleted_list%$'\n'}"
+  fi
+
+  # All touched modules are covered/waived (or gone) -> allow the stop.
+  if [ "$count" -eq 0 ]; then
+    [ -n "$deleted_note" ] && emit_context "$deleted_note"
+    return 0
+  fi
   uncovered="${uncovered%$'\n'}"   # trim trailing newline
 
   # --- loop guard (§3.4 / §4.3 steps 5-6) -------------------------------------
@@ -255,13 +299,9 @@ EOF
     local warn="test-guard stop-gate: allowing stop after ${C} blocks, but these modules are still not DONE/waived:
 ${uncovered}
 This is recorded, not forgiven."
-    if command -v jq >/dev/null 2>&1; then
-      jq -n --arg c "$warn" \
-        '{hookSpecificOutput:{hookEventName:"Stop",additionalContext:$c}}'
-    else
-      printf '{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"%s"}}\n' \
-        "$(json_escape "$warn")"
-    fi
+    [ -n "$deleted_note" ] && warn="${warn}
+${deleted_note}"
+    emit_context "$warn"
     return 0
   fi
 
@@ -272,6 +312,8 @@ This is recorded, not forgiven."
   local reason="test-guard stop-gate (block $((C + 1))/${MAX}): touched modules without DONE verdict or waiver:
 ${uncovered}
 Finish the gate (redgreen.sh green / spotcheck-arm+fire until >=2 KILLED) or record an objective waiver: redgreen.sh waive <test-file> \"reason\". After ${MAX} blocks the gate yields with a warning."
+  [ -n "$deleted_note" ] && reason="${reason}
+${deleted_note}"
 
   if command -v jq >/dev/null 2>&1; then
     jq -n --arg r "$reason" '{decision:"block",reason:$r}'

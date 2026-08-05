@@ -37,6 +37,27 @@ jobs:
         if: github.base_ref == 'main'
         run: bash scripts/release-guard.sh
 
+  # test-guard's own enforcement layer, verified against fixtures (the skill's
+  # hooks-contract.md §5). The stop gate is what physically holds a session open until
+  # every touched module is DONE or waived, so a regression in it removes enforcement
+  # SILENTLY — the failure mode is a green pipeline with no gate behind it, which is
+  # exactly the class of thing this repo cannot detect by reading diffs.
+  #
+  # Its own job on purpose: the verifier needs no pnpm install and no node_modules
+  # (bash + coreutils, plus jq when present for the fallback-JSON assertions), runs in
+  # about a second, and so cannot be delayed or broken by dependency resolution.
+  test-guard-hooks:
+    name: test-guard hook fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Throwaway REDGREEN_STATE_ROOT per case — it never touches real session state.
+      # Exit 1 = a fixture failed, and the log names the failing assertion.
+      - name: Verify stop-gate fixtures
+        run: bash .claude/skills/test-guard/hooks/tests/verify-stop-gate.sh
+
   ci:
     name: type-check, lint, build
     runs-on: ubuntu-latest
@@ -58,6 +79,28 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Error-wiring audit (blocking): every client surface wires the global handlers +
+      # Axiom sink before render and has a root boundary; every server has process guards,
+      # a terminal error middleware, and an opts-injected sink. Structural, node:fs only.
+      # The audit's own structure reader is unit-tested (node:test, stdlib — the audit and its
+      # lib stay dependency-free). Runs FIRST: a broken parser would make the gate below
+      # report green on a workflow it can no longer read correctly.
+      - name: Audit lib unit tests
+        # Explicit glob, not a directory: `node --test <dir>` does not resolve a bare
+        # directory the same way across Node majors, and a silent 0-test pass is worthless.
+        run: node --test scripts/lib/*.test.mjs
+
+      - name: Error-wiring audit
+        run: node scripts/error-wiring-audit.mjs
+
+      # Forbidden-import guard: nothing on a surface's EAGER (non-lazy) module graph may
+      # import a heavy UI kit. Deliberately an invariant, not a byte budget — a threshold
+      # measures a symptom, needs the build to evaluate, and only ever ratchets upward.
+      # Static imports only, and it stops at import() by design (that is how a heavy
+      # dependency is supposed to be reached). Runs before the build; costs milliseconds.
+      - name: Eager-import audit
+        run: node scripts/lib/eager-graph.mjs
+
       - name: Type-check (skips packages with no type-check script)
         run: pnpm -r --if-present run type-check
 
@@ -66,6 +109,66 @@ jobs:
 
       - name: Build (skips packages with no build script)
         run: pnpm -r --if-present run build
+
+      # error-kit's own suite is BLOCKING (unlike the whole-workspace test job below, which is
+      # visibility-only): it carries the drift tests that guarantee the vendored server/SPA
+      # copies never diverge from the canonical shipping stack. Cheap — one package.
+      - name: error-kit tests + drift (blocking)
+        run: pnpm --filter @mapps/error-kit test
+
+  # amp4email document validation (deadline-confirm). Gmail answers a dynamic
+  # part it refuses with `INTERNAL_ERROR` — a documented catch-all with no
+  # content — so an invalid document and a rejected envelope are
+  # indistinguishable from the inbox. The official validator names the rule and
+  # the line, which is the only way to tell them apart before sending.
+  #
+  # The exit code is the contract (see apps/deadline-confirm/scripts/validate-amp.mjs):
+  #   1 = a document is INVALID → a real defect, this job FAILS.
+  #   3 = the validator itself could not be fetched (it loads from
+  #       cdn.ampproject.org) → nothing was assessed. Reported, never fatal:
+  #       failing here would couple every PR in the monorepo to an external CDN.
+  # Separate job so a CDN outage cannot stall the blocking type-check/lint/build.
+  amp4email:
+    name: amp4email document validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Invoked as plain `node`, NOT through a package-manager runner: the exit
+      # code must arrive unmodified for the 1-vs-3 distinction to survive.
+      - name: Validate rendered amp4email documents
+        run: |
+          set +e
+          node apps/deadline-confirm/scripts/validate-amp.mjs
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "✅ Every rendered amp4email sample is valid." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$code" -eq 3 ]; then
+            echo "⚠️ SKIPPED — the AMP validator could not be fetched from cdn.ampproject.org." >> "$GITHUB_STEP_SUMMARY"
+            echo "Nothing was validated; this is infrastructure, not a verdict on the documents." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "❌ A rendered amp4email document is INVALID (read the log above for rule + line)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Gmail would answer this with an opaque INTERNAL_ERROR, so do not ship it." >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
 
   # Visibility-only test job (owner decision 2026-07-12): runs the full
   # workspace test suites and reports the outcome in the job summary, but

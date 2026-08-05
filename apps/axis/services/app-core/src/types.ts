@@ -15,6 +15,10 @@ export interface MondaySdkUser {
 export interface MondaySdkContext {
   instanceId?: number;
   boardId?: number;
+  /** Present on some surfaces; when absent, MondayProvider resolves it via a one-time
+   *  `me { account { id } }` query so Axiom rows carry `acc`. */
+  account?: { id?: number | string };
+  accountId?: number | string;
   user?: MondaySdkUser;
   theme?: string;
   mode?: string;

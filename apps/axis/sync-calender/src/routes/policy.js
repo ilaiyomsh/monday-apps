@@ -14,23 +14,44 @@ const router = express.Router();
 // Any user in the same account may read the active policy (they need it to
 // understand what will be written). Returns 404 if the Custom Object has
 // not been provisioned (no lifecycle create has fired yet).
-router.get('/api/policy', sessionTokenMiddleware, loadPolicyWithAccountGuard, async (req, res) => {
-  if (!req.policy) return res.status(404).json({ error: 'policy_not_found' });
-  const isOwner = await isPolicyOwner({
-    policy: req.policy,
-    userId: req.session.userId,
-    accountId: req.session.accountId,
-  });
-  const setupComplete = Boolean(req.policy.boardId && req.policy.linkColumnId && req.policy.lockColumnId);
-  return res.json({
-    policy: req.policy,
-    isOwner,
-    setupComplete,
-    // Feature flags computed from server env. Frontend uses microsoftEnabled
-    // to decide whether to render the Connect Outlook button.
-    microsoftEnabled: isMicrosoftEnabled(),
-  });
-});
+//
+// Exported for unit tests. The body await (isPolicyOwner) can reject — a raw
+// rejection here previously became an unhandled promise rejection (no local
+// try/catch, and there was no terminal error middleware). Wrapped so the failure
+// ships and the caller gets a 500 instead of a hung request.
+export async function getPolicyHandler(req, res) {
+  try {
+    if (!req.policy) return res.status(404).json({ error: 'policy_not_found' });
+    const isOwner = await isPolicyOwner({
+      policy: req.policy,
+      userId: req.session.userId,
+      accountId: req.session.accountId,
+    });
+    const setupComplete = Boolean(req.policy.boardId && req.policy.linkColumnId && req.policy.lockColumnId);
+    return res.json({
+      policy: req.policy,
+      isOwner,
+      setupComplete,
+      // Feature flags computed from server env. Frontend uses microsoftEnabled
+      // to decide whether to render the Connect Outlook button.
+      microsoftEnabled: isMicrosoftEnabled(),
+    });
+  } catch (err) {
+    logger.error('error', TAG, {
+      ...buildAccountCtx({
+        accountId: req.policy?.accountId,
+        userId: req.session?.userId,
+        objectId: req.policy?.objectId,
+      }),
+      stage: 'policy_get',
+      cause: err.message,
+      error: err,
+    });
+    return res.status(500).json({ error: 'policy_get_failed' });
+  }
+}
+
+router.get('/api/policy', sessionTokenMiddleware, loadPolicyWithAccountGuard, getPolicyHandler);
 
 // PATCH /api/policy
 // body: { objectId, boardId, linkColumnId, lockColumnId, peopleColumnId?, itemNameSource?, columnMapping }

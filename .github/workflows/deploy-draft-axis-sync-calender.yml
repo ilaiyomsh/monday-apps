@@ -45,9 +45,39 @@ jobs:
 
       - name: Build axis-sync-calender
         # Version layer: stamp the exact commit into the bundle (__BUILD_SHA__).
+        # Axiom error sink: bake the shared error dataset + ingest token + app slug into the
+        # client bundle (error-guard remote-monitoring standard). The sink self-gates on
+        # import.meta.env.PROD, so it stays inert in dev/tunnel/test builds.
         env:
           VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: sync-calender-admin
         run: pnpm --filter "./apps/axis/sync-calender" build
+
+      # The admin CLIENT bundle ('hidden' sourcemaps) is served to browsers, so its
+      # maps must NEVER reach the deploy — archive them keyed by commit SHA, then
+      # strip them from public/admin before code:push. (Server runs from source and
+      # is already readable — not symbolicated.) Pull with:
+      #   .claude/skills/axiom-sre/scripts/symbolicate '<frame>' --app sync-calender --ver <x.y.z+sha>
+      - name: Archive client sourcemaps as build artifact (for stack symbolication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-sync-calender-${{ github.sha }}
+          path: apps/axis/sync-calender/public/admin/**/*.map
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Strip client sourcemaps before deploy (never ship .map to the browser)
+        run: |
+          set -euo pipefail
+          find apps/axis/sync-calender/public/admin -name '*.map' -type f -delete
+          remaining="$(find apps/axis/sync-calender/public/admin -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining client .map files: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::client sourcemaps still present — refusing to push (would leak source)"
+            exit 1
+          fi
 
       - name: Install monday.com apps CLI
         run: npm install -g @mondaycom/apps-cli

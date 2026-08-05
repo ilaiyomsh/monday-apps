@@ -105,6 +105,9 @@ export async function loadConfigWithAccountGuard(req, res, next) {
     req.config = config;
     next();
   } catch (err) {
+    logger.warn('config_account_guard_failed', 'authz', {
+      cfg: req.params?.configId, acc: req.session?.accountId, cause: err.message,
+    });
     return res.status(500).json({ error: 'authz_failure', message: err.message });
   }
 }
@@ -140,6 +143,9 @@ export async function requirePolicyOwnership(req, res, next) {
     req.policy = policy;
     next();
   } catch (err) {
+    logger.warn('policy_ownership_guard_failed', 'authz', {
+      obj: req.query?.objectId || req.body?.objectId, acc: req.session?.accountId, cause: err.message,
+    });
     return res.status(500).json({ error: 'authz_failure', message: err.message });
   }
 }
@@ -161,6 +167,9 @@ export async function loadPolicyWithAccountGuard(req, res, next) {
     req.policy = policy;
     next();
   } catch (err) {
+    logger.warn('policy_account_guard_failed', 'authz', {
+      obj: req.query?.objectId || req.body?.objectId, acc: req.session?.accountId, cause: err.message,
+    });
     return res.status(500).json({ error: 'authz_failure', message: err.message });
   }
 }

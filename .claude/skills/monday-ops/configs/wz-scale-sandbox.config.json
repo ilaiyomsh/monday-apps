@@ -1,0 +1,25 @@
+{
+  "_doc": "High-scale sandbox setup for axis load testing (30+ users / dozens of projects / thousands of time reports). HARD-BOUND to the agent sandbox workspace — seed-scale.py refuses any other workspaceId. Boards carry the WZ- scratch prefix per repo golden rule 4. Driven by .github/workflows/scale-seed-sandbox.yml.",
+  "workspaceId": "16291824",
+  "demoName": "WZ-SCALE",
+  "outDir": "sandbox-out/wz-scale",
+  "structure": "portfolio_full",
+  "options": { "customers": false, "projectStructure": false, "routine": false },
+  "stages": ["תכנון", "ביצוע", "פיקוח", "מסירה"],
+  "boards": {
+    "portfolio":   { "mode": "create", "name": "WZ-SCALE תיק פרויקטים" },
+    "timeLogs":    { "mode": "create", "name": "WZ-SCALE דיווחי שעות" },
+    "allocations": { "mode": "create", "name": "WZ-SCALE הקצאות" },
+    "employees":   { "mode": "create", "name": "WZ-SCALE עובדים" }
+  },
+  "seedScale": {
+    "projects": 40,
+    "employees": 30,
+    "months": 3,
+    "allocationsPerProject": 6,
+    "blocksPerDay": 2,
+    "hoursPerBlock": 4,
+    "batchSize": 10,
+    "sleepBetweenBatches": 0.6
+  }
+}

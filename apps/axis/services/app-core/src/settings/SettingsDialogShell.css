@@ -215,6 +215,13 @@
   color: var(--color-danger, #e2445c);
 }
 
+.axsd-save-error {
+  margin-inline-end: auto;
+  font-size: 13px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--color-danger, #e2445c);
+}
+
 .axsd-btn {
   padding: var(--spacing-md, 12px) var(--spacing-2xl, 24px);
   border: none;

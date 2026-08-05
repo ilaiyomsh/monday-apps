@@ -8,9 +8,12 @@
 
 set -euo pipefail
 
-MAPPSRC="$HOME/.config/mapps/.mappsrc"
+MAPPSRC="${MAPPSRC:-$HOME/.config/mapps/.mappsrc}"
+if [[ ! -f "$MAPPSRC" && -n "${LOCALAPPDATA:-}" && -f "$LOCALAPPDATA/mapps/.mappsrc" ]]; then
+  MAPPSRC="$LOCALAPPDATA/mapps/.mappsrc"
+fi
 if [[ ! -f "$MAPPSRC" ]]; then
-  echo "Error: .mappsrc not found. Run 'mapps init -t <TOKEN>' first." >&2
+  echo "Error: .mappsrc not found in the Unix or Windows mapps config directory. Run 'mapps init -t <TOKEN>' first." >&2
   exit 1
 fi
 
@@ -18,28 +21,23 @@ QUERY="$1"
 VARIABLES="${2:-}"
 API_VERSION="${3:-2026-04}"
 
-# Python builds the JSON payload and extracts the token.
+# Node.js builds the JSON payload and extracts the token.
 # Line 1 = token, Line 2 = JSON payload.
-# All user input passed via sys.argv — no bash interpolation into Python code.
-OUTPUT=$(python3 -c "
-import json, sys
+# All user input is passed via argv — no bash interpolation into JavaScript.
+OUTPUT=$(node -e '
+const fs = require("fs");
+const config = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const rawVariables = process.argv[3] || "";
+const payload = { query: process.argv[2] };
+if (rawVariables) payload.variables = JSON.parse(rawVariables);
+process.stdout.write(`${config.accessToken}\n${JSON.stringify(payload)}\n`);
+' "$MAPPSRC" "$QUERY" "$VARIABLES")
 
-with open(sys.argv[1]) as f:
-    token = json.load(f)['accessToken']
-
-query = sys.argv[2]
-raw_vars = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else ''
-
-payload = {'query': query}
-if raw_vars:
-    payload['variables'] = json.loads(raw_vars)
-
-print(token)
-print(json.dumps(payload))
-" "$MAPPSRC" "$QUERY" "$VARIABLES")
-
-TOKEN=$(echo "$OUTPUT" | head -1)
-PAYLOAD=$(echo "$OUTPUT" | tail -1)
+# Split "token\npayload" with parameter expansion only — macOS ships bash 3.2,
+# which has no `mapfile` (it failed with "mapfile: command not found", making
+# every API call through this script a no-op on a stock mac).
+TOKEN="${OUTPUT%%$'\n'*}"
+PAYLOAD="${OUTPUT#*$'\n'}"
 
 curl -s -X POST \
   -H "Authorization: $TOKEN" \

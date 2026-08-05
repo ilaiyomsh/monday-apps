@@ -1,0 +1,72 @@
+// SYNCED COPY — canonical source: .claude/skills/error-guard/templates/. Fix defects THERE first (error-guard SKILL.md §Self-correction rule 4), then re-sync consumers.
+/**
+ * processGuards.js — process-level nets: the LAST catch mechanisms.
+ *
+ * Policy (error-guard references/server-patterns.md): an uncaughtException or
+ * unhandledRejection means the process is in an unknown state — log once, flush
+ * remote sinks, then EXIT (the platform restarts the container). Never `return to
+ * normal operation` from these handlers; limping on with corrupted state produces
+ * the false-success failures this skill exists to end.
+ *
+ * SIGTERM/SIGINT get a graceful path: flush sinks, close the server, exit 0.
+ *
+ * Usage (once, at the top of the server entry, BEFORE anything else can throw):
+ *   import logger from './logger.js';
+ *   import { flushAxiom } from './axiomServerSink.js';
+ *   import { installProcessGuards } from './processGuards.js';
+ *   installProcessGuards(logger, { flush: flushAxiom });
+ *   ...
+ *   const server = app.listen(port, ...);
+ *   setGracefulServer(server);   // optional: lets SIGTERM close in-flight requests
+ */
+
+const EXIT_DELAY_MS = 2_000; // hard ceiling on flush time — never hang a dying process
+
+let installed = false;
+let gracefulServer = null;
+
+export function setGracefulServer(server) {
+  gracefulServer = server;
+}
+
+export function installProcessGuards(logger, { flush } = {}) {
+  if (installed) return;
+  installed = true;
+
+  const flushAndExit = (code) => {
+    // Belt and suspenders: exit even if flush hangs.
+    const timer = setTimeout(() => process.exit(code), EXIT_DELAY_MS);
+    timer.unref?.();
+    Promise.resolve()
+      .then(() => (typeof flush === 'function' ? flush() : undefined))
+      .catch(() => {})
+      .then(() => process.exit(code));
+  };
+
+  process.on('uncaughtException', (err) => {
+    try {
+      logger.error('uncaught_exception', 'process', { error: err });
+    } catch { /* logging must not block the exit path */ }
+    flushAndExit(1);
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    try {
+      logger.error('unhandled_rejection', 'process', { error: err });
+    } catch { /* logging must not block the exit path */ }
+    flushAndExit(1);
+  });
+
+  const onSignal = (signal) => () => {
+    try {
+      logger.info('shutdown_signal', 'process', { signal });
+    } catch { /* proceed to exit regardless */ }
+    if (gracefulServer?.close) {
+      try { gracefulServer.close(); } catch { /* in-flight close is best-effort */ }
+    }
+    flushAndExit(0);
+  };
+  process.on('SIGTERM', onSignal('SIGTERM'));
+  process.on('SIGINT', onSignal('SIGINT'));
+}

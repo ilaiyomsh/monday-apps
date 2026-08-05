@@ -3,6 +3,7 @@ import { apiFetch, ApiError } from '../services/api';
 import type { Policy, PolicyResponse } from '../types';
 import { deriveSetupProgress } from '../lib/setupProgress';
 import { normalizeColumnMapping } from '../lib/mappingEntry';
+import logger from '../lib/logger';
 
 function normalizePolicy(p: Policy): Policy {
   return { ...p, columnMapping: normalizeColumnMapping(p.columnMapping) };
@@ -30,11 +31,14 @@ export function usePolicy(objectId: string, tokenReady: boolean) {
       setMicrosoftEnabled(Boolean(res.microsoftEnabled));
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
+        // 404 = no policy configured yet (a normal first-run state, not a failure).
         setPolicy(null);
         setIsOwner(false);
         setSetupComplete(false);
         setMicrosoftEnabled(false);
       } else {
+        // A real policy-load failure: ship it (was display-only) AND surface it to the owner.
+        logger.error('usePolicy', 'policy_load_failed', err instanceof Error ? err : new Error(String(err)));
         setError((err as Error).message);
         setSetupComplete(false);
       }

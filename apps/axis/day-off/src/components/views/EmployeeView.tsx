@@ -5,6 +5,8 @@
    Data via useDayOffData(); dates via useL10n().
    ============================================================ */
 import { useState, type CSSProperties } from 'react';
+import { useViewTracking } from '@axis/app-core';
+import { logger } from '../../core';
 import { useDayOffData } from '../../contexts/DayOffDataProvider';
 import { useL10n } from '../../domain/useL10n';
 import { absenceTypeMeta, TYPE_ORDER, reqWorkdayKeysInYear } from '../../domain/absence';
@@ -174,6 +176,7 @@ interface EmployeeViewProps {
 }
 
 export function EmployeeView({ onNewRequest, onOpenRequest, onAddOnDay }: EmployeeViewProps) {
+  useViewTracking(logger, 'mine');
   const { t } = useL10n();
   const { currentUser, monthDate, nav, year, years, onYearChange, requests, holidaysOnKey, loading } = useDayOffData();
   const [scope, setScope] = useState<StatScope>('month');

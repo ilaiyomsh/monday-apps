@@ -1,6 +1,6 @@
 {
   "name": "team-people-column",
-  "version": "2.1.3",
+  "version": "2.2.0",
   "description": "Monday.com column_view App",
   "type": "module",
   "scripts": {
@@ -28,7 +28,8 @@
     "monday-sdk-js": "^0.5.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-error-boundary": "^4.1.2"
+    "react-error-boundary": "^4.1.2",
+    "@mapps/error-kit": "workspace:*"
   },
   "devDependencies": {
     "@mondaycom/apps-cli": "^4.7.4",
@@ -120,8 +121,6 @@
       {
         "files": [
           "src/hooks/useUiErrorSink.js",
-          "src/utils/axiomErrorSink.js",
-          "src/utils/axiomBrowserTransport.js",
           "vite.config.js"
         ],
         "rules": {

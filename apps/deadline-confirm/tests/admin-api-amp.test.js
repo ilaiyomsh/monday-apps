@@ -158,14 +158,18 @@ describe('GET /api/digest/preview — amp4email part', () => {
     expect(res.body.amp).not.toContain(`value="${SECRET}"`);
   });
 
-  it('wires one hidden item_<itemId> per pending task (amp-bind dropdown value)', async () => {
+  // One form per ROW since 2026-08-04: the selection rides a radio the form
+  // serializes itself, not a hidden input bound to dd.v<id> (that binding raced
+  // the immediate submit), and the row is a card, so there is no <th>.
+  it('wires a radio per pending task inside that task\u2019s own row form', async () => {
     const res = await preview(harness());
 
-    expect(res.body.amp).toContain('name="item_9001" value="" [value]="dd.v9001"');
+    expect(res.body.amp).toMatch(/<input type="radio" class="pick" name="item_9001" value="[^"]+"/);
+    expect(res.body.amp).not.toContain('[value]="dd.v9001"');
     expect(res.body.amp).toContain('class="dd-trig');
     expect(res.body.amp).toContain('גיבוש תכנית עבודה');
     expect(res.body.amp).toContain('תאריך התחלה מתוכנן');
-    expect(res.body.amp).toMatch(/<th class="status-h">[^<]*סטטוס/);
+    expect(res.body.amp).toMatch(/<span class="row-cap">[^<]*סטטוס/);
     expect(res.body.amp).not.toContain('סטטוס חדש');
   });
 

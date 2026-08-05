@@ -26,6 +26,57 @@ is allowed ONLY for shapes listed here, with a comment naming the entry.
 
 ## Defect log
 
+### 2026-07-21 — check.sh/audit.sh ported to ESLint 9 flat config (FIXED)
+- **Trigger:** the scripts were written for the ESLint-8 eslintrc engine
+  (`--no-eslintrc --config <json> --resolve-plugins-relative-to`). The repo runs
+  ESLint 9 (flat config default), which removed those flags. A prior stopgap
+  forced eslintrc mode with `ESLINT_USE_FLAT_CONFIG=false` — but that env var and
+  the entire eslintrc engine are removed in ESLint 10, and the borrow logic
+  depended on each consumed app carrying `eslint-plugin-promise` /
+  `@typescript-eslint/parser` locally (most do NOT), so the promise + TS rules
+  silently dropped per app. Documented as the fails-open gap in
+  `docs/ERROR-AXIOM-STANDARD.md §Enforcement`.
+- **Fix:** both scripts now generate a flat config (`eslint.config.mjs` in a temp
+  dir) from the same `templates/eslint-error-rules.json` rule intents, via a new
+  shared engine `scripts/lib-eslint-flat.sh` (the two scripts drifting apart is
+  what let this survive — one engine now). Removed flags: `--no-eslintrc`,
+  `--resolve-plugins-relative-to`, `ESLINT_USE_FLAT_CONFIG=false`. Plugins now
+  resolve from the **repo root** (added as root devDependencies:
+  `eslint`, `eslint-plugin-promise`, `@typescript-eslint/parser`,
+  `@typescript-eslint/eslint-plugin`, `typescript`), so the full kit runs
+  uniformly regardless of the target app's own install. ESLint is run with cwd =
+  repo root (flat config only lints files under its base path) and
+  `--no-config-lookup --config` so the app's own eslint.config is ignored.
+- **TS handling:** `.ts/.tsx` files are parsed with `@typescript-eslint/parser`
+  and get the syntax kit in BOTH modes. Type-aware `no-floating-promises`
+  (`ignoreVoid:false`) is added in `audit.sh` full-tree mode only (gated on a
+  tsconfig + the TS plugin, best-effort with a syntax-only retry on
+  project-service error) — too heavy for the per-edit hook. This is the
+  documented degraded mode (`references/eslint-rules.md`).
+- **Red-gated:** scratch file with (a) empty catch and (b) console-only catch →
+  check.sh exits 1 reporting `no-empty` + `no-restricted-syntax` + `no-console`;
+  full hook exits 2 with the remediation; `.mutbak` interop still skips.
+  `audit.sh` on `apps/team-people-column` passes (0 HIGH); on a TS app the
+  type-aware pass flags real floating promises. Per-file latency ~0.65s (JS) /
+  ~0.74s (TS). `pnpm -r --if-present type-check` green after the devDep install.
+- **NOTE (ESLint 10):** the eslintrc removal that motivated this is now handled —
+  the scripts are flat-config native. The old "migrate before v10" warning is
+  resolved.
+
+### 2026-07-27 — audit.sh failed on Windows Git Bash (FIXED)
+- **Trigger:** auditing a fresh column-view scaffold from a Git worktree.
+  `resolve_module` passed an MSYS `/c/...` path inside JavaScript, so
+  `eslint-plugin-promise` was reported missing even though it was installed;
+  the script then crashed because `jq` was not installed.
+- **Fix at source:** module resolution now runs with the app as Node's working
+  directory, and all JSON config/report processing uses Node.js instead of
+  `jq`. This keeps the audit self-contained on Windows and Unix.
+- **Consumer checked:** `twyst-your-status` standalone scaffold.
+- **Carried into the flat-config engine (2026-07-28):** the ESLint-9 port landed on a
+  branch cut before this fix; `eg_resolve_module` and `eg_gen_config`
+  (`scripts/lib-eslint-flat.sh`) plus audit.sh's retry check were re-done in Node so
+  the jq-free, MSYS-safe behaviour survives the merge.
+
 ### 2026-07-14 — check.sh false positive on foreign inline eslint-disable (FIXED)
 - **Trigger:** editing `DatePickerPopover.jsx`, which carries an
   `eslint-disable-next-line react-hooks/exhaustive-deps` comment, tripped the
@@ -101,3 +152,29 @@ is allowed ONLY for shapes listed here, with a comment naming the entry.
 - **Trigger:** pilot agent reported the runbook/SKILL still described
   `check.sh`/`audit.sh` as not yet existing while using them as the acceptance gate.
 - **Fix:** wording removed from SKILL.md + retrofit-runbook.md same session.
+
+## Hook union selector misses the server `logError` convention (2026-07-19) — FIXED 2026-07-27
+
+`scripts/check.sh`'s UNION_SELECTOR previously accepted only `logger.*` member calls,
+`throw`, `showErrorWithDetails`, or `next(err)` inside a catch. deadline-confirm's
+server convention is the named import `logError(tag, msg, ctx)` from
+`helpers/logger.js` — semantically the same funnel — so the PostToolUse hook
+flagged EVERY such catch as a false positive. **Fix:** the selector now also allows
+`CallExpression[callee.name='logError']`. It lives in `EG_UNION_SELECTOR`
+(`scripts/lib-eslint-flat.sh`) since the ESLint-9 flat-config port folded check.sh's
+and audit.sh's copies into one engine.
+
+### 2026-07-21 — False positive: `.ts` vendored transport not exempt (FIXED)
+- **Trigger:** re-vendoring the hardened browser transport into
+  `apps/telemetry-dashboard/src/client/utils/axiomBrowserTransport.ts` (a `.ts`
+  SPA copy) tripped the PostToolUse hook — `no-console` on the `crumb()`
+  breadcrumb and `catch-must-log`/`no-empty` on the transport's intentional
+  "never throws to the caller" exit-path catches.
+- **Root cause:** `eg_should_skip` (`scripts/lib-eslint-flat.sh`) exempted only
+  `axiomBrowserTransport.js` — the pure-client `.js` template — but the embedded
+  SPA copies and the canonical `packages/error-kit/src/browser/axiomTransport.ts`
+  are `.ts`. The intent was always to exempt the transport as sanctioned infra;
+  the list just missed the `.ts` variants (same gap for `processGuards.ts`).
+- **Fix:** exemption extended to `axiomBrowserTransport.ts` / `axiomTransport.ts`
+  / `processGuards.ts` / `process-guards.ts`. Behavior of the rule kit is
+  otherwise unchanged; `*Sink*` already covered every error/server sink file.

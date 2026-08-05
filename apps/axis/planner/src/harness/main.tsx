@@ -171,7 +171,7 @@ function Harness() {
     scrollLeft: 0, setScrollLeft() {}, scrollTop: 0, setScrollTop() {}, containerWidth: 1400,
     visibleDayRange: { startIndex: 0, endIndex: DAYS, offsetLeft: 0 },
     sidebarWidth: 360, setSidebarWidth() {}, saveSidebarWidth() {},
-    updateTask() {}, addAllocation: async () => {}, deleteAllocation() {}, pendingDelete: null, undoDelete() {},
+    updateTask: async () => {}, addAllocation: async () => {}, deleteAllocation() {}, pendingDelete: null, undoDelete() {},
     showToast() {}, openModal() {}, openBulkModal() {}, bulkUpdateAllocationPM: async () => {}, patchProjectData() {},
     containerRef, forceShownProjects: new Map(), addForceShownProject() {}, absencesLoading: false,
     availability: {}, holidaysByDate: new Map(), projectMetrics, projectMetricsReady: true,
@@ -181,7 +181,7 @@ function Harness() {
 
   useEffect(() => {
     ;(window as any).__measure = measure
-    const t = setTimeout(() => console.log('[HARNESS_MEASURE] ' + JSON.stringify(measure())), 700)
+    const t = setTimeout(() => console.info('[HARNESS_MEASURE] ' + JSON.stringify(measure())), 700)
     return () => clearTimeout(t)
   }, [])
 

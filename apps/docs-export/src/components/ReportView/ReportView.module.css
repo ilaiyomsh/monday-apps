@@ -1,0 +1,87 @@
+/*
+ * The surface's own layout. Logical properties throughout (see
+ * RangeToggle.module.css for why direction-relative CSS is mandatory here).
+ */
+
+.root {
+  /* The board view gets the full iframe width; the controls are a narrow column,
+     so cap the reading width instead of stretching a 3-control form across 2000px. */
+  width: 100%;
+  max-width: 720px;
+  padding: var(--content-gutter, 16px);
+  box-sizing: border-box;
+
+  /* Centre the capped column in the iframe. `margin-inline` (not `margin-left/right`)
+     so it stays centred under both dir=rtl and dir=ltr — without this the column has
+     no auto margin and collapses onto whichever edge is the block's start, leaving a
+     narrow form stranded against one side of a very wide board view. */
+  margin-inline: auto;
+
+  /* The CONTROLS stay start-aligned inside the column (the Flex sets align=start);
+     only the column itself is centred. Centre-aligning individual form rows would
+     make the labels and their fields drift apart from each other. */
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.gear {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 6px;
+  border-radius: var(--border-radius-small, 4px);
+  color: var(--icon-color, #676879);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gear:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.gear:focus-visible {
+  outline: 2px solid var(--primary-color, #0073ea);
+  outline-offset: 1px;
+}
+
+.errorBlock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px;
+  border-radius: var(--border-radius-small, 4px);
+  /* Tinted rather than loud: the failure is recoverable and the retry is right
+     there, so this is not an alarm. */
+  background: var(--negative-color-selected, #fff5f5);
+  border: 1px solid var(--negative-color, #d83a52);
+}
+
+.retry {
+  appearance: none;
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 16px;
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+}
+
+.retry:hover {
+  border-color: var(--primary-color, #0073ea);
+}
+
+.retry:focus-visible {
+  outline: 2px solid var(--primary-color, #0073ea);
+  outline-offset: 1px;
+}

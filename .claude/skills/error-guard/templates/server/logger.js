@@ -190,6 +190,33 @@ const emit = (record) => {
 };
 
 // ============================================
+// encodeDims — usage/health message encoder (D4)
+// ============================================
+
+/**
+ * Fold categorical/measured dims into a stable, queryable message suffix:
+ * `base key1=v1 key2=v2` with keys sorted. Only string/bool/finite-number values are
+ * included (objects, functions, NaN/Infinity dropped) so the shipped message stays flat
+ * and APL-parseable. Used by track()/health() to encode usage/health dims (D4). Identical
+ * spec across app-core, the client template, and this server template (single wire format).
+ *
+ * @param {string} base - the event/signal name
+ * @param {Object} [dims] - categorical/measured dims
+ * @returns {string}
+ */
+export function encodeDims(base, dims) {
+  if (!dims) return base;
+  const parts = [];
+  for (const key of Object.keys(dims).sort()) {
+    const v = dims[key];
+    if (typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) {
+      parts.push(`${key}=${v}`);
+    }
+  }
+  return parts.length ? `${base} ${parts.join(' ')}` : base;
+}
+
+// ============================================
 // Public API
 // ============================================
 
@@ -215,14 +242,42 @@ const logger = {
   info: makeLevelFn('INFO'),
   debug: makeLevelFn('DEBUG'),
 
-  /** Express access-log helpers (used by request-logger middleware). */
+  /**
+   * track — usage telemetry (D3): an INFO record, domainKind 'usage', alwaysShip:true, so it
+   * reaches the Axiom sink regardless of the WARN/ERROR ship policy. Dims fold into the message
+   * via encodeDims (D4). Emits directly (bypasses the level-gate early-return in makeLevelFn).
+   * @param {string} event - stable event id
+   * @param {Object} [dims] - categorical/measured dims folded into the message
+   */
+  track: (event, dims) => emit({
+    level: 'INFO', tag: 'usage', message: encodeDims(event, dims),
+    domainKind: 'usage', alwaysShip: true, consoleEnabled: currentLevel >= LOG_LEVELS.INFO
+  }),
+
+  /**
+   * health — health signal (D5): an INFO record, domainKind 'health', alwaysShip:true.
+   * Metrics fold into the message via encodeDims (D4).
+   * @param {string} signal - stable signal id
+   * @param {Object} [metrics] - measured metrics folded into the message
+   */
+  health: (signal, metrics) => emit({
+    level: 'INFO', tag: 'health', message: encodeDims(signal, metrics),
+    domainKind: 'health', alwaysShip: true, consoleEnabled: currentLevel >= LOG_LEVELS.INFO
+  }),
+
+  /**
+   * Express access-log helpers (used by request-logger middleware).
+   * PRIVACY: log req.path, NOT req.originalUrl — the latter carries the query string,
+   * which can hold tokens/emails; a 4xx/5xx access log would then ship them via the
+   * sink's `url` allowlist. req.path is the route only, safe to ship.
+   */
   request: (req) => {
-    logger.debug('request_received', 'http', { method: req.method, url: req.originalUrl });
+    logger.debug('request_received', 'http', { method: req.method, url: req.path });
   },
   response: (req, statusCode, duration) => {
     const fn = statusCode >= 500 ? logger.error : statusCode >= 400 ? logger.warn : logger.debug;
     fn('request_completed', 'http', {
-      method: req.method, url: req.originalUrl, status: statusCode, ms: duration
+      method: req.method, url: req.path, status: statusCode, ms: duration
     });
   },
 

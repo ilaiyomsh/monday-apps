@@ -12,15 +12,22 @@ polyfillGlobal();
 
 export const monday = mondaySdk() as unknown as MondaySdk;
 
-const dataset = import.meta.env.VITE_AXIOM_DATASET as string | undefined;
-const token = import.meta.env.VITE_AXIOM_TOKEN as string | undefined;
-
 export const logger = createLogger({
   app: 'day-off',
   appVersion: (import.meta.env.VITE_APP_VERSION as string) || '0.0.0',
   environment: import.meta.env.VITE_ENVIRONMENT as string | undefined,
-  axiom: dataset && token ? { dataset, token } : undefined,
 });
+
+// Remote log shipping to Axiom goes through the shared hardened transport (batched,
+// sanitized, circuit-broken) — NOT the logger's old naive per-record fetch. Wired in
+// main.tsx before render. Env is read here so the activation gate is one place.
+export const axiomEnv = {
+  app: 'day-off',
+  dataset: (import.meta.env.VITE_AXIOM_DATASET as string | undefined) ?? 'app-errors',
+  token: import.meta.env.VITE_AXIOM_TOKEN as string | undefined,
+  appVersion: (import.meta.env.VITE_APP_VERSION as string) || '0.0.0',
+  environment: import.meta.env.VITE_ENVIRONMENT as string | undefined,
+};
 
 export const { SettingsProvider, useSettings } = createSettings<DayOffSettings>({
   storageKeyPrefix: 'customSettings_',

@@ -482,6 +482,23 @@ scripts/axiom-query <env> --since 1h <<< "['dataset'] | project _time, message, 
 scripts/axiom-query <env> --since 1h --ndjson <<< "['dataset'] | project _time, message | take 1"
 ```
 
+### Symbolicate (minified client stack frames → source)
+
+`app-errors` ships `stack1` **minified** (one frame). Client apps build with
+`sourcemap: 'hidden'`; CI archives the maps as the artifact `sourcemaps-<app>-<sha>`
+and strips them from the deploy dir (never public). This tool resolves a frame
+back to source, keyed by the log row's `ver` (`<version>+<shortSha>`):
+
+```bash
+# fetch the CI sourcemap artifact by ver and symbolicate (needs authenticated gh)
+scripts/symbolicate '<stack1 string>' --app discussions --ver 2.3.0+9292e7a
+# offline / a locally-built map:
+scripts/symbolicate 'index-<hash>.js:61:29212' --map apps/<app>/build/assets/index-<hash>.js.map
+```
+
+Prints `source:line:col (symbol)` + a source snippet. See `reference/symbolicate.md`.
+First run installs one dep (`@jridgewell/trace-mapping`) into `scripts/lib/node_modules`.
+
 ### Grafana (Metrics)
 ```bash
 # Discover datasources and UIDs (pass env names to limit: discover-grafana prod)
@@ -540,4 +557,4 @@ When this skill's tooling misfires — a `scripts/discover-*` or query script er
 
 ## Reference Files
 
-All in `reference/`: `apl.md` (operators/functions/spotlight), `axiom.md` (API), `blocks.md` (Slack Block Kit), `failure-modes.md`, `grafana.md` (PromQL), `memory-system.md`, `postmortem-template.md`, `pyroscope.md` (profiling), `query-patterns.md` (APL recipes), `sentry.md`, `slack.md`, `slack-api.md`.
+All in `reference/`: `apl.md` (operators/functions/spotlight), `axiom.md` (API), `blocks.md` (Slack Block Kit), `failure-modes.md`, `grafana.md` (PromQL), `memory-system.md`, `postmortem-template.md`, `pyroscope.md` (profiling), `query-patterns.md` (APL recipes), `sentry.md`, `slack.md`, `slack-api.md`, `symbolicate.md` (minified stack → source).

@@ -26,6 +26,7 @@ Files in this skill (paths under `.claude/skills/monday-cicd/`, relative to the 
 | `scripts/dev-live-attach.sh` | Point the DRAFT at a local dev server via tunnel (hot reload in monday) |
 | `scripts/dev-live-detach.sh` | End dev-live: kill processes + rebind draft to the CDN build (mandatory) |
 | `references/pipeline-model.md` | Full model: branches, gates, secrets, deploy commands, version mechanisms |
+| `references/server-app-urls.md` | Server-side apps: draft vs live URLs — which URL goes in which dev-center field (BASE_URL / OAuth redirect / feature URL) so BOTH versions stay stable |
 
 ## Mode selection — route by INTENT, never by exact wording
 
@@ -146,6 +147,15 @@ resolvable APP_ID (package.json deploy script or `.env`) and a `build` script.
      manually "Set as active for me" once in the Developer Center to preview
      it — this cannot be automated (no CLI/API exists for personal active
      version).
+5. **Error-wiring (do not skip) — follow `docs/ERROR-AXIOM-STANDARD.md`.**
+   Every onboarded app joins the error-kit standard: wire the entry
+   (`setupGlobalErrorHandlers` + `attachAxiomSink` before render + root
+   `ErrorBoundary` for clients; process guards + terminal error middleware +
+   opts-injected sink for servers), add a `SURFACES` entry in
+   `scripts/error-wiring-audit.mjs`, inject `VITE_AXIOM_*` into the deploy
+   workflow Build step (clients), and add a drift entry to
+   `packages/error-kit/test/drift.test.ts` if the app vendors a copy
+   (server / embedded SPA). `node scripts/error-wiring-audit.mjs` must exit 0.
 
 ---
 

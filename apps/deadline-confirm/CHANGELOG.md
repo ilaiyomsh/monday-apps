@@ -2,6 +2,232 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.14.0 — 2026-08-05 — a per-employee summary file after every cron run, and a tick that says how long it took
+
+**A row per employee, including everyone who got nothing.** After every cron
+tick, each tenant that actually ran now mails itself a CSV —
+`digest-summary-<slot>.csv` — listing every person on the users board:
+who received the digest, who failed and with which SMTP message, who had already
+been mailed in this slot (§4), who had zero pending tasks, and which users-board
+rows never resolved into an employee at all. That last group is the reason the
+file exists: a missing row is information that vanished, and "nobody was missed"
+is precisely the claim nobody could previously check.
+
+**It goes to the tenant's OWN sending mailbox, not to `OPERATOR_EMAIL`** (owner
+decision 2026-08-05). The report follows whatever mailbox the admin screen
+connected — rebinding a sender moves the report with it, and there is no second
+setting that can quietly fall out of date. `OPERATOR_EMAIL` keeps receiving the
+cross-tenant text summary and never receives the file.
+
+**Only the cron produces a file.** `runDigestForAccount` returns the rows to
+every caller, but `/api/digest/send` and `resend-today` ignore them: those show
+their result on the screen. Same shape as the per-slot marker — the shared
+pipeline computes, and only the scheduler acts on it.
+
+**Three details in the file are load-bearing:**
+- **A UTF-8 BOM.** Without it Excel reads the file in the local ANSI codepage and
+  every Hebrew name opens as mojibake. It is written as an escape, never as an
+  invisible character in source — eslint's `no-irregular-whitespace` blocks the
+  literal, and a future reader would delete it as a typo.
+- **The cluster columns are derived from `config.digest.sections`, in order** —
+  which is also priority order (0.13.0). Add a cluster, rename one, press the ↑
+  arrow: the file follows. A hard-coded header would keep counting under the
+  wrong heading, which is worse than not counting.
+- **`סה"כ` is quoted as `"סה""כ"`.** It is the one header carrying the exact
+  character RFC4180 quoting exists for; emitted raw, Excel parses every row one
+  column short.
+
+Values that would be evaluated as formulas (`=`, `+`, `-`, `@`) are neutralized
+with a leading apostrophe. Task and employee names come from a customer's board
+and the file is opened on somebody's machine.
+
+**Attaching anything at all needed a new MIME layer.** `helpers/rfc822.js` +
+`mime-alternative.js` could only build `multipart/alternative` — several
+renderings of ONE body, which is not what a file is. The new
+`helpers/mime-mixed.js` wraps a body plus attachments, and its nested case
+carries a `multipart/alternative` through **byte-for-byte with no
+Content-Transfer-Encoding of its own**: re-wrapping an alternative body is
+exactly how the Gmail API strips the AMP part (findings §2), so the one thing
+this builder must never do is touch the bytes it is handed. An attachment
+filename with a quote or CRLF is refused, not sanitized — same rule
+`rfc822.js` applies to `To`/`Subject`.
+
+**A failed report never costs a digest.** The digests are already out when the
+file goes; a send failure is logged and the tick still answers 200. A non-2xx
+here would hand the platform a retry and re-run the whole tenant over a file
+nobody is waiting on.
+
+**And the tick now says how long it took.** `durationMs` per tenant, in the
+`tenant run finished` log line and in the tick response — so
+`mapps scheduler:run` answers the open question from `docs/scheduling.md` §7.3
+("are 300 seconds enough for a serial loop that opens one SMTP connection per
+recipient?") with a number instead of a shrug. Nothing about the timeout or the
+send concurrency was changed: the decision rule and its thresholds are written
+down in §7.3, to be applied once real runs have been measured. The measurement
+reads the clock twice around the run; the run itself still receives the FROZEN
+tick clock, so a long batch cannot straddle a slot boundary and sign two slots.
+
+Docs: `docs/scheduling.md` §5.2 (the whole report), §7.1 (the exact command
+sequence for deciding whether the cron hits draft or live — owner-only, it needs
+a token), §7.3 (how to measure and what to do with each result).
+
+## 0.13.1 — 2026-08-05 — the scheduler exists now, and cannot mail anyone twice
+
+**The digest had never been sent automatically.** `mapps scheduler:list -a
+11704868` answered "No scheduler jobs found": the endpoint, the `sendHour` filter
+and their tests were all fine, but the post-deploy registration step (README §6)
+had simply never run. Everything that ever went out was sent by hand from the
+admin screen. The job is registered as of today, and the README now states the
+history so nobody reads the app as "sending on a schedule" again.
+
+**Registering it exposed a CLI bug worth knowing.** `scheduler:create … -r 0` is
+IGNORED — the CLI treats 0 as "not supplied", drops into an interactive prompt
+and stores its own default. What actually got stored:
+
+    retryConfig: { maxRetries: 3, minBackoffDuration: 60 }, timeout: 300
+
+So zero retries is not reachable from the CLI, and a tick killed at the 300s
+timeout is re-invoked up to three times, a minute apart. Against a send loop with
+no memory that means every recipient already emailed gets emailed again. The
+guard had to move into the handler.
+
+**Per (slot × recipient), persisted as it goes.** The cron now passes
+`skipAlreadySent: true`, which loads a per-slot marker (`digest_sent` =
+`{ slot, personIds }`) and writes it back **after every successful send** rather
+than once at the end. Two properties come out of that shape, and both are pinned
+by tests:
+- a retry SKIPS whoever already has the mail and SENDS whoever is still missing,
+  so a killed run resumes instead of either duplicating or abandoning the batch;
+- a recipient is recorded only when their own send succeeded.
+
+The marker is read and written THROUGH the 60s read cache, never from it — the
+platform's default backoff is 60 seconds, exactly the window in which a cached
+read cannot see what the previous attempt did. The stored slot doubles as the
+expiry, so one key per tenant self-cleans and yesterday can never block today.
+
+**It is opt-in, and that is load-bearing.** `/api/digest/send` and
+`resend-today` exist to re-send deliberately inside the same slot, so only the
+cron enforces the marker. A mutation that defaults the flag on is killed by test.
+
+**And the operator summary stopped firing every hour.** The gate read
+`!t.skip || t.skip !== 'wrong_hour'` — true for every possible value, because
+`wrong_hour` is a skip reason no code produces (the not-due branch `continue`s
+without pushing). An account that had merely never configured a digest therefore
+counted as "due" on every tick: with an hourly cron, a summary mail every hour of
+every day, or an hourly failed-send in the log when that account has no mailbox.
+Measured before the fix, then fixed to count only tenants that really were due.
+The tick's JSON still names unconfigured tenants — that costs nobody an email.
+
+⚠️ **Still open:** whether the cron drives the live or the draft version. 0.13.0
+is on draft only, so verify with `app-version:list` + `code:logs` which version's
+log carries the `cron_tick` line before trusting an automatic send to exercise
+the new email.
+
+## 0.13.0 — 2026-08-04 — the email updates the board as you go: no send button, a form per row, two layouts
+
+Three changes in one round, all to the body of the digest mail.
+
+**1. A text field must be filled before its row's status can be picked.** In a
+cluster that maps a text column, the status tag now ships `disabled` and carries
+`[disabled]="dd.n<id> == ''"`, so the dropdown does not open at all until the
+field holds text. The empty note used to be caught one step later, at the submit
+gate; locking the control makes the order of operations impossible to get wrong.
+The static attribute is not redundant with the binding — **amp-bind does not
+evaluate bindings on load**, so a trigger carrying only `[disabled]` would be
+tappable until the reader's first state change, which is exactly the window this
+closes. `pointer-events` is outside the strict amp4email CSS set, so `disabled`
+is the only lever available.
+
+**2. The single send button is gone. Picking a status writes that task
+immediately, with a loader and a ✓ on that row.**
+
+**Why the table had to become a card per row.** amp-form looks for its
+`submitting` / `submit-success` / `submit-error` blocks among the form's own
+children. One form per message can therefore only ever show ONE loader, and a
+`<form>` cannot span two `<td>`s — so per-row feedback forces one form per row,
+and one form per row forces the row out of the table. Cards also stack on a
+phone, which the fixed-width table never did.
+
+**The two mechanics that look like details and are not.**
+- **The selection rides a radio, not an amp-bind-bound hidden input.**
+  `AMP.setState(...)` followed by `form.submit` in one action chain is a race:
+  amp-bind applies DOM mutations on the next vsync frame and the submit does not
+  wait, so the POST would carry the PREVIOUS value. A checked radio is
+  serialized by the form itself. The `setState` still in that chain is cosmetic
+  — close the menu, repaint the trigger — and cannot lose a selection.
+- **`change` on the radio submits; `tap` only repaints and closes the menu.**
+  `change:<formId>.submit` is the supported AMP-for-Email pattern for a form
+  control, and it fires after the radio is checked. The split is required rather
+  than tidy: both events fire on a first pick, so submitting from each would post
+  twice and the duplicate would answer `already_done` — replacing the ✓ of a
+  write that had just succeeded. Accepted cost: re-tapping the same option fires
+  no `change` and does not resubmit, so a failed row is retried by picking a
+  different status.
+
+**3. Two layouts in one document: cards on a phone, columns on a desktop.**
+
+The card layout is the BASE and `@media (min-width: 601px)` ADDS the wide one.
+That direction is the whole decision. A media query is the only width signal an
+amp4email document has — no JS, no viewport API, and the `media` attribute
+applies to amp-* elements only — so the fallback for a client that strips queries
+must be the layout that works at any width. Card-first gives that; a table base
+with a `max-width` query would hand the same client a squashed table on a phone.
+
+On a wide screen each cluster gains a header strip and the in-card field captions
+switch off; on a narrow one the captions come back and every field stacks. Both
+column partitions (three columns, or four when a note column is mapped) use the
+SAME breakpoint, or the header strip and the rows would switch at different
+widths.
+
+The wide layout is a **visual** table, not a `<table>` — a `<form>` cannot span
+two `<td>`s, and per-row forms are the whole point. Columns align because every
+row is the same width and shares the same percentages, and those percentages stop
+short of 100% on purpose: inline-blocks carry a whitespace gap between them, and
+a full 100% wraps the status column onto its own line. The one visible difference
+from the old table is that there are no vertical grid lines.
+
+Card chrome follows the monday mobile app: rounded bordered card with a 4px
+stripe on the inline-start edge, the name on top, the date as a chip. The stripe
+takes the CLUSTER's primary color rather than the row's current status — the pill
+already shows the status, so the stripe groups the cards that belong together,
+and being per-cluster it needs no binding.
+
+A test asserts that **nothing interactive is styled inside the media query**. A
+layout bug must not be able to hide the trigger, the menu, the radio or the note
+field: at that point the email stops being able to do its job.
+
+**Signed per row.** Each form carries a manifest covering its own task only, so
+a leaked form authorizes one item, and the document is smaller than it would be
+repeating the message-wide manifest N times. `/amp/confirm` needed no change: it
+verifies whatever manifest arrives and checks every pair against it.
+
+**What the new request shape forced on the server.** Same tasks, same writes,
+same monday complexity budget — but one POST per task instead of one per
+message. Bucket B (per `accountId:ip`) was 30/min, which would have started
+answering `[E9]` partway down a large digest with the earlier rows already
+written; it is now 120, matching bucket A, and both capacities are named
+constants next to the limiter instead of numbers buried in `index.js`. The reply
+also stopped being phrased for a batch: a one-task submission answers "עודכן" /
+"היה מעודכן כבר" instead of counting, which also kills "משימה אחת היו מעודכנות
+כבר" — plural verb on a singular subject, which a per-row digest would have
+shown on every already-done row. A body that really carries several items keeps
+counting, mixed outcomes included.
+
+**Dropped with the bulk form:** the hidden `item_<id>` inputs, the `dd.v<id>`
+state, the ORed `[disabled]` submit gate, the marked-but-empty note highlight
+(the trigger lock makes that state unreachable) and the cross-cluster de-dup —
+each form submits alone, so each carries its own named note field.
+
+⚠️ **One amp4email behaviour is still unverified in Gmail:** `change` on a TEXT
+input, which the note lock's state mirror depends on (`input-throttled` was
+already measured dead there). Without it a mapped row's trigger stays locked;
+clusters with no mapped text column are unaffected. The write path itself is not
+at risk — `change:<form>.submit` on a form control is confirmed supported, which
+is why the submit hangs off `change` and not off `tap`. Also still open from
+0.12.0: `npm run validate:amp` could not run in the cloud session
+(`cdn.ampproject.org` is not reachable from it), so the new markup — label-wrapped
+radios, a form inside each card — has not been through the official validator.
+
 ## 0.12.0 — 2026-08-03 — a required text field per task, mapped to a board text column
 
 *(0.12.0 addendum, 2026-08-04 — the same version also shipped, in one round:

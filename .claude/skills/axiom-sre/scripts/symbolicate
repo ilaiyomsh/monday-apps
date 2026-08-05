@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# symbolicate — resolve a minified `stack1` frame from an app-errors log row to
+# its original source, against the build's hidden CI sourcemap. See
+# scripts/lib/symbolicate.mjs for the full contract.
+#
+#   scripts/symbolicate '<frame>' --map <path/to.map>
+#   scripts/symbolicate '<frame>' --app discussions --ver 2.3.0+9292e7a
+#
+# On first run it installs the tool's single dependency (@jridgewell/trace-mapping)
+# into scripts/lib/node_modules (gitignored). No network needed afterwards for
+# the --map path; the --app/--ver path needs `gh` (authenticated) to pull the
+# CI artifact.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB="$HERE/lib"
+
+if [ ! -d "$LIB/node_modules/@jridgewell/trace-mapping" ]; then
+  echo "symbolicate: installing tool dependency (one-time)…" >&2
+  ( cd "$LIB" && npm install --silent --no-audit --no-fund ) >&2
+fi
+
+exec node "$LIB/symbolicate.mjs" "$@"

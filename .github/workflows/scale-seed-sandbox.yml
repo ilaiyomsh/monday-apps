@@ -1,0 +1,90 @@
+name: Scale-seed sandbox (WZ- boards, axis load testing)
+
+# MANUAL-ONLY utility — never triggered by pushes and entirely outside the
+# deploy fan-out. Provisions a WZ-SCALE board system in the agent sandbox
+# workspace (16291824) and seeds it at high volume (dozens of projects, 30+
+# employee rows over the account's real users, thousands of time reports)
+# for axis Planner/Tracker/Day-off load testing.
+#
+# Safety: seed-scale.py hard-refuses any workspace other than the sandbox and
+# any demoName without the WZ- prefix. Mutations are batched (10/call) and
+# throttled; a complexity hit cools down 60s before one retry. Default run is
+# a DRY RUN — nothing is written until `apply` is explicitly checked.
+#
+# MONDAY_TOKEN is injected only here (repo secret), exactly like the deploy
+# workflows — it never reaches agent/developer context.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Actually write to the sandbox (unchecked = dry-run plan only)"
+        type: boolean
+        default: false
+      projects:
+        description: "Number of WZ-SCALE projects"
+        default: "40"
+      employees:
+        description: "Number of employee rows (round-robin over real users)"
+        default: "30"
+      months:
+        description: "Months of time reports (back from today)"
+        default: "3"
+
+jobs:
+  scale-seed:
+    name: Provision + seed WZ-SCALE in the sandbox
+    runs-on: ubuntu-latest
+    concurrency:
+      group: scale-seed-sandbox
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install monday.com apps CLI
+        run: npm install -g @mondaycom/apps-cli
+
+      - name: Authenticate mapps CLI (non-interactive)
+        run: mapps init -t "$MONDAY_TOKEN"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+
+      - name: Provision WZ-SCALE boards (dry-run plan)
+        run: python3 .claude/skills/monday-ops/scripts/provision.py .claude/skills/monday-ops/configs/wz-scale-sandbox.config.json
+
+      # Sandbox hygiene before a fresh build: drop WZ-SCALE leftovers from
+      # previous runs (triple-guarded: sandbox-only, WZ-SCALE prefix, ≤20).
+      - name: Clean previous WZ-SCALE boards
+        if: ${{ inputs.apply }}
+        run: python3 .claude/skills/monday-ops/scripts/cleanup-wz-scale.py --apply
+
+      - name: Provision WZ-SCALE boards (apply)
+        if: ${{ inputs.apply }}
+        run: python3 .claude/skills/monday-ops/scripts/provision.py .claude/skills/monday-ops/configs/wz-scale-sandbox.config.json --apply
+
+      - name: Seed at scale
+        run: >
+          python3 .claude/skills/monday-ops/scripts/seed-scale.py
+          .claude/skills/monday-ops/configs/wz-scale-sandbox.config.json
+          --projects "${{ inputs.projects }}"
+          --employees "${{ inputs.employees }}"
+          --months "${{ inputs.months }}"
+          ${{ inputs.apply && '--apply' || '' }}
+
+      - name: Validate live boards against the blueprint
+        if: ${{ inputs.apply }}
+        run: python3 .claude/skills/monday-ops/scripts/validate.py .claude/skills/monday-ops/configs/wz-scale-sandbox.config.json
+
+      - name: Upload state + seed summary
+        if: ${{ always() && inputs.apply }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: wz-scale-state
+          path: sandbox-out/wz-scale/
+          retention-days: 30

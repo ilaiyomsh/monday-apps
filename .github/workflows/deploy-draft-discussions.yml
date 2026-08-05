@@ -16,6 +16,7 @@ on:
     paths:
       - "apps/discussions/**"
       - "packages/shared/**"
+      - "packages/error-kit/**"
 
 jobs:
   deploy-draft:

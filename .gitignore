@@ -16,3 +16,10 @@ coverage/
 # mapps CLI artifacts (manifest export dirs, upload leftovers)
 .dev/
 temp.zip
+
+# monday-ops CI run outputs (state.json/settings are uploaded as Actions artifacts)
+sandbox-out/
+__pycache__/
+
+# local SecureStorage dev/test backend artifact (memory-backend snapshot; never source)
+local-secure-storage.db.json

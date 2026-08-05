@@ -3,6 +3,8 @@
  * employee, with KPI cards scoped by fixed year/month dropdowns.
  */
 import { useMemo, useState, type ReactElement } from 'react';
+import { useViewTracking } from '@axis/app-core';
+import { logger } from '../../core';
 import { ABSENCE_TYPES, TYPE_ORDER } from '../../domain/absence';
 import { eachDay, fromKey, isWeekend, toKey } from '../../domain/dates';
 import { useL10n } from '../../domain/useL10n';
@@ -86,6 +88,7 @@ function rangeEndOfMonth(year: number, month: number): string {
    Dashboard view
    ============================================================ */
 export function DashboardView({ year, onYearChange, onOpenDrill }: DashboardViewProps) {
+  useViewTracking(logger, 'dashboard');
   const { t, monthShort, monthName } = useL10n();
   const { requests, companyDays, teamIds, myTeams, empById } = useDayOffData();
   const order = TYPE_ORDER;
