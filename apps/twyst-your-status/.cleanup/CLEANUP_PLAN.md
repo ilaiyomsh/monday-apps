@@ -23,7 +23,7 @@ stated ordering dependencies inside `ColumnSettings.jsx` and `PersonPicker.jsx`)
 | 4 | unused deps | 1 | M | done |
 | 5 | duplication consolidation | 10 | L | done |
 | 6 | pattern alignment | 4 | L | done |
-| 7 | structure | 13 | L | approved |
+| 7 | structure | 13 | L | done |
 
 **Approval record.** Batches 1, 2, 3, 4 and 6 were approved by the repo owner (ilai@twyst.co.il)
 by explicit in-session instruction ("אני רוצה שתתחיל ליישם", 2026-08-05), after being shown the
@@ -360,7 +360,7 @@ are here; six that cannot are recorded in the appendix.
 ---
 
 ## Batch 7 — structure: oversized modules split along existing seams
-risk: L | status: approved
+risk: L | status: done
 
 Thresholds: component > 250 lines, file > 400, function > 60. Every split is verbatim
 movement; where a symbol's import path would change for a **locked** test, a re-export in the
