@@ -59,7 +59,10 @@ beforeEach(async () => {
     [KEYS.assets('סבב')]: { templateDocx: 'UEsDBBQ=' },
   });
   storage.getItem.mockImplementation(async (key) => (stored[key] ? value(stored[key]) : {}));
-  storage.setItem.mockResolvedValue({ success: true });
+  // round358 — saves now VERIFY by reading the key back, so the mock has to echo
+  // writes like real storage does; a write-blind getItem reads as a lost write and
+  // fails the save (which is exactly the protection, but not what this file tests).
+  storage.setItem.mockImplementation(async (key, val) => { stored[key] = JSON.parse(val); return { data: { success: true } }; });
   storage.deleteItem.mockResolvedValue({ success: true });
 
   render(<TemplatesProvider><Probe /></TemplatesProvider>);
