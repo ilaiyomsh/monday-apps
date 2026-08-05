@@ -392,6 +392,13 @@ export default function App() {
   const [duplicateFrom, setDuplicateFrom] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  // round355 — the create-discussion card is PARKED (hidden, not torn down) while the
+  // user edits a discussion type's template, then brought back untouched. Its own
+  // state survives because CreateDiscussionModal never unmounts — `open` only gates
+  // the render — so parking must not clear editDiscussion/duplicateFrom/createPrefill.
+  const [createSuspended, setCreateSuspended] = useState(false);
+  const [pendingTypeEdit, setPendingTypeEdit] = useState(null);
+  const typeEditNonceRef = useRef(0);
   const [canManageSettings, setCanManageSettings] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [launchParams, setLaunchParams] = useState(() => readLaunchParams());
@@ -939,6 +946,35 @@ export default function App() {
     setShowCreate(true);
   }, []);
 
+  // round355 — the pencil beside a type in the create card: park the card and open
+  // Settings straight on that type's template editor (roles · agenda · export). The
+  // nonce makes each click a distinct request, so clicking the same type twice works.
+  const handleEditTypeTemplate = useCallback((typeName) => {
+    typeEditNonceRef.current += 1;
+    setPendingTypeEdit({ type: typeName, nonce: typeEditNonceRef.current });
+    setCreateSuspended(true);
+    setShowSettings(true);
+  }, []);
+
+  // Close Settings and un-park the create card. Wired to BOTH the type-template save
+  // (the spec'd hand-back) and every other way of closing Settings — a user who
+  // cancelled would otherwise be stranded with a filled-in card they cannot reopen
+  // without losing it. Inert when nothing was parked.
+  const handleCloseSettings = useCallback(() => {
+    setShowSettings(false);
+    setPendingTypeEdit(null);
+    setCreateSuspended(false);
+  }, []);
+
+  // The sidebar gear TOGGLES Settings, and it stays clickable while Settings is open
+  // (the `contained` overlay dims only the card pane). round355 — closing it that way
+  // must go through handleCloseSettings too, or a parked create card would be left
+  // hidden with no way back to it.
+  const handleToggleSettings = useCallback(() => {
+    if (showSettings) handleCloseSettings();
+    else setShowSettings(true);
+  }, [showSettings, handleCloseSettings]);
+
   const rootStyle = sidebarWidth != null ? { '--sidebar-w': `${sidebarWidth}px` } : undefined;
 
   // Shared overlays (toasts + error details) render for BOTH views, so a
@@ -1084,7 +1120,7 @@ export default function App() {
           onDelete={handleDeleteDiscussion}
           canManageSettings={canManageSettings}
           currentUser={currentUser}
-          onOpenSettings={() => setShowSettings((s) => !s)}
+          onOpenSettings={handleToggleSettings}
           onOpenPersonal={personalAreaVisible ? openPersonal : null}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
@@ -1121,15 +1157,19 @@ export default function App() {
             tabs (not the whole screen). */}
         <SettingsModal
           isOpen={showSettings}
-          onClose={() => setShowSettings(false)}
+          onClose={handleCloseSettings}
           onNotify={notify}
           templatesOnly={!canManageSettings}
           contained
+          pendingTypeEdit={pendingTypeEdit}
+          /* Only hand back when the create card is actually parked — otherwise saving a
+             type template from the gear (the pre-round355 flow) would close Settings. */
+          onTypeTemplateSaved={createSuspended ? handleCloseSettings : null}
         />
       </div>
 
       <CreateDiscussionModal
-        open={showCreate || !!editDiscussion || !!duplicateFrom}
+        open={(showCreate || !!editDiscussion || !!duplicateFrom) && !createSuspended}
         editDiscussion={editDiscussion}
         duplicateFrom={duplicateFrom}
         prefill={createPrefill}
@@ -1140,6 +1180,7 @@ export default function App() {
         onStageComplete={handleStageComplete}
         onStageError={handleStageError}
         canManageSettings={canManageSettings}
+        onEditTypeTemplate={handleEditTypeTemplate}
       />
 
       {/* round207 — per-discussion export dialog (opened from the row kebab's

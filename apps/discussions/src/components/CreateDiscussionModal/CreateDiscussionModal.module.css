@@ -368,10 +368,53 @@
   box-shadow: var(--box-shadow-small, 0 4px 12px rgba(0, 0, 0, 0.16));
 }
 
+/* round355 — a type row now carries a trailing action (the template pencil), so it is
+   a flex row: swatch · label (takes the slack) · pencil. The container is dir="rtl",
+   so the growing label pushes the pencil to the visual LEFT edge with no directional
+   CSS — same construction as the templates panel's list rows. */
 .dropdownItem {
+  display: flex;
+  align-items: center;
   padding: 8px 10px;
   cursor: pointer;
   color: var(--text-color, #323338);
+}
+
+.dropdownItemLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Revealed on row hover / keyboard focus (focus-visible keeps it reachable without a
+   mouse, which a hover-only reveal would not). */
+.typeTemplateBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--border-radius-small, 4px);
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+}
+
+.dropdownItem:hover .typeTemplateBtn,
+.typeTemplateBtn:focus-visible {
+  opacity: 1;
+}
+
+.typeTemplateBtn:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+  color: var(--primary-color, #0073ea);
 }
 
 .dropdownItem:hover {

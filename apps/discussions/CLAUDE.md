@@ -305,6 +305,28 @@ start empty when storage is unavailable (local dev):
   `applyOrder()` on every read. Defensive: saved ids first, unknown ids keep API order at the end,
   deleted ids drop out.
 
+### Edit a type's template from the create card, and come back (round355)
+The type field in `CreateDiscussionModal` carries a per-type pencil (owner **or** super member —
+`canManageSettings || useIsSuperMember(...)`, the same pair that gets the settings gear; **not**
+`can('manageTemplates')`, which defaults to `'all'`). It hands the user to that type's template
+editor and brings them back to the card **unchanged**. The pipe, end to end:
+- `onEditTypeTemplate(typeName)` → `App` mints `pendingTypeEdit = {type, nonce}`, sets
+  `createSuspended`, opens Settings. **Parking, not closing:** `editDiscussion`/`duplicateFrom`/
+  `createPrefill` are left alone, and the card's own `useState` survives because
+  `CreateDiscussionModal` never unmounts (`open` only gates the render, `if (!open) return null`).
+- `SettingsModal` selects the templates tab and forwards the request; `TemplateManagerModal`
+  applies it through **`shouldApplyTypeEdit`** (`typeEditRequest.js`), which encodes the two rules:
+  wait for `TemplatesContext.loading` — `startEditType` classifies new-vs-existing off
+  `typeTemplates`, so entering early opens blank and the save **wipes** the stored template — and
+  apply each nonce once, or a re-render resets the draft under the user.
+- Coming back: a successful **types** save calls `onTypeSaved`, and `App` un-parks. The card's two
+  open-effects (seed, title focus/select) skip on that pass via `resumingFromTypeEditorRef` — that
+  skip IS "the same point I left"; without it the seed effect clears every filled field.
+- `onTypeTemplateSaved` is passed **only while parked**, so saving a template from the gear (the
+  pre-round355 path) still just returns to the type list. Every close route — X, Esc, overlay, and
+  the sidebar gear toggle (still clickable: `contained` dims only the card pane) — goes through
+  `handleCloseSettings`, or a parked card would be stranded and unreachable.
+
 ### Cross-board permission roles (round341)
 A decision's entitled managers (יוצר / מוביל / מרכז דיון) hold people columns on the
 **discussions** board, but both the permissions matrix (`buildTierRoles`) and the resolver
