@@ -222,6 +222,36 @@ describe('createStatusChangeHandler', () => {
     expectNoIntervention(deps);
   });
 
+  it('emits a verdict trace line — ALLOWED — with board/column/item on an allowed change', async () => {
+    const deps = makeDeps();
+    deps.evaluate.mockReturnValue({ allowed: true, reason: null });
+    const handle = createStatusChangeHandler(deps);
+
+    await handle(makeEvent());
+
+    const trace = deps.logger.info.mock.calls.find(
+      ([msg]) => typeof msg === 'string' && msg.startsWith('status change'),
+    );
+    expect(trace).toBeDefined();
+    expect(trace[0]).toContain('ALLOWED');
+    expect(trace[0]).toContain('col=status_col');
+  });
+
+  it('emits a verdict trace line — BLOCKED (reason) — on a blocked change', async () => {
+    const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue(monitorRules());
+    deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
+    const handle = createStatusChangeHandler(deps);
+
+    await handle(makeEvent());
+
+    const trace = deps.logger.info.mock.calls.find(
+      ([msg]) => typeof msg === 'string' && msg.startsWith('status change'),
+    );
+    expect(trace).toBeDefined();
+    expect(trace[0]).toContain('BLOCKED (not-offered)');
+  });
+
   it('neither records nor reverts on the non-revertable reason required-fields-unknown, and warns', async () => {
     const deps = makeDeps();
     deps.evaluate.mockReturnValue({ allowed: false, reason: 'required-fields-unknown' });

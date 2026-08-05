@@ -22,6 +22,19 @@ columnValue: {"$any$": true}}` מתקבל.
 - **הטסט חוזק**: הטסט הקודם בדק רק שה-config מכיל `"columnId"` ולכן פספס את החוסר;
   עכשיו הוא מאמת `config.columnValue === {"$any$": true}` (נכשל על הקוד הישן).
 
+**תצפית (אותה גרסה):** הדיבוג של הבאג לעיל נחסם כי `mapps code:logs` מרנדר רק את שדה
+`message` ומשמיט את `context` — כך שכל `catch` שהתעד `logger.error('X failed', TAG,
+{error})` הראה רק `X failed` בלי הסיבה. תוקן בשלושה מישורים:
+
+- **שרבוב הסיבה ל-`message`**: כשלים ב-enroll/status/bypasses/webhook-dispatch, ב-handler
+  שינוי-הסטטוס, וב-oauth callback מצרפים עכשיו את מחרוזת השגיאה ל-message עצמו (ה-context
+  נשמר לשילוח Axiom).
+- **עקבות לתהליך שינוי-הסטטוס**: שורת `webhook received …` בכניסה ל-guard, ושורת
+  `status change ALLOWED/BLOCKED (reason) …` אחרי ההערכה — כך שינוי-סטטוס עוקב שורה-אחר-שורה.
+- **סינון רעש ה-SDK**: `installSdkLogFilter()` (helpers/sdk-log-filter.js) משתיק את שורות
+  `[SecureStorage]/[Storage.get] Got data for key` של apps-sdk 0.1.4 (5-8 לכל בקשה, ללא
+  כיבוי דרך env, וגם דלף מפתחות storage); error/warn לא מושפעים.
+
 ## 3.15.1 — מועמד הפיתוח הבא אחרי שחרור 3.15.0 ללייב
 
 אין שינוי מוצרי. 3.15.0 שוחררה ללייב (PR #623), ולכן develop מקדם את המספר למועמד

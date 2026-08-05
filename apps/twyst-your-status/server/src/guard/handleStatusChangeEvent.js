@@ -172,6 +172,13 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, bypassL
       peopleByColumnId,
       requiredFieldValues,
     });
+    // One trace line per evaluated change (only guarded, enrolled columns reach
+    // here), so the change→verdict outcome is followable in `code:logs`.
+    logger.info(
+      `status change ${verdict.allowed ? 'ALLOWED' : `BLOCKED (${verdict.reason})`} board=${boardId} col=${columnId} item=${itemId} ${previousLabelId}→${newLabelId} actor=${actingUserId}`,
+      TAG,
+      { accountId, boardId, columnId, itemId, allowed: verdict.allowed, reason: verdict.reason ?? null },
+    );
     if (verdict.allowed) return;
     if (!REVERTABLE_REASONS.includes(verdict.reason)) {
       logger.warn('illegal change NOT reverted (verdict is not revert-worthy)', TAG, {
@@ -212,7 +219,7 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, bypassL
             await api.notifyUser(primaryToken, event.userId, itemId, REVERT_NOTIFICATION_TEXT);
           } catch (err) {
             // The revert already landed — a failed notification must not fail the event.
-            logger.error('revert notification failed', TAG, {
+            logger.error(`revert notification failed: ${String(err?.message ?? err)}`, TAG, {
               accountId, itemId, error: String(err?.message ?? err),
             });
           }
@@ -249,7 +256,7 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, bypassL
     const laneKey = `${event?.boardId}:${event?.pulseId}:${event?.columnId}`;
     const previous = lanes.get(laneKey) ?? Promise.resolve();
     const run = previous.then(() => process(event)).catch((err) => {
-      logger.error('status-change handling failed', TAG, {
+      logger.error(`status-change handling failed: ${String(err?.message ?? err)}`, TAG, {
         boardId: String(event?.boardId), itemId: String(event?.pulseId),
         columnId: String(event?.columnId), error: String(err?.message ?? err),
       });

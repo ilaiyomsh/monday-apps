@@ -24,7 +24,13 @@ const envManager = new EnvironmentVariablesManager({ updateProcessEnv: true });
 
 import { createApp } from './app.js';
 import logger from './helpers/logger.js';
+import { installSdkLogFilter } from './helpers/sdk-log-filter.js';
 import { attachAxiomServerSink, flushAxiom } from './helpers/axiomServerSink.js';
+
+// Silence apps-sdk 0.1.4's per-read console chatter (SecureStorage/Storage "Got
+// data for key…") BEFORE any storage call runs — it buries the guard's own log
+// lines in `code:logs` and leaks storage keys. Errors/warns are untouched.
+installSdkLogFilter();
 import {
   installProcessGuards,
   makeServerErrorHandler,
