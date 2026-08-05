@@ -10,6 +10,16 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.14.1 — 2026-08-05
+
+round354 — ממצא P1 של Codex על PR השחרור, נתפס לפני שהגיע ללקוחות: לוחות ותיקים
+שהוקמו עם סכימת העדיפות הישנה נושאים את "נמוכה" על לייבל 5 (האפור, אחרון בסדר
+התצוגה) — וללא שער, כל תא עדיפות ריק שם היה מוצג "נמוכה", כך שאי-בחירה נעשית
+בלתי-ניתנת-להבחנה מעדיפות נמוכה. מעכשיו לייבל 5 נחשב מצב-ריק רק כשהוא ראשון
+בסדר התצוגה — המקום שבו לייבל מצב-ריק חי בהגדרה (וכך גם בהקמות החדשות ובתיקונים
+הידניים של הבעלים). "נמוכה" הישן נשאר אופציה רגילה, והתאים הריקים שם חוזרים
+לנוסח הישן.
+
 ## 2.14.0 — 2026-08-05
 
 round353 — ארבעה תיקוני חוויה מצילומי המסך של הבעלים.
