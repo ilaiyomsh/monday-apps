@@ -17,13 +17,21 @@ stated ordering dependencies inside `ColumnSettings.jsx` and `PersonPicker.jsx`)
 ## Summary
 | batch | category | findings | risk | status |
 |---|---|---|---|---|
-| 1 | comments | 9 | S | pending |
-| 2 | dead files | 3 | M | pending |
-| 3 | unused exports | 5 | M | pending |
-| 4 | unused deps | 1 | M | pending |
+| 1 | comments | 9 | S | approved |
+| 2 | dead files | 3 | M | approved |
+| 3 | unused exports | 5 | M | approved |
+| 4 | unused deps | 1 | M | approved |
 | 5 | duplication consolidation | 10 | L | pending |
-| 6 | pattern alignment | 4 | L | pending |
+| 6 | pattern alignment | 4 | L | approved |
 | 7 | structure | 13 | L | pending |
+
+**Approval record.** Batches 1, 2, 3, 4 and 6 were approved by the repo owner (ilai@twyst.co.il)
+by explicit in-session instruction ("אני רוצה שתתחיל ליישם", 2026-08-05), after being shown the
+refutation pass and the recommendation to hold 5 and 7 back. The agent transcribed that decision
+into this file; it did not make it. Batches **5 and 7 remain `pending`** — 7 carries two findings
+struck as unexecutable and depends on a gate that cannot detect a `ReferenceError` in this
+workspace (`no-undef` is off), and 5 shares `ColumnSettings.jsx` with 7. They stay available for a
+second round after this one lands.
 
 ## Pre-approval refutation pass — READ BEFORE APPROVING ANYTHING
 
@@ -82,7 +90,7 @@ positives + 11 auditor/scanner entries that are guard-blocked, superseded or own
 ---
 
 ## Batch 1 — comments: stale factual claims in comments only
-risk: S | status: pending
+risk: S | status: approved
 
 Comment text only — zero behaviour change, no code line touched. This app has **no**
 commented-out code and **no** TODO/FIXME markers (see appendix `A-comments-10`), so this batch
@@ -147,7 +155,7 @@ supports.
 ---
 
 ## Batch 2 — dead files: three unreferenced modules
-risk: M | status: pending
+risk: M | status: approved
 
 All three verified dead by an independent adversarial pass (not just knip): no importer, no
 dynamic/lazy import, no barrel, no string/route reference in `vite.config.js:23`, no
@@ -175,7 +183,7 @@ dynamic/lazy import, no barrel, no string/route reference in `vite.config.js:23`
 ---
 
 ## Batch 3 — unused exports: dead public surface
-risk: M | status: pending
+risk: M | status: approved
 
 ⚠ **Header corrected by the refutation pass.** The original wording ("only exports whose
 *binding* is dead are here") is false for `K-020` and `K-022`, and a literal reading of it would
@@ -218,7 +226,7 @@ was unused while the value is live inside its own module is in the appendix.
 ---
 
 ## Batch 4 — unused deps: dead `React` default bindings
-risk: M | status: pending
+risk: M | status: approved
 
 knip reports **zero** unused, unlisted or phantom dependencies in both workspaces, and both
 ESLint reports are empty — so this batch is the one dependency-level finding that exists:
@@ -306,7 +314,7 @@ batch has already shifted the file.
 ---
 
 ## Batch 6 — pattern alignment: deviations from the app's own dominant pattern
-risk: L | status: pending
+risk: L | status: approved
 
 The dominant patterns were counted before any deviation was named (13 call sites through one
 `monday.api` funnel, 13 named GraphQL ops vs 1 inline, 4-of-4 guard HTTP shape, 60+ SPA log
