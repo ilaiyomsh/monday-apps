@@ -235,6 +235,14 @@ a Hebrew toast and ships to Axiom — naming `workspaces:write` when the platfor
 like an authorization refusal. The scope itself is a Developer Center setting; agents never
 touch it.
 
+**Adding the scope in the Developer Center is NOT enough (round352, fourth report).** Scope
+edits land on the **draft version** only; they take effect when that version is **promoted to
+live**, and then every installed account must **re-approve** the permissions (in-app banner /
+reinstall) — official docs, confirmed 2026-08-05. The owner added the scope and the next
+install still had loose boards precisely because of this. The failure toast now spells out the
+whole path (scope → promote → re-approve). Promotion also consumes the draft: create a new
+draft version right after (manifest export→import), or the next `deploy-draft` run fails.
+
 There is **no settings button** for this any more (round345 removed the round342 one) — if you are
 tempted to add one, make provisioning do it instead.
 

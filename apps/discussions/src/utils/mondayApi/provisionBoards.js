@@ -543,8 +543,18 @@ function reportFolderProblem(text) {
 export function describeFolderFailure(err) {
   const text = `${err?.message || ''} ${JSON.stringify(err?.response || '')}`.toLowerCase();
   if (/unauthorized|permission|forbidden|scope|not allowed/.test(text)) {
+    /*
+     * round352 (owner, FOURTH folder report — this time WITH the scope added) — naming the
+     * scope alone proved insufficient: the owner added `workspaces:write` in the Developer
+     * Center and the next install still had no folder. Per the official docs (confirmed
+     * 2026-08-05): scope edits land on the DRAFT version only; they take effect when that
+     * version is PROMOTED to live, and each installed account must then re-approve the
+     * permissions (in-app banner / reinstall). A remedy that omits the promote step reads as
+     * done while changing nothing — so the message now carries the whole path.
+     */
     return 'לאפליקציה חסרה הרשאת workspaces:write — בלעדיה monday לא מאפשר ליצור תיקייה. '
-      + 'יש להוסיף את ההרשאה לאפליקציה ב-Developer Center ולאשר אותה מחדש בהתקנה.';
+      + 'הוספת ההרשאה ב-Developer Center משנה את גרסת הטיוטה בלבד: היא נכנסת לתוקף רק אחרי '
+      + 'קידום הגרסה ללייב (Promote), ואז יש לאשר מחדש את ההרשאות בכל חשבון שהאפליקציה מותקנת בו.';
   }
   return `יצירת התיקייה נכשלה: ${err?.message || 'שגיאה לא מזוהה'}`;
 }
