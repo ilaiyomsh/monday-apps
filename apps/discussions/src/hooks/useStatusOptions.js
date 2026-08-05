@@ -38,7 +38,16 @@ import logger from '../utils/logger.js';
 const cache = new Map(); // key `${boardId}:${colId}` -> resolved result
 const inflight = new Map();
 
-const EMPTY = { options: [], labelById: {}, colorById: {}, orderById: {}, doneId: null };
+const EMPTY = { options: [], labelById: {}, colorById: {}, orderById: {}, doneId: null, emptyLabel: null };
+
+/*
+ * round353 §3 — the GRAY DEFAULT label's stable id. monday pre-creates every status
+ * column with a gray label on id 5; provisioning (and owners, by renaming it) put the
+ * "not yet" text there ("טרם החל" / "טרם נבחרה"). An EMPTY cell is still *no value* —
+ * monday never auto-assigns id 5 — so surfaces render `emptyLabel` for empty values,
+ * which makes the gray label read as the empty state everywhere in the app.
+ */
+const GRAY_DEFAULT_LABEL_ID = 5;
 
 // ---- change-notification (so a newly added label propagates without reload) ----
 // The module cache never expired before; `addStatusLabel` now bumps `version`
@@ -120,7 +129,15 @@ async function load(boardId, colId) {
   });
   const doneOpt = options.find((o) => o.isDone);
   const doneId = doneOpt ? doneOpt.id : null;
-  return { options, labelById, colorById, orderById, doneId };
+  // Blank gray labels are filtered out by the parsers above, so this is null unless the
+  // column really carries a text on id 5 — callers keep their own fallback for null.
+  // round354 (Codex P1) — AND only when id 5 is FIRST in display order, which is where an
+  // empty-state label lives by definition. Boards provisioned with the OLD priority scheme
+  // carry "נמוכה" on id 5 at the LAST position; without the position gate every empty
+  // priority cell there would read "נמוכה", making unset indistinguishable from Low.
+  const emptyLabel =
+    options[0]?.id === GRAY_DEFAULT_LABEL_ID ? (labelById[GRAY_DEFAULT_LABEL_ID] ?? null) : null;
+  return { options, labelById, colorById, orderById, doneId, emptyLabel };
 }
 
 export function useStatusOptions(boardKey = 'tasks', alias = 'statusID') {

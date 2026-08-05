@@ -12,7 +12,9 @@
      off the edge; the right stays flush (the board bleeds right). */
   width: 100%;
   padding-inline-start: var(--content-gutter-start, 52px); /* round112 — wider white gutter */
-  padding-inline-end: 0;
+  /* round353 §4 (owner request) — the board used to bleed to the right edge on purpose;
+     now the right white band mirrors the left gutter so both sides are symmetric. */
+  padding-inline-end: var(--content-gutter-start, 52px);
   box-sizing: border-box;
 }
 
@@ -77,7 +79,9 @@
    Round 83: nudged ~0.5cm off the right edge (owner request). */
 .batterySlot {
   margin-inline-start: auto;
-  margin-inline-end: 0.5cm;
+  /* round353 §4 — the root's symmetric right padding replaces the round83 0.5cm nudge;
+     zero here puts the battery exactly on the table's right edge line. */
+  margin-inline-end: 0;
 }
 /* round180 — while the discussions selector panel is open the card is narrow, so
    hide the colored quick-filter battery; it returns only once the tabs area is

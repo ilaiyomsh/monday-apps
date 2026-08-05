@@ -86,6 +86,16 @@ describe('round346 — a folder that did not happen is reported, not swallowed',
     expect(said).toContain(PROVISION_FOLDER_NAME);
     // ...and it survives the trip to the toast, which is the only place it matters.
     expect(toastTexts().join('\n')).toContain('workspaces:write');
+    /*
+     * round352 (owner, FOURTH report — scope added, folder still missing) — the instruction
+     * must include the step that actually makes the scope take effect: editing scopes in the
+     * Developer Center changes the DRAFT version only, and nothing reaches installs until that
+     * version is PROMOTED to live and the account re-approves the permissions (official docs,
+     * confirmed 2026-08-05). "יש להוסיף את ההרשאה" alone sent the owner to do exactly that,
+     * and it changed nothing — the incomplete sentence is itself the bug.
+     */
+    expect(toastTexts().join('\n')).toContain('קידום');
+    expect(toastTexts().join('\n')).toContain('לאשר');
   });
 
   // Any OTHER failure still gets reported — with its own message rather than a scope guess,
@@ -117,7 +127,9 @@ describe('round346 — a folder that did not happen is reported, not swallowed',
 
   it('describeFolderFailure recognises the permission wording variants', () => {
     for (const msg of ['UNAUTHORIZED', 'Permission denied', 'FORBIDDEN', 'missing scope', 'not allowed']) {
-      expect(describeFolderFailure(new Error(msg))).toContain('workspaces:write');
+      const text = describeFolderFailure(new Error(msg));
+      expect(text).toContain('workspaces:write');
+      expect(text).toContain('קידום'); // round352 — the promote step is part of the remedy
     }
     expect(describeFolderFailure(new Error('boom'))).toContain('boom');
   });
