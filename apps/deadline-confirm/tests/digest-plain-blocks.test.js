@@ -1,4 +1,4 @@
-// TDD red phase (0.14.0) — the text/plain part is built from the same BLOCKS as
+// TDD red phase (0.15.0) — the text/plain part is built from the same BLOCKS as
 // the AMP part, so the two can never say different things. It keeps its hard
 // V6 requirement unchanged: no links, no signatures, no credential of any kind
 // (D2/D3) — and now that the operator authors the text, that has to hold for
@@ -48,7 +48,7 @@ const cluster = (id = 's_done0001') => ({ type: 'cluster', id });
 const render = (blocks, recipient = RECIPIENT) => renderDigestPlain({ recipient, blocks });
 
 describe('renderDigestPlain — the blocks are the content', () => {
-  it('carries none of the pre-0.14.0 sentences when the blocks carry none', () => {
+  it('carries none of the pre-0.15.0 sentences when the blocks carry none', () => {
     const out = render([cluster()]);
     expect(out).not.toContain('שלום');
     expect(out).not.toContain('אלו המשימות שממתינות לעדכון סטטוס');

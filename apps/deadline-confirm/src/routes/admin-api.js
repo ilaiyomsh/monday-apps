@@ -83,7 +83,7 @@ const isNonEmptyString = (v, max = Infinity) =>
   typeof v === 'string' && v.length > 0 && v.length <= max;
 
 /**
- * Validate + normalize ONE digest cluster — a `cluster` block (0.14.0) or a
+ * Validate + normalize ONE digest cluster — a `cluster` block (0.15.0) or a
  * legacy `sections[]` entry, which carry the same fields.
  *
  * Returns `{ section }` or `{ bad: true }`; the CALLER names the offending
@@ -251,11 +251,11 @@ function validateConfig(body) {
     if (!isNonEmptyString(raw.usersEmailColumnId)) return { field: 'digest.usersEmailColumnId' };
     if (!isNonEmptyString(raw.subject, 120)) return { field: 'digest.subject' };
 
-    // --- the body (0.14.0): an ordered block list, or the legacy sections ----
+    // --- the body (0.15.0): an ordered block list, or the legacy sections ----
     // `blocks` is the source of truth and `sections` is DERIVED from it, in
     // block order — that derivation is what makes the mail's order the cluster
     // priority (digest-service lets the first matching section claim a task).
-    // A body with `sections` and no `blocks` is the pre-0.14.0 admin (and every
+    // A body with `sections` and no `blocks` is the pre-0.15.0 admin (and every
     // settings export taken before it): accepted, and given the reconstructed
     // legacy blocks so storage is never left without them.
     let sections;
@@ -696,7 +696,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
       };
 
       // The digest always leaves here WITH blocks — reconstructed on the way out
-      // for a config stored before 0.14.0. That is deliberate: the admin SPA
+      // for a config stored before 0.15.0. That is deliberate: the admin SPA
       // then has one shape to edit and needs no migration logic of its own, and
       // the reconstruction stays in one place (services/digest-blocks.js).
       // Storage is untouched; the blocks land there on the operator's next save.

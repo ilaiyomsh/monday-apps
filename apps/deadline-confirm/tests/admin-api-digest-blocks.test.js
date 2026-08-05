@@ -1,4 +1,4 @@
-// TDD red phase (0.14.0) — the server side of the digest BLOCK model:
+// TDD red phase (0.15.0) — the server side of the digest BLOCK model:
 //
 //   PUT /api/config   accepts digest.blocks (text | cluster), validates every
 //                     style value (a font name reaches a stylesheet — it is an
@@ -93,7 +93,7 @@ const configWith = (digest) => ({
   digest,
 });
 
-/** Legacy stored config: sections, no blocks — the pre-0.14.0 shape. */
+/** Legacy stored config: sections, no blocks — the pre-0.15.0 shape. */
 const legacyStoredConfig = () => ({
   boardId: '111',
   peopleColumnId: 'people_t',
@@ -267,7 +267,7 @@ describe('PUT /api/config — digest.blocks', () => {
 });
 
 describe('GET /api/state — blocks are always present', () => {
-  it('reconstructs blocks for a config stored before 0.14.0', async () => {
+  it('reconstructs blocks for a config stored before 0.15.0', async () => {
     const { app } = harness({ seed: { [scoped('config')]: legacyStoredConfig() } });
     const res = await request(app).get('/api/state').set('Authorization', authHeader());
     expect(res.status).toBe(200);

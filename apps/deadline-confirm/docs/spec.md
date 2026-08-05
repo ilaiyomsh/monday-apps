@@ -672,7 +672,7 @@ granted for the **testing phase** by owner decision 2026-08-04 (D12 suspension �
 decision. `gmail-sender.js` is kept for reference/rollback only.
 
 
-# 0.14.0 — the summary email is a BLOCK LIST (owner decisions, 2026-08-05)
+# 0.15.0 — the summary email is a BLOCK LIST (owner decisions, 2026-08-05)
 
 Supersedes the parts of the V4 amendment above that describe the digest body as
 "sections + fixed wrapper text". The clusters (מקבצים) and their rules are
@@ -738,7 +738,7 @@ digest: {
   whenever they exist — so a stale `sections` copy (a hand-edited record, an old
   settings import) can never classify tasks in an order the mail does not render
   in. `sections` keeps being written so a rolled-back server still works.
-- **A config with no `blocks` key is pre-0.14.0** and is reconstructed on read
+- **A config with no `blocks` key is pre-0.15.0** and is reconstructed on read
   into the blocks that reproduce the 0.13.x email — greeting, lead, the note hint
   (only when some cluster maps a note column), the clusters, footer. That
   reconstruction is one function (`services/digest-blocks.js`

@@ -68,9 +68,21 @@ describe('enrollColumnGuard', () => {
     expect(await enrollColumnGuard({ boardId: '5098', columnId: 'c' }, deps)).toBe('not_activated');
   });
 
-  it("returns 'failed' on any other non-2xx answer (403 not_board_owner included)", async () => {
+  /*
+   * round330 — 403 gets its own status. The manual enroll button reports the
+   * reason to the owner, and "רק בעלי הלוח יכולים לרשום" is a different
+   * instruction from "נסו שוב": retrying cannot fix a permission.
+   */
+  it("returns 'not_board_owner' on a 403 answer", async () => {
     const deps = makeDeps({
       fetchImpl: vi.fn().mockResolvedValue(okResponse(403, { error: 'not_board_owner' })),
+    });
+    expect(await enrollColumnGuard({ boardId: '5098', columnId: 'c' }, deps)).toBe('not_board_owner');
+  });
+
+  it("returns 'failed' on any other non-2xx answer (502 from monday included)", async () => {
+    const deps = makeDeps({
+      fetchImpl: vi.fn().mockResolvedValue(okResponse(502, { error: 'enroll_failed' })),
     });
     expect(await enrollColumnGuard({ boardId: '5098', columnId: 'c' }, deps)).toBe('failed');
   });
@@ -89,5 +101,40 @@ describe('enrollColumnGuard', () => {
     const status = await enrollColumnGuard({ boardId: '5098', columnId: 'c' }, deps);
     expect(status).toBe('failed');
     expect(deps.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  /*
+   * round329 — the caller now AWAITS this call and closes the settings surface
+   * only afterwards, which puts two new requirements on the request itself.
+   */
+
+  it('sends the request as keepalive, so a surface that closes mid-flight cannot kill it', async () => {
+    const deps = makeDeps();
+    await enrollColumnGuard({ boardId: '5098', columnId: 'c' }, deps);
+    expect(deps.fetchImpl.mock.calls[0][1].keepalive).toBe(true);
+  });
+
+  it("gives up with 'failed' after timeoutMs — an unreachable guard cannot hold the settings screen open", async () => {
+    // A guard that never answers, and honours the abort the way fetch does.
+    const fetchImpl = vi.fn((_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => {
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        reject(err);
+      });
+    }));
+    const deps = makeDeps({ fetchImpl, timeoutMs: 20 });
+
+    const status = await enrollColumnGuard({ boardId: '5098', columnId: 'c' }, deps);
+
+    expect(status).toBe('failed');
+    expect(fetchImpl.mock.calls[0][1].signal.aborted).toBe(true);
+  });
+
+  it('does not abort a request that answers in time', async () => {
+    const deps = makeDeps({ timeoutMs: 5000 });
+    const status = await enrollColumnGuard({ boardId: '5098', columnId: 'c' }, deps);
+    expect(status).toBe('enrolled');
+    expect(deps.fetchImpl.mock.calls[0][1].signal.aborted).toBe(false);
   });
 });

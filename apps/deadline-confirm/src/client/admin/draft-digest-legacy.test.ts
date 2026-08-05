@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { digestClusters, digestFromConfig, digestIsComplete } from './draft';
 
-// 0.14.0: a config this old has no `blocks` key either, so reading it also
+// 0.15.0: a config this old has no `blocks` key either, so reading it also
 // reconstructs the 0.13.x text blocks around these clusters — asserted at the
 // bottom. The clusters themselves are read through digestClusters().
 
@@ -90,7 +90,7 @@ describe('digestFromConfig — a current config is unaffected', () => {
   });
 });
 
-describe('digestFromConfig — a config with no blocks key (0.14.0 migration)', () => {
+describe('digestFromConfig — a config with no blocks key (0.15.0 migration)', () => {
   it('rebuilds the greeting/lead/footer text blocks around the clusters', () => {
     const draft = digestFromConfig(LEGACY_DIGEST);
     expect(draft.blocks.map((b) => b.type)).toEqual(['text', 'text', 'cluster', 'cluster', 'text']);

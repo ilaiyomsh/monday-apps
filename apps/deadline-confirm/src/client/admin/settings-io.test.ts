@@ -27,7 +27,7 @@ const COLUMNS: BoardColumn[] = [
   { id: 'status', title: 'סטטוס', type: 'status', labels: [] },
 ];
 
-// 0.14.0: clusters are blocks, so the backfill walks the block list. A text
+// 0.15.0: clusters are blocks, so the backfill walks the block list. A text
 // block is added to every fixture on purpose — the backfill must step over it.
 const section = (over: Partial<DigestClusterDraft> = {}): DigestClusterDraft => ({
   ...newDigestCluster('משימות שנדרש להתחיל'),

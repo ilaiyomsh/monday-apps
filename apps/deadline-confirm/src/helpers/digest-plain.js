@@ -1,5 +1,5 @@
 // V6 text/plain digest renderer (docs/v6-amp-only-decisions.md §5), block-driven
-// since 0.14.0.
+// since 0.15.0.
 //
 // AMP for Email requires a fallback part — "AMP-only" means the second part
 // becomes NON-ACTIONABLE, not absent. This renders that part from the SAME

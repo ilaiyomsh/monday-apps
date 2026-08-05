@@ -1,4 +1,4 @@
-// TDD red phase (0.14.0) — the amp4email digest renders the operator's BLOCKS,
+// TDD red phase (0.15.0) — the amp4email digest renders the operator's BLOCKS,
 // in their order, and nothing else. Two properties are under test here and both
 // were product decisions (owner, 2026-08-05):
 //
@@ -79,7 +79,7 @@ const render = (blocks, recipient = RECIPIENT) =>
   });
 
 describe('renderDigestAmp — no content text of its own', () => {
-  it('ships none of the pre-0.14.0 sentences when the blocks carry none', () => {
+  it('ships none of the pre-0.15.0 sentences when the blocks carry none', () => {
     const doc = render([cluster()]);
     expect(doc).not.toContain('שלום');
     expect(doc).not.toContain(LEGACY_TEXTS.lead);

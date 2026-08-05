@@ -120,7 +120,7 @@ src/
   email on two rows → two messages); rows with ≠1 person skipped as
   `multi_person`. Pending = date ≤ today (Asia/Jerusalem) AND status in
   section's `includeStatusLabelIds`.
-- **THE DIGEST BODY IS AN OPERATOR-AUTHORED BLOCK LIST (0.14.0, owner decisions
+- **THE DIGEST BODY IS AN OPERATOR-AUTHORED BLOCK LIST (0.15.0, owner decisions
   2026-08-05).** `digest.blocks` is an ordered array of `{type:'text'}` (free text
   + block-level formatting) and `{type:'cluster'}` (a מקבץ, carrying the settings
   `sections[]` used to). Three things follow, and all three are load-bearing:
@@ -133,7 +133,7 @@ src/
      server re-computes on every save (`sectionsFromBlocks`, block order) and
      keeps storing for rollback. `digest-service.digestSections()` prefers blocks
      whenever they exist — never read `digest.sections` directly in new code.
-  3. **A digest with NO `blocks` key is pre-0.14.0** and is reconstructed on read
+  3. **A digest with NO `blocks` key is pre-0.15.0** and is reconstructed on read
      into the blocks that reproduce the 0.13.x mail (greeting, lead, note hint
      only if a cluster maps a note column, clusters, footer) —
      `legacyBlocksFromSections`, used by the send path, the preview and
@@ -150,7 +150,7 @@ src/
   re-scan), escaped by the renderer.
 - **Section order = priority (owner decision 2026-08-04, now BLOCK order):** a
   task matching several clusters' conditions appears ONLY in the first cluster in
-  block order (per recipient — `claimed` set in `digest-service.js`). Since 0.14.0
+  block order (per recipient — `claimed` set in `digest-service.js`). Since 0.15.0
   the ↑/↓ arrows that reorder the mail ARE the priority UI — one list, so the two
   cannot disagree. A rendered email can therefore never produce `conflict_item` —
   that guard remains for hand-crafted POSTs only.
@@ -278,6 +278,32 @@ src/
     old filter tested a `wrong_hour` skip reason no code produces, so an account
     that had merely never configured a digest counted as due on every tick — an
     hourly summary mail, measured.
+  - **Per-employee summary CSV (0.14.0, owner decision 2026-08-05 —
+    `docs/scheduling.md` §5.2).** After a tick, each tenant that RAN gets a
+    `multipart/mixed` mail — plain body + `digest-summary-<slot>.csv` — sent to
+    **its own sending mailbox** (`${accountId}:google_sender`, a send to itself),
+    deliberately NOT `OPERATOR_EMAIL`: the report follows whatever mailbox the
+    admin screen connected, so there is no second setting to drift. Four things
+    are load-bearing: the **UTF-8 BOM** (without it Excel opens Hebrew as
+    mojibake — written as `\uFEFF`, never a literal); the cluster columns are
+    **derived from `config.digest.sections` in order** so the file tracks the
+    settings; there is **a row per employee including everyone who got nothing**
+    (`kind` = sent / failed / already_sent / no_tasks / skipped, and the reason
+    rides in the `שגיאה` column since it is the only free-text slot in the
+    owner's column list); and a failed report is **logged, never fatal** — the
+    digests are already out, and a non-2xx here would retry the whole tenant.
+    Only `routes/scheduler.js` mails it: `runDigestForAccount` returns
+    `summaryRows`/`summarySections` to every caller, and the admin routes ignore
+    them (the screen shows its own result). An unrecognized `kind` THROWS
+    (`unknown_summary_row_kind`) rather than printing a row of zeros that reads
+    as "fine". Attachments need `helpers/mime-mixed.js`, which nests a
+    `multipart/alternative` body **byte-for-byte** with no CTE of its own — a
+    re-wrap is exactly what strips the AMP part (findings §2).
+  - **`durationMs` per tenant (0.14.0)** — `tenant run finished` in the log AND
+    in the tick response, so `scheduler:run` answers "does 300s suffice?" (§7.3)
+    without log spelunking. It is measured with two `now()` reads around the run;
+    the run itself still receives the FROZEN tick clock (`() => clock`) so a long
+    batch cannot straddle a slot boundary and sign two slots.
 - **V6 resend:** `POST /api/digest/resend-today` — all recipients, current slot.
 
 ## Env & deploy

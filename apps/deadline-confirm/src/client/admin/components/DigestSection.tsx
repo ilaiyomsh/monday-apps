@@ -1,8 +1,8 @@
 // The "מייל מסכם" (digest) tab: users-board mapping, the subject block, the
-// BODY BLOCK EDITOR (DigestBlocksSection — 0.14.0), preview against the SAVED
+// BODY BLOCK EDITOR (DigestBlocksSection — 0.15.0), preview against the SAVED
 // config, and the manual send + AMP debug lane.
 //
-// 0.14.0 moved the cluster settings into the block list, so this file no longer
+// 0.15.0 moved the cluster settings into the block list, so this file no longer
 // owns them: what is left here is the delivery configuration (who gets the mail,
 // when) plus the subject — which is itself a block, pinned first, because it is
 // the one piece of text that is not part of the body.

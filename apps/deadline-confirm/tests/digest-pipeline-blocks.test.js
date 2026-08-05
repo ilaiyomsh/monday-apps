@@ -1,4 +1,4 @@
-// TDD red phase (0.14.0) — the pipeline side of the block model:
+// TDD red phase (0.15.0) — the pipeline side of the block model:
 //
 //   digest-service.digestSections()  the clusters come from `blocks` when the
 //       digest has them; the stored `sections` array is only a projection, so a

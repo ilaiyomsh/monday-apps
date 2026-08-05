@@ -1,4 +1,4 @@
-// 0.14.0 — the summary email's BODY editor: ONE ordered list of blocks.
+// 0.15.0 — the summary email's BODY editor: ONE ordered list of blocks.
 //
 // Replaces the "מקבצי משימות" panel. A block is either free text (with
 // block-level formatting) or a task cluster (מקבץ) carrying its own settings, and

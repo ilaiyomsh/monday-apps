@@ -8,7 +8,7 @@
 //     opaque 400 invalid_config on save;
 //   * a token the admin substitutes in the preview but the server does not (or
 //     vice versa) → the preview stops describing the mail that is sent;
-//   * a different legacy reconstruction → importing a pre-0.14.0 settings export
+//   * a different legacy reconstruction → importing a pre-0.15.0 settings export
 //     silently produces a different email from the one that config was sending.
 
 import { describe, it, expect } from 'vitest';

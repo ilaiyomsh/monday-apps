@@ -1,4 +1,4 @@
-// Pure list operations behind the summary email's body editor (0.14.0).
+// Pure list operations behind the summary email's body editor (0.15.0).
 //
 // They are here, not inside DigestBlocksSection, because they carry the rules
 // that matter and this app runs vitest in `node` — a component has no render

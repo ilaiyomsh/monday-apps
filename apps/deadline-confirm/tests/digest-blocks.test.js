@@ -1,4 +1,4 @@
-// TDD red phase (0.14.0) — src/services/digest-blocks.js, the block model behind
+// TDD red phase (0.15.0) — src/services/digest-blocks.js, the block model behind
 // the summary email. The digest body is now an ORDERED list of blocks (text or
 // cluster) authored by the operator; the renderers carry no content text of
 // their own (owner decision 2026-08-05).
@@ -55,7 +55,7 @@ const LEGACY_DIGEST = {
 const textOf = (blocks) => blocks.filter(isTextBlock).map((b) => b.text);
 
 describe('normalizeDigestBlocks — legacy config (no blocks key)', () => {
-  it('reproduces the pre-0.14.0 email: greeting, lead, clusters, footer', () => {
+  it('reproduces the pre-0.15.0 email: greeting, lead, clusters, footer', () => {
     const blocks = normalizeDigestBlocks(LEGACY_DIGEST);
     expect(blocks.map((b) => b.type)).toEqual(['text', 'text', 'cluster', 'cluster', 'text']);
   });

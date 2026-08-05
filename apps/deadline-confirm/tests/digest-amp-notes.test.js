@@ -223,7 +223,7 @@ describe('renderDigestAmp — the status dropdown is gated on the note', () => {
     expect(html).not.toContain('.dd-trig[disabled]');
   });
 
-  // 0.14.0 moved that sentence OUT of the renderer: the mail carries no
+  // 0.15.0 moved that sentence OUT of the renderer: the mail carries no
   // pre-written text, so the note hint is a text block. A tenant whose config
   // predates blocks still gets it — legacyBlocksFromSections re-creates it when
   // (and only when) some cluster maps a note column, asserted in

@@ -76,7 +76,7 @@ export interface DigestSectionConfig {
 }
 
 /**
- * A free-text block of the summary email (0.14.0). Block-level formatting only —
+ * A free-text block of the summary email (0.15.0). Block-level formatting only —
  * the same controls the single email's template editor offers, plus a color and
  * a bold flag. `font` must be one of DIGEST_FONTS: the value reaches the amp
  * document's stylesheet, and the server re-validates it against the same list.
@@ -109,14 +109,14 @@ export interface DigestConfig {
   /** Hour (0–23, Asia/Jerusalem) when the daily digest is scheduled. Default 8. */
   sendHour?: number;
   /**
-   * The email BODY, in order (0.14.0). Source of truth for both the content and
+   * The email BODY, in order (0.15.0). Source of truth for both the content and
    * the cluster priority. GET /api/state always answers with this array —
    * reconstructed server-side for a config saved before blocks existed.
    */
   blocks?: DigestBlock[];
   /**
    * Cluster projection the server derives from `blocks` and keeps storing.
-   * Pre-0.14.0 configs have ONLY this. Never edit it directly — a stale copy is
+   * Pre-0.15.0 configs have ONLY this. Never edit it directly — a stale copy is
    * ignored wherever blocks exist.
    */
   sections: DigestSectionConfig[];
@@ -240,7 +240,7 @@ export const EMAIL_FONTS = [
  * Fonts a digest text block may use. MIRRORS DIGEST_FONTS in
  * src/services/digest-blocks.js — the server rejects anything else, and
  * tests/digest-blocks-client-drift.test.js fails if the two lists diverge.
- * 'Default' means the email's own stack (what every pre-0.14.0 digest used).
+ * 'Default' means the email's own stack (what every pre-0.15.0 digest used).
  */
 export const DIGEST_FONTS = ['Default', ...EMAIL_FONTS] as const;
 

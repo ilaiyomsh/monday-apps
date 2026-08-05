@@ -32,7 +32,7 @@ export function backfillDateColumnTitles(digest: DigestDraft, columns: BoardColu
   const titleById = new Map(columns.map((c) => [c.id, c.title]));
   return {
     ...digest,
-    // 0.14.0: clusters live in the block list, so the backfill walks the blocks
+    // 0.15.0: clusters live in the block list, so the backfill walks the blocks
     // and leaves text blocks untouched.
     blocks: digest.blocks.map((b) => {
       if (b.type !== 'cluster') return b;

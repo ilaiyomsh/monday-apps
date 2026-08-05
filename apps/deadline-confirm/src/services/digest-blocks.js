@@ -1,4 +1,4 @@
-// The summary email's BLOCK MODEL (0.14.0, owner decisions 2026-08-05) — pure,
+// The summary email's BLOCK MODEL (0.15.0, owner decisions 2026-08-05) — pure,
 // no I/O, shared by both renderers, the config validator and the admin state.
 //
 // WHAT CHANGED. Until 0.13.x the digest body was hard-coded: a greeting, an
@@ -47,7 +47,7 @@ const TOKEN_RE = /\{\{\s*(שם|name)\s*\}\}/g;
 
 /**
  * Fonts offered for a text block. 'Default' is the sentinel for the document's
- * own stack (Figtree/Roboto/Noto Sans Hebrew) — what every pre-0.14.0 mail was
+ * own stack (Figtree/Roboto/Noto Sans Hebrew) — what every pre-0.15.0 mail was
  * rendered in, so it has to stay reachable or the migration would restyle the
  * text it is meant to preserve. The renderer maps it; storage keeps the token.
  *

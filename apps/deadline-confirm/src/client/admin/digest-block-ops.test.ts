@@ -1,4 +1,4 @@
-// TDD red phase (0.14.0) — the block-list operations behind the body editor.
+// TDD red phase (0.15.0) — the block-list operations behind the body editor.
 //
 // They live in a module rather than inside the component because they carry the
 // rules that matter: reordering is what sets CLUSTER PRIORITY (so an off-by-one

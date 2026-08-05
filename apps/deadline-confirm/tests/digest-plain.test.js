@@ -35,7 +35,7 @@ const RECIPIENT = {
 const render = (recipient = RECIPIENT) => renderDigestPlain({ recipient });
 
 describe('renderDigestPlain — content', () => {
-  // 0.14.0: the greeting is a TEXT BLOCK, not something this renderer writes —
+  // 0.15.0: the greeting is a TEXT BLOCK, not something this renderer writes —
   // this fixture passes no blocks, so there is nothing to greet with. Greeting,
   // ordering and the legacy reconstruction are asserted in
   // digest-plain-blocks.test.js.

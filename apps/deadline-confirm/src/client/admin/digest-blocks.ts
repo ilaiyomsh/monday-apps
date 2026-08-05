@@ -1,4 +1,4 @@
-// Client-side mirror of the digest BLOCK model (0.14.0).
+// Client-side mirror of the digest BLOCK model (0.15.0).
 //
 // WHY A MIRROR AND NOT AN IMPORT. The authority is
 // `src/services/digest-blocks.js` — server code, plain ESM, no Node APIs, so it
@@ -12,7 +12,7 @@
 // What lives here is only what the ADMIN needs: the token (insert button +
 // preview), the caps the editor enforces before the server does, and the legacy
 // reconstruction — needed because importing a settings export taken before
-// 0.14.0 hands this code a digest with `sections` and no `blocks` (GET
+// 0.15.0 hands this code a digest with `sections` and no `blocks` (GET
 // /api/state never does: the server normalizes on the way out).
 
 import type { DigestBlock, DigestSectionConfig, DigestTextBlock } from './types';

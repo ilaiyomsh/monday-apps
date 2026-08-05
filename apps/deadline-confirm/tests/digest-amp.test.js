@@ -506,7 +506,7 @@ describe('renderDigestAmp — strict amp4email CSS (data-css-strict)', () => {
 describe('renderDigestAmp — response + validation', () => {
   // Per ROW, not per message: amp-form looks for these blocks inside the form
   // that submitted, which is what puts the loader and the mark on that row.
-  // 0.14.0: the greeting left this renderer. It is a TEXT BLOCK now (the mail
+  // 0.15.0: the greeting left this renderer. It is a TEXT BLOCK now (the mail
   // carries no pre-written text), so "greets by name" is asserted in
   // digest-amp-blocks.test.js against the block list — not here, where this
   // fixture deliberately passes no blocks at all.

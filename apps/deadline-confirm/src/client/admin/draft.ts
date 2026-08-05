@@ -66,7 +66,7 @@ export interface DigestDraft {
   sendHour: number;
   /**
    * The email body, in order: text blocks and cluster blocks in ONE list
-   * (0.14.0). There is no separate sections array any more — cluster order here
+   * (0.15.0). There is no separate sections array any more — cluster order here
    * is what the server stores as section order, i.e. the cluster priority.
    */
   blocks: DigestBlockDraft[];
@@ -178,7 +178,7 @@ export function defaultDigestDraft(): DigestDraft {
   };
 }
 
-/** One stored section → a cluster draft, tolerating every pre-0.14.0 shape. */
+/** One stored section → a cluster draft, tolerating every pre-0.15.0 shape. */
 function clusterFromSection(s: DigestSectionConfig): DigestClusterDraft {
   const buttonIds =
     Array.isArray(s.buttonIds) && s.buttonIds.length > 0
@@ -210,7 +210,7 @@ function blockFromConfig(block: DigestBlock): DigestBlockDraft {
 export function digestFromConfig(digest: DigestConfig | null | undefined): DigestDraft {
   if (!digest) return defaultDigestDraft();
   // GET /api/state always sends `blocks`. The fallback is for an IMPORTED
-  // settings export taken before 0.14.0 — reconstruct the mail it was sending
+  // settings export taken before 0.15.0 — reconstruct the mail it was sending
   // rather than drop its text (same reconstruction the server does).
   const blocks = Array.isArray(digest.blocks)
     ? digest.blocks

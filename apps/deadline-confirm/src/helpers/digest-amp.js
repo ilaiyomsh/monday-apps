@@ -441,7 +441,7 @@ const STYLES_NOTES = `
 // unvalidated one would be a stylesheet-injection point in a document that is
 // sent to a reader's mailbox.
 
-/** The document's own stack — what every pre-0.14.0 digest was rendered in. */
+/** The document's own stack — what every pre-0.15.0 digest was rendered in. */
 const DOC_FONT_STACK = 'Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif';
 
 /**
@@ -733,7 +733,7 @@ ${renderStatusControl({ formId, menuKey, task, buttons, palette, noteGated: Bool
  * same thing. A block naming a section that is absent renders nothing.
  *
  * `blocks` absent (legacy call shape, and every renderer test that predates
- * 0.14.0) means "the clusters, in recipient order, with no text".
+ * 0.15.0) means "the clusters, in recipient order, with no text".
  *
  * @param {Array<object>|undefined} blocks
  * @param {object} recipient
@@ -766,7 +766,7 @@ function resolveUnits(blocks, recipient) {
 /**
  * Render the dynamic-email (amp4email) part of one recipient's digest.
  *
- * The BODY IS THE BLOCK LIST (0.14.0). This function contributes no content
+ * The BODY IS THE BLOCK LIST (0.15.0). This function contributes no content
  * text of its own — only operational chrome: the cluster column headers, the
  * status caption, the note placeholder and amp-form's per-row
  * submitting/✓/error strips. A greeting, an instruction line or a footer is a

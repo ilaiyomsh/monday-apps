@@ -2,7 +2,7 @@
 // blocks saving (payload digest: null); an ENABLED digest must be complete
 // before draftToConfig resolves.
 //
-// 0.14.0: the draft's clusters live in `blocks` (one ordered list of text and
+// 0.15.0: the draft's clusters live in `blocks` (one ordered list of text and
 // cluster blocks), so the assertions below read them through digestClusters().
 // The completeness rules themselves are unchanged — plus two new ones for text
 // blocks, which the server also enforces.
@@ -209,7 +209,7 @@ describe('draftToConfig digest resolution', () => {
     expect(payload?.digest).toBeNull();
   });
 
-  // 0.14.0: the payload carries BOTH — `blocks` (what the server validates and
+  // 0.15.0: the payload carries BOTH — `blocks` (what the server validates and
   // stores) and the `sections` projection derived from them, sent so a rolled-back
   // server still finds the clusters. The server re-derives sections from the
   // blocks either way, so storage cannot end up with the two disagreeing.

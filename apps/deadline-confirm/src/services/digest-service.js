@@ -20,13 +20,13 @@ import { normalizeDigestBlocks, sectionsFromBlocks } from './digest-blocks.js';
 /**
  * The digest's clusters, as sections.
  *
- * SINGLE SOURCE OF TRUTH (0.14.0): when the digest carries `blocks`, the
+ * SINGLE SOURCE OF TRUTH (0.15.0): when the digest carries `blocks`, the
  * clusters — and their ORDER, which is their priority — come from there. The
  * stored `sections` array is a projection the server writes alongside them
  * (older server versions and this module's callers read it), so trusting it
  * over the blocks would let the two disagree: a config imported or hand-edited
  * with a stale `sections` copy would classify tasks in one order and render
- * them in another. A digest with no `blocks` key is pre-0.14.0 — then
+ * them in another. A digest with no `blocks` key is pre-0.15.0 — then
  * `sections` IS the truth.
  *
  * @param {object|null|undefined} digest
@@ -150,7 +150,7 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
   const { digest } = config;
   const buttonsById = new Map((config.buttons ?? []).map((b) => [b.id, b]));
   const dateColumns = collectDigestDateColumns(digest);
-  // Blocks first, `sections` only for a pre-0.14.0 digest — see digestSections.
+  // Blocks first, `sections` only for a pre-0.15.0 digest — see digestSections.
   // NAMED configSections deliberately: the per-recipient loop below builds its
   // own local `sections` (the output), and shadowing this one there silently
   // classifies against an empty list.
@@ -213,6 +213,12 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
   // R2 invariant (v6 §6): a recipient's digest contains ONLY tasks assigned
   // to that recipient — R1/R2 and the attribution wording depend on it.
   const recipients = [];
+  // Employees the users board DID resolve (email + exactly one person) who have
+  // nothing pending. They are not recipients — there is no mail to send them —
+  // but the per-employee summary file (§5.2) must still carry a row for each,
+  // because "nobody is missing" is the only claim that file makes. Reported
+  // separately so no consumer can mistake them for someone who got mail.
+  const emptyRecipients = [];
   for (const r of userRecipients) {
     const sections = [];
     let taskCount = 0;
@@ -249,7 +255,10 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
         })),
       });
     }
-    if (taskCount === 0) continue;
+    if (taskCount === 0) {
+      emptyRecipients.push({ email: r.email, name: r.name, personId: r.personId });
+      continue;
+    }
     recipients.push({
       email: r.email,
       name: r.name,
@@ -264,5 +273,5 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
     });
   }
 
-  return { recipients, skippedUsers };
+  return { recipients, skippedUsers, emptyRecipients };
 }

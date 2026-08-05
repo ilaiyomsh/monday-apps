@@ -67,7 +67,7 @@ const cluster = (over = {}) => ({
 
 const recipient = (sections) => ({ name: 'דנה כהן', personId: '501', sections });
 
-/** A text block as the admin stores it (0.14.0 — the body is a block list). */
+/** A text block as the admin stores it (0.15.0 — the body is a block list). */
 const text = (over = {}) => ({
   type: 'text',
   id: 'x_sample01',
@@ -124,7 +124,7 @@ const SAMPLES = [
     ]),
   },
   {
-    // 0.14.0: the body is operator-authored blocks. Every generated .tb<n> rule
+    // 0.15.0: the body is operator-authored blocks. Every generated .tb<n> rule
     // and every text div has to pass the same strict-CSS check as the rest of the
     // document — the properties are reused from validated rules, but only the
     // validator can say so.
