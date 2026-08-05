@@ -346,7 +346,9 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
       // happened". logger.error routes to the global toast — the rejection is now
       // impossible to miss. (A stale templateDocx from "קובץ תבנית" mode still counts
       // against the budget even in "עיצוב כאן", which is how a small logo can trip it.)
-      logger.error('ExportTemplateTab', msg);
+      // The toast text comes from record.error ?? record.data (useUiErrorSink) — a
+      // message-only call would show the generic unexpected-error text (Codex P2).
+      logger.error('ExportTemplateTab', msg, new Error(msg));
       return true;
     }
     return false;

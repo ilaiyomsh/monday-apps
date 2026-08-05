@@ -64,6 +64,15 @@ describe('round358 — verify-after-write catches a silent loss', () => {
     await expect(saveTypeExportAssets(CTX, 'סבב', ASSETS)).rejects.toThrow(/לא נקלטה|אימות/);
   });
 
+  it('SAME-LENGTH different content rejects too — the verify compares content, not size (Codex P2)', async () => {
+    // Replacing a file with another of identical size (two exports of the same
+    // template) must not pass verification against a stale read-back.
+    const stale = { ...ASSETS, templateDocx: 'XXXXXXXX' }; // same length as 'UEsDBBQ='
+    expect(stale.templateDocx.length).toBe(ASSETS.templateDocx.length);
+    storage.getItem.mockResolvedValue(echo(JSON.stringify(stale)));
+    await expect(saveTypeExportAssets(CTX, 'סבב', ASSETS)).rejects.toThrow(/לא נקלטה|אימות/);
+  });
+
   it('type save: a matching read-back resolves clean', async () => {
     await expect(saveTypeExportAssets(CTX, 'סבב', ASSETS)).resolves.toMatchObject({ templateDocx: 'UEsDBBQ=' });
   });

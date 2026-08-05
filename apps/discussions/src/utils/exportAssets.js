@@ -91,8 +91,12 @@ async function verifyWriteLanded(key, clean, what) {
     logger.warn('exportAssets', `${what}: קריאת האימות אחרי הכתיבה נכשלה — מניחים שהכתיבה נקלטה`, err);
     return;
   }
+  // Codex P2 on this round — content, not length: replacing a file with different
+  // content of the SAME size (two versions of the same logo, a re-exported .docx)
+  // must not pass verification against a stale read-back. Multi-MB string equality
+  // is a cheap memcmp-style check; the save is rare and already does a full read.
   const mismatch = ['headerLogo', 'footerLogo', 'templateDocx'].find(
-    (f) => (stored[f]?.length || 0) !== (clean[f]?.length || 0)
+    (f) => (stored[f] || '') !== (clean[f] || '')
   );
   if (mismatch) {
     const err = new Error(`${what}: הכתיבה לא נקלטה באחסון (אימות ${mismatch} נכשל) — נסו קובץ קטן יותר`);
