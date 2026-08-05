@@ -118,11 +118,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
   // Deliberately NOT can('manageTemplates'): that capability defaults to 'all'.
   const isSuper = useIsSuperMember({ currentUser });
   const canEditTypeTemplate = !!onEditTypeTemplate && (canManageSettings || isSuper);
-  // Set when the user leaves for the type-template editor. This component never
-  // unmounts (`open` only gates the render), so every field the user already filled
-  // is still in state when they come back — the flag stops the open-effects below
-  // from re-seeding over it, which is what makes the return land "at the same point".
-  const resumingFromTypeEditorRef = useRef(false);
+  // Set (to `{ type }`) when the user leaves for the type-template editor. This
+  // component never unmounts (`open` only gates the render), so every field the user
+  // already filled is still in state when they come back — the flag stops the
+  // open-effects below from re-seeding over it, which is what makes the return land
+  // "at the same point". The type name rides along so the resume can refresh that
+  // type's derived agenda (see the resume effect).
+  const resumingFromTypeEditorRef = useRef(null);
   const { templates, participantTemplates, typeTemplates, typeColor, assignRandomTypeColor } = useTemplates();
   const { settings, updateSettings } = useSettings();
   // round340 — see resolvePreference: the fallback is DEFAULT_PREFERENCES, not a literal
@@ -376,11 +378,21 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
     }
   }, [open, isEdit]);
 
-  // round355 — clear the resume flag AFTER the two open-effects above have read it.
-  // Declared last on purpose: effects run in declaration order within a component, so
-  // this is the one that consumes the flag, and a later fresh open seeds normally.
+  // round355 — the resume pass. Declared last on purpose: effects run in declaration
+  // order within a component, so the two open-effects above have already read the flag
+  // and this is the one that consumes it (a later fresh open then seeds normally).
   useEffect(() => {
-    if (open) resumingFromTypeEditorRef.current = false;
+    if (!open) return;
+    const resumed = resumingFromTypeEditorRef.current;
+    resumingFromTypeEditorRef.current = null;
+    if (!resumed?.type || resumed.type !== discussionType) return;
+    // Codex P2 on round355 — the type just edited may be the one selected here, and
+    // `selectType` had already stashed the OLD agenda in `typeTopics` for submit. Left
+    // alone, creating now would build topics from the agenda the user just replaced.
+    // Only the AGENDA is re-derived: applyParticipantTemplate merges people in, and
+    // the user may have removed some of them on purpose since selecting the type.
+    setTypeTopics(typeTopicsFor(resumed.type));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const applyParticipantTemplate = (tpl) => {
@@ -405,6 +417,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
   //   1. the UNIFIED type template (topics + lead + participants in one) — new;
   //   2. legacy fallback: the separate topic + participant templates assigned to
   //      that type (each type maps to at most one of each — see TemplateManager).
+  // The agenda a type template contributes to a NEW discussion (null = none). Shared
+  // by selectType and the resume refresh so the two can never disagree.
+  const typeTopicsFor = (typeName) => {
+    const tpl = typeTemplates.find((t) => t.discussionType === typeName);
+    return tpl?.topics?.length ? tpl.topics : null;
+  };
+
   const selectType = (id) => {
     setDiscussionType(id);
     setIsTypeDropdownOpen(false);
@@ -418,7 +437,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
       // Unified template: fill people now, stash topics for submit. Clear any
       // manual topic-template pick so we don't double-create topics.
       setTemplateId('none');
-      if (typeTpl.topics?.length) setTypeTopics(typeTpl.topics);
+      setTypeTopics(typeTopicsFor(id));
       applyParticipantTemplate({ participants: typeTpl.participants, lead: typeTpl.lead, coordinator: typeTpl.coordinator });
       return;
     }
@@ -1232,7 +1251,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
                                     onPointerDown={(e) => e.stopPropagation()}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      resumingFromTypeEditorRef.current = true;
+                                      resumingFromTypeEditorRef.current = { type: option.label };
                                       setIsTypeDropdownOpen(false);
                                       setTypeSearch('');
                                       onEditTypeTemplate(option.label);
