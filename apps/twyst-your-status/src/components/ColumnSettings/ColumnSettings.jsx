@@ -952,16 +952,9 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       mondayService.showNotice('ההגדרות נשמרו');
       // But a column the guard does not watch is not protected, and this screen's
       // switch says it is. Say so rather than let the owner assume.
-      if (enrollment === 'not_activated') {
-        mondayService.showNotice(
-          'ההגדרות נשמרו, אך השומר אינו מחובר לחשבון — ביטול אוטומטי לא יפעל עד לחיבור.',
-          'error',
-        );
-      } else if (enrollment === 'failed') {
-        mondayService.showNotice(
-          'ההגדרות נשמרו, אך רישום השומר על העמודה נכשל — נסו לשמור שוב.',
-          'error',
-        );
+      const enrollmentIssue = enrollmentProblem(enrollment);
+      if (enrollmentIssue) {
+        mondayService.showNotice(`ההגדרות נשמרו, אך ${enrollmentIssue}`, 'error');
       }
       await dismiss({ saved: true });
     } catch (err) {
@@ -987,13 +980,26 @@ function ColumnSettings({ context, variant = 'overlay' }) {
   // draft, and account-level `activated` can be true thanks to a DIFFERENT
   // owner while this column's reverts are all skipped. Those two are fallbacks,
   // in that order, only when the server cannot answer. null = unknown/loading.
-  const [guardConn, setGuardConn] = useState({ activated: null, primaryAuthorized: null, meAuthorized: null });
+  // round330 — `enrolled` rides the same probe and used to be dropped on the
+  // floor: it is the only on-screen answer to "does this column actually carry
+  // its webhook", which is what decides whether ANY of this works (no webhook →
+  // no revert AND no bypass ever recorded). tri-state, and the third state is
+  // load-bearing: null means the guard did not answer, which must not be shown
+  // as "not registered".
+  const [guardConn, setGuardConn] = useState({
+    activated: null, primaryAuthorized: null, meAuthorized: null, enrolled: null,
+  });
   const guardConnected = guardConn.meAuthorized ?? guardConn.primaryAuthorized ?? guardConn.activated;
+  const [enrolling, setEnrolling] = useState(false);
 
   const refreshGuardStatus = useCallback(async () => {
     if (!boardId || !columnId) return;
-    const { activated, primaryAuthorized, meAuthorized } = await getGuardStatus({ boardId, columnId });
-    setGuardConn({ activated, primaryAuthorized, meAuthorized });
+    const {
+      activated, primaryAuthorized, meAuthorized, enrolled,
+    } = await getGuardStatus({ boardId, columnId });
+    setGuardConn({
+      activated, primaryAuthorized, meAuthorized, enrolled,
+    });
   }, [boardId, columnId]);
 
   // Read on open, and again when the tab regains focus — that is when the owner
@@ -1014,6 +1020,40 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       mondayService.showNotice('הדפדפן חסם את חלון החיבור — אשרו חלונות קופצים ונסו שוב.', 'error');
     } else if (status === 'failed') {
       mondayService.showNotice('לא ניתן היה לפתוח את החיבור. נסו שוב.', 'error');
+    }
+  };
+
+  /*
+   * round330 — one reading of an enrollment outcome, shared by the save path and
+   * the manual register button. null = nothing to report; every other status is a
+   * DIFFERENT instruction (authorize / ask a board owner / retry), which is why
+   * they are separate statuses at all.
+   */
+  const enrollmentProblem = (status) => {
+    if (status === 'not_activated') return 'השומר אינו מחובר לחשבון — נדרש אישור חד-פעמי של הבעלים.';
+    if (status === 'not_board_owner') return 'רק בעלי הלוח יכולים לרשום את השומר על הלוח.';
+    if (status === 'failed') return 'רישום השומר על העמודה נכשל — נסו שוב.';
+    return null; // 'enrolled' | 'disabled' (dev harness)
+  };
+
+  /*
+   * round330 — register the webhook without re-saving the form. Two reasons this
+   * button exists: a column saved before the enrollment bug was fixed carries no
+   * webhook and nothing but a save would have registered it, and an owner who
+   * sees "אינה רשומה" needs a way to act on it from where they read it.
+   * The server endpoint is idempotent, and the button is hidden once the column
+   * IS registered, so it cannot stack a second webhook on the same column.
+   */
+  const handleEnrollNow = async () => {
+    setEnrolling(true);
+    try {
+      // Total by contract (a status for every outcome, never a throw) — see guardEnroll.
+      const problem = enrollmentProblem(await enrollColumnGuard({ boardId, columnId }));
+      if (problem) mondayService.showNotice(problem, 'error');
+      else mondayService.showNotice('העמודה נרשמה אצל השומר.');
+      await refreshGuardStatus();
+    } finally {
+      setEnrolling(false);
     }
   };
 
@@ -1076,6 +1116,12 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     }));
 
   const coloredCount = labelsDraft.filter((label) => !label.isDefaultEmpty).length;
+
+  // round330 — three states, not two: 'unknown' is what the guard not answering
+  // looks like, and it is not the same news as "not registered".
+  const enrolledState = guardConn.enrolled === true
+    ? 'ok'
+    : (guardConn.enrolled === false ? 'need' : 'unknown');
 
   return (
     <main className={`twyst-settings${isOverlay ? ' is-overlay' : ''}`} dir="rtl">
@@ -1210,6 +1256,33 @@ function ColumnSettings({ context, variant = 'overlay' }) {
               )}
             </div>
           )}
+
+          {/* round330 — does this column actually carry its webhook? Shown to every
+              owner who opens the settings, and NOT gated on the auto-revert switch:
+              without the webhook the guard hears nothing at all, so a bypass is not
+              even counted in the monitor below. The register button is the repair —
+              hidden once registered, so it cannot add a second webhook. */}
+          <div className={`twyst-guard-hook twyst-guard-hook--${enrolledState}`}>
+            {enrolledState === 'ok' && (
+              <span>✓ העמודה רשומה אצל השומר — שינויי סטטוס מדווחים אליו בזמן אמת.</span>
+            )}
+            {enrolledState !== 'ok' && (
+              <span>
+                {enrolledState === 'need'
+                  ? 'העמודה אינה רשומה אצל השומר — עקיפות לא יזוהו ולא יירשמו. '
+                  : 'מצב הרישום אצל השומר לא ידוע — השומר לא ענה. '}
+                <button
+                  type="button"
+                  className="twyst-linkish"
+                  disabled={saving || enrolling}
+                  aria-busy={enrolling}
+                  onClick={handleEnrollNow}
+                >
+                  רישום השומר על העמודה
+                </button>
+              </span>
+            )}
+          </div>
         </section>
 
         <BypassMonitor

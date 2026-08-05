@@ -68,9 +68,21 @@ describe('enrollColumnGuard', () => {
     expect(await enrollColumnGuard({ boardId: '5098', columnId: 'c' }, deps)).toBe('not_activated');
   });
 
-  it("returns 'failed' on any other non-2xx answer (403 not_board_owner included)", async () => {
+  /*
+   * round330 — 403 gets its own status. The manual enroll button reports the
+   * reason to the owner, and "רק בעלי הלוח יכולים לרשום" is a different
+   * instruction from "נסו שוב": retrying cannot fix a permission.
+   */
+  it("returns 'not_board_owner' on a 403 answer", async () => {
     const deps = makeDeps({
       fetchImpl: vi.fn().mockResolvedValue(okResponse(403, { error: 'not_board_owner' })),
+    });
+    expect(await enrollColumnGuard({ boardId: '5098', columnId: 'c' }, deps)).toBe('not_board_owner');
+  });
+
+  it("returns 'failed' on any other non-2xx answer (502 from monday included)", async () => {
+    const deps = makeDeps({
+      fetchImpl: vi.fn().mockResolvedValue(okResponse(502, { error: 'enroll_failed' })),
     });
     expect(await enrollColumnGuard({ boardId: '5098', columnId: 'c' }, deps)).toBe('failed');
   });

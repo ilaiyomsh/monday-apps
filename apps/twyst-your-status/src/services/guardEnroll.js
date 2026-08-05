@@ -25,7 +25,11 @@
  *   'not_activated' — the guard answered 409: the account has not completed
  *                     the one-time OAuth activation. Logged as a warning with
  *                     the activation pointer (GUARD-ACTIVATION.md).
- *   'failed'        — network error or any other non-200 answer. Logged.
+ *   'not_board_owner' — the guard answered 403: creating a board webhook is a
+ *                     BOARD owner's right, and a column owner is not necessarily
+ *                     one. Its own status (round330) because the manual register
+ *                     button must say so — retrying cannot fix a permission.
+ *   'failed'        — network error, timeout, or any other non-200 answer. Logged.
  *
  * @param {{ boardId: string|number, columnId: string }} target
  * @param {{
@@ -80,6 +84,10 @@ export async function enrollColumnGuard({ boardId, columnId }, deps = {}) {
     if (response.status === 409) {
       logger.warn('guardEnroll', 'guard not activated for this account — column saved unguarded (see docs/GUARD-ACTIVATION.md)', { boardId, columnId });
       return 'not_activated';
+    }
+    if (response.status === 403) {
+      logger.warn('guardEnroll', 'not a board owner — a board webhook cannot be created by this user', { boardId, columnId });
+      return 'not_board_owner';
     }
     logger.error('guardEnroll', `guard enrollment answered ${response.status}`, { boardId, columnId });
     return 'failed';
