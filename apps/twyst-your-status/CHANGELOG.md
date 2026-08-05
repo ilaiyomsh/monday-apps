@@ -1,5 +1,27 @@
 # Changelog
 
+## תיקון רישום ה-webhook — `change_status_column_value` דורש `columnValue` (3.15.2)
+
+רישום עמודה אצל השומר (`POST /api/guard/enroll`) החזיר **502 לכל בעלים**, וכך גם
+`/status` ו-`/bypasses`. הקונטיינר היה תקין (`/health` = 200); ה-502 היה בלוק ה-catch
+של ה-handlers עצמם. האבחון החי הראה: SecureStorage תקין (הטוקן נשמר ונקרא), טוקן ה-OAuth
+תקף (ה-`api.me()` בתוך ה-callback הצליח) — הכשל היה `monday API soft error thrown at the
+funnel`, שגיאת GraphQL רכה בתוך תשובת 200.
+
+השורש: `create_webhook` נקרא עם `event: change_status_column_value` ו-`config: {columnId}`
+בלבד. האירוע הזה **דורש גם `columnValue`**; config עם `columnId` בלבד נדחה עם
+`"This config for this event is invalid"` (`InvalidWebhookConfigException`). ה-funnel זורק
+את השגיאה הרכה וה-handler מחזיר 502 — כלומר הרישום **מעולם לא עבד** (ללא קשר ל-OAuth,
+להרשאות או לניתוב, שכולם תקינים). אומת אמפירית: `{columnId}` נדחה; `{columnId,
+columnValue: {"$any$": true}}` מתקבל.
+
+- **התיקון** (`monday-api.js` `createColumnWebhook`): `config` הפך ל-
+  `{columnId, columnValue: {"$any$": true}}` — יורה על **כל** ערך חדש בעמודה, בדיוק מה
+  שהשומר צריך (ואז מחליט לפי הכללים שלו). נשמר אותו אירוע `change_status_column_value`,
+  כך שמבנה ה-payload שה-handler מפענח (`value.label.index`) לא משתנה.
+- **הטסט חוזק**: הטסט הקודם בדק רק שה-config מכיל `"columnId"` ולכן פספס את החוסר;
+  עכשיו הוא מאמת `config.columnValue === {"$any$": true}` (נכשל על הקוד הישן).
+
 ## 3.15.1 — מועמד הפיתוח הבא אחרי שחרור 3.15.0 ללייב
 
 אין שינוי מוצרי. 3.15.0 שוחררה ללייב (PR #623), ולכן develop מקדם את המספר למועמד
