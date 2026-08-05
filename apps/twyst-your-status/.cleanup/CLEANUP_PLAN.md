@@ -21,7 +21,7 @@ stated ordering dependencies inside `ColumnSettings.jsx` and `PersonPicker.jsx`)
 | 2 | dead files | 3 | M | done |
 | 3 | unused exports | 5 | M | done |
 | 4 | unused deps | 1 | M | done |
-| 5 | duplication consolidation | 10 | L | approved |
+| 5 | duplication consolidation | 10 | L | done |
 | 6 | pattern alignment | 4 | L | done |
 | 7 | structure | 13 | L | approved |
 
@@ -255,7 +255,7 @@ are pre-declared in the appendix so no batch reopens them.
 ---
 
 ## Batch 5 — duplication consolidation: one owner per duplicated rule
-risk: L | status: approved
+risk: L | status: done
 
 Covers all four actionable jscpd clones (clones 1, 4, 5, 6) plus the sub-threshold copies only
 a human reader finds; clones 2 and 3 are in the appendix with reasons. Several findings touch
