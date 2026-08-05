@@ -38,7 +38,16 @@ import logger from '../utils/logger.js';
 const cache = new Map(); // key `${boardId}:${colId}` -> resolved result
 const inflight = new Map();
 
-const EMPTY = { options: [], labelById: {}, colorById: {}, orderById: {}, doneId: null };
+const EMPTY = { options: [], labelById: {}, colorById: {}, orderById: {}, doneId: null, emptyLabel: null };
+
+/*
+ * round353 §3 — the GRAY DEFAULT label's stable id. monday pre-creates every status
+ * column with a gray label on id 5; provisioning (and owners, by renaming it) put the
+ * "not yet" text there ("טרם החל" / "טרם נבחרה"). An EMPTY cell is still *no value* —
+ * monday never auto-assigns id 5 — so surfaces render `emptyLabel` for empty values,
+ * which makes the gray label read as the empty state everywhere in the app.
+ */
+const GRAY_DEFAULT_LABEL_ID = 5;
 
 // ---- change-notification (so a newly added label propagates without reload) ----
 // The module cache never expired before; `addStatusLabel` now bumps `version`
@@ -120,7 +129,10 @@ async function load(boardId, colId) {
   });
   const doneOpt = options.find((o) => o.isDone);
   const doneId = doneOpt ? doneOpt.id : null;
-  return { options, labelById, colorById, orderById, doneId };
+  // Blank gray labels are filtered out by the parsers above, so this is null unless the
+  // column really carries a text on id 5 — callers keep their own fallback for null.
+  const emptyLabel = labelById[GRAY_DEFAULT_LABEL_ID] ?? null;
+  return { options, labelById, colorById, orderById, doneId, emptyLabel };
 }
 
 export function useStatusOptions(boardKey = 'tasks', alias = 'statusID') {

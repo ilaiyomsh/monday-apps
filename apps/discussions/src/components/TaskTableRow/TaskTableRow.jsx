@@ -416,14 +416,14 @@ export const TaskTableRow = memo(function TaskTableRow({
               {showStatus ? (
                 <span className={styles.statusFill} style={{ background: statusFill }}>{statusLabel}</span>
               ) : (
-                <span className={styles.statusEmpty}>בחר סטאטוס</span>
+                <span className={styles.statusEmpty}>{statusOpts.emptyLabel || 'בחר סטאטוס'}</span>
               )}
             </button>
           </Dialog>
         ) : showStatus ? (
           <span className={styles.statusFill} style={{ background: statusFill }}>{statusLabel}</span>
         ) : (
-          <span className={styles.statusEmpty} />
+          <span className={styles.statusEmpty}>{statusOpts.emptyLabel || ''}</span>
         )}
       </div>
     ),
@@ -467,14 +467,14 @@ export const TaskTableRow = memo(function TaskTableRow({
                 {showPriorityValue ? (
                   <span className={styles.statusFill} style={{ background: priorityFill }}>{priorityLabel}</span>
                 ) : (
-                  <span className={styles.statusEmpty}>בחר עדיפות</span>
+                  <span className={styles.statusEmpty}>{priorityOpts.emptyLabel || 'בחר עדיפות'}</span>
                 )}
               </button>
             </Dialog>
           ) : showPriorityValue ? (
             <span className={styles.statusFill} style={{ background: priorityFill }}>{priorityLabel}</span>
           ) : (
-            <span className={styles.statusEmpty} />
+            <span className={styles.statusEmpty}>{priorityOpts.emptyLabel || ''}</span>
           )}
       </div>
     ) : null,

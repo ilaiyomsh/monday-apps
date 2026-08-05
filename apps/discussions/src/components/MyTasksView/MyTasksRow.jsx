@@ -289,7 +289,7 @@ export const MyTasksRow = React.memo(function MyTasksRow({ task, columns, status
         options={priorityOpts.options}
         labelById={priorityOpts.labelById}
         colorById={priorityOpts.colorById}
-        emptyLabel={t('myTasks.noPriority')}
+        emptyLabel={priorityOpts.emptyLabel || t('myTasks.noPriority')}
         onChange={onPriorityChange}
       />
     ) : null,
@@ -302,7 +302,7 @@ export const MyTasksRow = React.memo(function MyTasksRow({ task, columns, status
         options={statusOpts.options}
         labelById={statusOpts.labelById}
         colorById={statusOpts.colorById}
-        emptyLabel={t('myTasks.noStatus')}
+        emptyLabel={statusOpts.emptyLabel || t('myTasks.noStatus')}
         onChange={onStatusChange}
       />
     ),

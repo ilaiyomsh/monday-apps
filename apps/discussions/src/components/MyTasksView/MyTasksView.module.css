@@ -116,10 +116,10 @@
      With margin the scrollport itself starts 28px in: scrolled content clips
      there and the frozen cells (left:0) pin exactly at the inset, gutter clean. */
   margin-inline-start: var(--content-gutter-start, 52px); /* round114 — shared white gutter */
-  /* round184 — a symmetric right inset (owner request) so the row separators STOP
-     a bit before the right edge instead of bleeding to it, matching the discussion
-     tables' right rule inset. */
-  margin-inline-end: var(--section-rule-inset-wide, 24px);
+  /* round353 §4 (owner request) — the right inset equals the LEFT gutter, so the
+     white band between the table and the screen edge is truly symmetric on both
+     sides (the round184 24px inset was narrower than the 52px left gutter). */
+  margin-inline-end: var(--content-gutter-start, 52px);
 }
 /* Establishes the shared horizontal extent: as wide as the widest group table
    (max-content), but never narrower than the viewport (min-width:100%) so the
@@ -450,9 +450,12 @@
   padding: 8px 0 16px;
 }
 
-/* Round 81 — push the quick-filter battery to the far (right) end of the ltr toolbar. */
+/* Round 81 — push the quick-filter battery to the far (right) end of the ltr toolbar.
+   round353 §4 — and stop it on the TABLE's right edge line: the toolbar already pads
+   16px, so the battery adds the difference up to the shared 52px gutter. */
 .batterySlot {
   margin-inline-start: auto;
+  margin-inline-end: calc(var(--content-gutter-start, 52px) - var(--spacing-medium, 16px));
 }
 
 /* round210 — PHONE fit (owner screenshot 2026-07-21): the desktop board chrome

@@ -36,22 +36,19 @@ const MODULE = 'provisionBoards';
 const MANAGED_TYPE_TITLE = 'סוג דיון';
 
 /*
- * Status column (tasks.statusID) — exact label set, display order and colors the
- * user requested (verified against the live board). Stable label ids: בעבודה=0,
- * בוצע=1 (is_done), תקוע=2, טרם החל=3, blank=5. `labels_positions_v2` is the
- * DISPLAY order (blank, טרם החל, בעבודה, תקוע, בוצע); `done_colors:[1]` marks
- * בוצע as done.
+ * Status column (tasks.statusID) — round353 §3 (owner, with screenshots): the "not yet"
+ * text lives ON THE GRAY DEFAULT LABEL, id 5 — "טרם החל" is not an extra label, it IS the
+ * gray one. The previous shape shipped it as a separate blue label (id 3) plus a blank
+ * gray, and the owner had to delete the extra and rename the gray by hand. Verified live
+ * (sandbox, 2026-08-05): `labels: {"5": "טרם החל"}` round-trips and keeps grey #c4c4c4.
+ * Stable ids: בעבודה=0 (orange), בוצע=1 (green, is_done), תקוע=2 (red), טרם החל=5 (grey).
+ * `labels_positions_v2` is the DISPLAY order (טרם החל, בעבודה, תקוע, בוצע). No
+ * `labels_colors` block — create_column ignores it; the ids ARE the colors (see
+ * PRIORITY_DEFAULTS below).
  */
 const STATUS_DEFAULTS = JSON.stringify({
-  labels: { 0: 'בעבודה', 1: 'בוצע', 2: 'תקוע', 3: 'טרם החל', 5: '' },
-  labels_positions_v2: { 0: 2, 1: 4, 2: 3, 3: 1, 5: 0 },
-  labels_colors: {
-    0: { color: '#fdab3d', border: '#e99729', var_name: 'orange' },
-    1: { color: '#00c875', border: '#00b461', var_name: 'green-shadow' },
-    2: { color: '#df2f4a', border: '#ce3048', var_name: 'red-shadow' },
-    3: { color: '#007eb5', border: '#3db0df', var_name: 'blue-links' },
-    5: { color: '#c4c4c4', border: '#b0b0b0', var_name: 'grey' },
-  },
+  labels: { 0: 'בעבודה', 1: 'בוצע', 2: 'תקוע', 5: 'טרם החל' },
+  labels_positions_v2: { 0: 1, 1: 3, 2: 2, 5: 0 },
   done_colors: [1],
 });
 
@@ -74,10 +71,14 @@ const STATUS_DEFAULTS = JSON.stringify({
  *   · `create_column` IGNORES `labels_colors`. A status column's colour is fixed by the
  *     label's ID, from monday's own palette: 0 orange · 1 green-shadow · 2 red-shadow ·
  *     3 blue-links · 4 purple · 5 grey · 6 grass-green · 7 bright-blue · 8 mustered ·
- *     9 yellow · 10 soft-black · 11 dark-red. (STATUS_DEFAULTS above appears to set
- *     colours successfully only because its ids happen to match that palette already.)
- *     So the ids below are CHOSEN for their colours: 2=red for דחופה, 0=orange for
- *     גבוהה, 9=yellow for בינונית, 5=grey for נמוכה. Renumber them and the colours move.
+ *     9 yellow · 10 soft-black · 11 dark-red · 12 dark-pink · 13 light-pink ·
+ *     14 dark-purple · 15 lime-green · 16 turquoise · 17 trolley-grey · 18 brown ·
+ *     19 dark-orange (12–19 verified live 2026-08-05, sandbox 16291824).
+ *     So the ids below are CHOSEN for their colours — round353 §3, matching the owner's
+ *     screenshots: 10=black for דחופה, 14=dark-purple for גבוהה, 7=bright-blue for
+ *     בינונית, 16=turquoise for נמוכה, and 5=grey carrying "טרם נבחרה" as the default
+ *     empty state (the gray label CAN take a text at creation — verified live).
+ *     Renumber them and the colours move.
  *   · `create_column` also ignores `done_colors` and always writes back `[1]`. Nothing
  *     here can prevent that, so the ids deliberately SKIP 1: the done marker then points
  *     at a label that does not exist and is inert, instead of silently marking a real
@@ -87,8 +88,8 @@ const STATUS_DEFAULTS = JSON.stringify({
  * Ids and positions are decoupled on purpose, which is what makes both true at once.
  */
 const PRIORITY_DEFAULTS = JSON.stringify({
-  labels: { 2: 'דחופה', 0: 'גבוהה', 9: 'בינונית', 5: 'נמוכה' },
-  labels_positions_v2: { 2: 0, 0: 1, 9: 2, 5: 3 },
+  labels: { 5: 'טרם נבחרה', 10: 'דחופה', 14: 'גבוהה', 7: 'בינונית', 16: 'נמוכה' },
+  labels_positions_v2: { 5: 0, 10: 1, 14: 2, 7: 3, 16: 4 },
 });
 
 const DECISION_STATUS_DEFAULTS = JSON.stringify({

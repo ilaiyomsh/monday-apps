@@ -157,6 +157,12 @@ both views; the discussions-only modals (Settings/Templates/Create) stay inside 
   `useStatusOptions('tasks', alias)` is parameterized to read either status column's labels/order.
   `priorityID`'s provisioned label IDs are chosen for their COLOURS — `create_column` ignores
   `labels_colors` and binds colour to the label id (see `PRIORITY_DEFAULTS`).
+  **The GRAY DEFAULT label (stable id 5) is the empty state (round353 §3):** provisioning writes
+  "טרם החל"/"טרם נבחרה" onto label 5 itself (no extra labels), and `useStatusOptions` exposes its
+  text as `emptyLabel` — every tasks status/priority surface renders that for an EMPTY value
+  (falling back to the old "ללא סטאטוס"/"בחר סטאטוס" strings when label 5 has no text). monday
+  never auto-assigns id 5, so the app-side rendering is what makes the gray label read as the
+  default. Decision-board surfaces were deliberately left on the old strings.
 
 ### "Previous tasks" tab — three resolution modes
 `PreviousTasksTab` resolves the tasks it shows in one of three modes, chosen by the owner in Settings

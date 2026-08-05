@@ -227,7 +227,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   // Status options (for the fills + the staged phase-1 "not done" filter). Loaded
   // once (cached); notDoneStatusIds is [] until ready, so the staged phase-1 then
   // degrades gracefully to the last-month trim alone in that brief window.
-  const { options: statusOptions, labelById, colorById, orderById, doneId } = useStatusOptions('tasks', 'statusID');
+  const { options: statusOptions, labelById, colorById, orderById, doneId, emptyLabel: statusEmptyLabel } = useStatusOptions('tasks', 'statusID');
   const notDoneStatusIds = useMemo(
     () => (statusOptions || []).filter((o) => !o.isDone).map((o) => Number(o.id)),
     [statusOptions]
@@ -264,6 +264,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     labelById: priorityLabelById,
     colorById: priorityColorById,
     orderById: priorityOrderById,
+    emptyLabel: priorityEmptyLabel,
   } = useStatusOptions('tasks', 'priorityID');
 
   // --- client pipeline: filter -> quick-status -> sort -> group (instant) ---
@@ -310,12 +311,12 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       isValidStatus,
       order: group.order,
       discussionDateById: discDateMap,
-      noStatusLabel: t('myTasks.noStatus'),
-      noPriorityLabel: t('myTasks.noPriority'),
+      noStatusLabel: statusEmptyLabel || t('myTasks.noStatus'),
+      noPriorityLabel: priorityEmptyLabel || t('myTasks.noPriority'),
       noDiscussionLabel: t('myTasks.noDiscussion'),
       allTasksLabel: t('myTasks.allTasks'),
     }), colorsByKey),
-    [orderedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t, colorsByKey]
+    [orderedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, statusEmptyLabel, priorityEmptyLabel, t, colorsByKey]
   );
 
   // round208 — a drag-drop inside ONE group (mobile cards) rebuilds the FLAT
