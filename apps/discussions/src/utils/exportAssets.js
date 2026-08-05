@@ -24,7 +24,12 @@ import { monday } from './mondayApi/monday-client.js';
 import logger from './logger.js';
 
 const STORAGE_KEY_BASE = 'discussions_export_assets';
-const TIMEOUT_MS = 5000;
+// round361 — 30s, NOT the 5s inherited from the tiny-settings storage pattern:
+// these values are multi-MB (base64 logos + .docx), and a read that trips a short
+// timeout is swallowed into EMPTY downstream — rendering exactly like "nothing was
+// ever saved", which is the owner-reported symptom this round chases.
+export const EXPORT_ASSETS_TIMEOUT_MS = 30000;
+const TIMEOUT_MS = EXPORT_ASSETS_TIMEOUT_MS;
 // Conservative ceiling under monday's ~6MB per-object storage limit.
 export const EXPORT_ASSETS_MAX_BYTES = 6 * 1024 * 1024;
 
@@ -73,6 +78,19 @@ function typeNameDigest(typeName) {
 export function typeExportAssetsKey(context, typeName) {
   const instanceId = context?.instanceId || context?.boardId || 'default';
   return `${STORAGE_KEY_BASE}_type_${instanceId}_${typeNameDigest(typeName)}`;
+}
+
+/*
+ * round361 — the type's stored CONFIG carries a tiny `hasTemplateDocx` flag that
+ * persists through the small, reliable ASCII type-templates key. When the flag says
+ * a file was saved but the (separately stored, multi-MB) assets came back without
+ * one, the file existed and the ASSET side lost or failed to read it — a state the
+ * editor must present differently from "no file was ever uploaded". Callers must
+ * pass the type's OWN stored config (or null), never the seeded system fallback —
+ * the system template legitimately claims ITS file, not the type's.
+ */
+export function missingStoredTemplateDocx(ownExportTemplate, assets) {
+  return ownExportTemplate?.hasTemplateDocx === true && !assets?.templateDocx;
 }
 
 // The pre-round360 key. NEVER written any more; still read as a fallback so an
@@ -221,13 +239,20 @@ export async function saveExportAssets(context, assets) {
  * round254 — load a discussion-TYPE's own export assets (its brand binaries), or
  * EMPTY when none. Best-effort; never throws.
  */
-export async function loadTypeExportAssets(context, typeName) {
+export async function loadTypeExportAssets(context, typeName, { strict = false } = {}) {
   if (!typeName) return { ...EMPTY };
   const key = typeExportAssetsKey(context, typeName);
   try {
     const res = await withTimeout(monday.storage.getItem(key));
     if (res?.data?.value) return normalize(JSON.parse(res.data.value));
   } catch (err) {
+    /*
+     * round361 — the type EDITOR asks for strict:true: swallowing a read failure
+     * into EMPTY renders exactly like "no file was ever saved", which is how a
+     * failing read masqueraded as a lost save. The default stays fail-soft so the
+     * export dialog keeps degrading to the lower asset tiers.
+     */
+    if (strict) throw err;
     logger.warn('exportAssets', 'קריאת נכסי הייצוא של סוג הדיון נכשלה — משתמשים בברירת המחדל', err);
     return { ...EMPTY };
   }
@@ -251,6 +276,7 @@ export async function loadTypeExportAssets(context, typeName) {
     }
     return assets;
   } catch (err) {
+    if (strict) throw err;
     logger.warn('exportAssets', 'קריאת נכסי הייצוא של סוג הדיון נכשלה — משתמשים בברירת המחדל', err);
   }
   return { ...EMPTY };

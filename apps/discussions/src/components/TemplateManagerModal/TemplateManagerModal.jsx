@@ -16,6 +16,7 @@ import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { countPoints } from '@generated/utils/templates.js';
 import { shouldApplyTypeEdit } from './typeEditRequest.js';
+import { missingStoredTemplateDocx } from '@generated/utils/exportAssets.js';
 import {
   useDropdownOptions,
   addDropdownLabel,
@@ -420,13 +421,31 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
      */
     const token = (typeAssetsLoadRef.current += 1);
     typeExportTouchedRef.current = false;
-    Promise.resolve(loadTypeExportAssets?.(typeName))
+    /*
+     * round361 (owner: "אין שגיאה אבל הקובץ לא שם") — the editor's read is STRICT,
+     * because here a swallowed read failure renders exactly like "no file was ever
+     * saved". Two distinct states become visible on the export sub-tab:
+     *   - the read itself failed → say so, instead of an innocent empty upload row;
+     *   - the read succeeded EMPTY while the type's OWN stored config says a file
+     *     was saved (`hasTemplateDocx` persists in the small, reliable
+     *     type-templates key) → the asset write was lost — say that.
+     * Both are token-guarded like the assets themselves — a stale result must not
+     * stamp an error onto a newer editing session.
+     */
+    Promise.resolve(loadTypeExportAssets?.(typeName, { strict: true }))
       .then((a) => {
         if (!a) return;
         if (token !== typeAssetsLoadRef.current || typeExportTouchedRef.current) return;
         setTypeExportAssets(a);
+        if (missingStoredTemplateDocx(existing?.exportTemplate ?? null, a)) {
+          setTypeExportAssetError('קובץ התבנית סומן כשמור, אך לא נמצא באחסון — נסו להעלות ולשמור אותו שוב.');
+        }
       })
-      .catch((err) => logger.warn('TemplateManagerModal', 'טעינת נכסי הייצוא של הסוג נכשלה', err));
+      .catch((err) => {
+        logger.warn('TemplateManagerModal', 'טעינת נכסי הייצוא של הסוג נכשלה', err);
+        if (token !== typeAssetsLoadRef.current) return;
+        setTypeExportAssetError('קריאת נכסי הייצוא של הסוג מהאחסון נכשלה — הקובץ עשוי להיות שמור. סגרו את העורך ונסו שוב.');
+      });
     setIsNew(!existing);
     setView('edit');
   };

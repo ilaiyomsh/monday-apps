@@ -455,7 +455,7 @@ export function TemplatesProvider({ children }) {
   // keyed store; the CONFIG lives on the TypeTemplate.exportTemplate. Both wrappers
   // bind the current instance context so callers pass only the type name.
   const loadTypeExportAssets = useCallback(
-    (typeName) => loadTypeExportAssetsAt(context, typeName),
+    (typeName, opts) => loadTypeExportAssetsAt(context, typeName, opts),
     [context]
   );
   const saveTypeExportAssets = useCallback(
