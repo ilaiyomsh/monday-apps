@@ -411,7 +411,15 @@ the human prefers a smaller blast radius, strike findings rather than reordering
 - evidence: `OnClickDialog` measures 342 lines and `loadDialogData` 68; the component owns eight pieces of fetch state plus the whole load/supersede/retry machinery inline, alongside its rendering.
 - source: auditor:structure
 
-### A-structure-07
+### A-structure-07 — ⚠ SKIPPED BY BATCH 7, EXECUTED AS A FOLLOW-UP
+> **Record correction.** Batch 7 (`86fa951`) was committed and marked `done` while this
+> approved, non-struck finding never ran — `rosterAccess.js` did not exist and `loadRoster`
+> was still in `PersonPicker.jsx:36-53`. The approval block above says batch 7 "executes 11
+> of its 13 findings"; it executed **10**. Nothing recorded the gap, which is the part that
+> mattered: a silent omission under a `done` status is a false record, worse than the
+> missing extraction. Stage 3's adversarial reviewer caught it. The extraction was then
+> performed as a separate follow-up commit, outside the batch, with the same guard rules
+> applied to both paths and the full gate re-run.
 - files: src/components/shared/PersonPicker.jsx:36-54 → new src/services/rosterAccess.js
 - action: move :36-54 verbatim into `src/services/rosterAccess.js` exporting `loadRoster` (keep the module-level `rosterCache`, the single-flight `rosterPromise` and its `= null` retry reset). `PersonPicker.jsx` imports `loadRoster` from `../../services/rosterAccess`. Keep the `logger.error('PersonPicker', …)` tag string as-is unless you deliberately accept a log-tag change. If batch 6's `A-patterns-05` landed first, the GraphQL document is already `GET_ACCOUNT_USERS` in `graphqlQueries.js` — import it here rather than re-inlining the text; either way the query text must stay byte-identical because `guardEnrollOnSave.test.jsx:89`, `guardWebhookIndicator.test.jsx:91` and `newLabelPermissions.test.jsx:107` branch on `query.includes('AccountUsers')`. Importers to update: `PersonPicker.jsx` only.
 - evidence: a component file owns an API-access service (module-level cache + single-flight promise + inline GraphQL document) while every other monday read in the app lives under `src/services/`; `src/services/teamsAccess.js` (108 lines) is the app's precedent for exactly this shape. `PersonPicker.jsx` is 374 lines, the largest file in `components/shared/`.

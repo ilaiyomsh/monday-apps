@@ -10,8 +10,8 @@ import { createPortal } from 'react-dom';
 import { Avatar, AvatarGroup } from '@vibe/core';
 import { Check, CloseSmall, Search, Person } from '@vibe/icons';
 import { computeFloatingPosition } from '../../utils/overlayPlacement';
-import { GET_ACCOUNT_USERS } from '../../services/graphqlQueries';
 import mondayService from '../../services/mondayService';
+import { loadRoster, getCachedRoster } from '../../services/rosterAccess';
 import logger from '../../utils/logger';
 import styles from './PersonPicker.module.css';
 
@@ -29,28 +29,6 @@ function photoOf(user) {
 
 function entryKey(entry) {
   return `${entry?.kind || 'person'}:${String(entry?.id)}`;
-}
-
-// Module-level roster cache: one users query per page load, shared by every
-// picker instance.
-let rosterCache = null;
-let rosterPromise = null;
-async function loadRoster() {
-  if (rosterCache) return rosterCache;
-  if (!rosterPromise) {
-    rosterPromise = mondayService
-      .query(GET_ACCOUNT_USERS, { limit: 500 })
-      .then((data) => {
-        rosterCache = data?.users || [];
-        return rosterCache;
-      })
-      .catch((err) => {
-        logger.error('PersonPicker', 'Failed to load account roster', err);
-        rosterPromise = null; // allow retry on next open
-        return [];
-      });
-  }
-  return rosterPromise;
 }
 
 /**
@@ -79,8 +57,8 @@ export function PersonPicker({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [pos, setPos] = useState(null);
-  const [fetchedUsers, setFetchedUsers] = useState(rosterCache || []);
-  const [loading, setLoading] = useState(!users && !rosterCache);
+  const [fetchedUsers, setFetchedUsers] = useState(getCachedRoster() || []);
+  const [loading, setLoading] = useState(!users && !getCachedRoster());
   const triggerRef = useRef(null);
   const popoverRef = useRef(null);
 

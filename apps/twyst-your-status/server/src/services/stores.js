@@ -26,7 +26,7 @@
  */
 
 export { unwrapStoredValue } from './stores/unwrapStoredValue.js';
-export { REFRESH_CUSHION_MS, createTokenStore } from './stores/tokenStore.js';
+export { createTokenStore } from './stores/tokenStore.js';
 export { createRulesStore } from './stores/rulesStore.js';
 export { createBypassLog } from './stores/bypassLog.js';
 export { createEnrollmentStore } from './stores/enrollmentStore.js';
