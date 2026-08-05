@@ -109,5 +109,10 @@ Every deviation is a monorepo fact, not a preference:
   "`server` — remove from ignoreWorkspaces" is wrong: dropping that line puts phantom
   unlisted dependencies from `server/tests/**` into the SPA report (verified 2026-08-05).
 - **knip exits 1** → that means it HAS findings. It is a report, not a failure.
+- **Re-running the baseline** → `baseline.json` is tracked, so overwrite it in place and
+  commit the change. Do NOT `rm -rf .cleanup/` first: the deletion itself dirties the tree
+  and `baseline.sh` then refuses its own clean-tree precondition.
+  Re-baseline whenever `base_sha` drifts from `HEAD` — stage 3 reviews `base_sha..HEAD`, so a
+  stale base drags unrelated commits into the cleanup diff.
 - **A run pauses on a shell permission prompt** → the command is missing from
   `permissions.allow` in `.claude/settings.json`; add it and resume.

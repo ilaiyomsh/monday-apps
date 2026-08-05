@@ -1,11 +1,11 @@
 {
-  "date": "2026-08-05T13:57:35+00:00",
+  "date": "2026-08-05T14:01:24+00:00",
   "toolchain": {
     "node": "v22.22.2",
     "pnpm": "10.33.0"
   },
   "app": "twyst-your-status",
-  "base_sha": "d9bc0d4d83650ce2f0df4d43d2630520b9b918ea",
+  "base_sha": "306f41ce58e46cd0098c3631a92490dfa8411091",
   "branch": "claude/twystyourstatus-cleanup-workflow-ud6gpw",
   "scope": {
     "app_dir": "apps/twyst-your-status",
