@@ -20,7 +20,7 @@ stated ordering dependencies inside `ColumnSettings.jsx` and `PersonPicker.jsx`)
 | 1 | comments | 9 | S | done |
 | 2 | dead files | 3 | M | done |
 | 3 | unused exports | 5 | M | done |
-| 4 | unused deps | 1 | M | approved |
+| 4 | unused deps | 1 | M | done |
 | 5 | duplication consolidation | 10 | L | pending |
 | 6 | pattern alignment | 4 | L | approved |
 | 7 | structure | 13 | L | pending |
@@ -226,7 +226,7 @@ was unused while the value is live inside its own module is in the appendix.
 ---
 
 ## Batch 4 — unused deps: dead `React` default bindings
-risk: M | status: approved
+risk: M | status: done
 
 knip reports **zero** unused, unlisted or phantom dependencies in both workspaces, and both
 ESLint reports are empty — so this batch is the one dependency-level finding that exists:
