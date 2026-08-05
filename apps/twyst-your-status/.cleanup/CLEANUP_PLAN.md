@@ -22,7 +22,7 @@ stated ordering dependencies inside `ColumnSettings.jsx` and `PersonPicker.jsx`)
 | 3 | unused exports | 5 | M | done |
 | 4 | unused deps | 1 | M | done |
 | 5 | duplication consolidation | 10 | L | pending |
-| 6 | pattern alignment | 4 | L | approved |
+| 6 | pattern alignment | 4 | L | done |
 | 7 | structure | 13 | L | pending |
 
 **Approval record.** Batches 1, 2, 3, 4 and 6 were approved by the repo owner (ilai@twyst.co.il)
@@ -314,7 +314,7 @@ batch has already shifted the file.
 ---
 
 ## Batch 6 — pattern alignment: deviations from the app's own dominant pattern
-risk: L | status: approved
+risk: L | status: done
 
 The dominant patterns were counted before any deviation was named (13 call sites through one
 `monday.api` funnel, 13 named GraphQL ops vs 1 inline, 4-of-4 guard HTTP shape, 60+ SPA log
