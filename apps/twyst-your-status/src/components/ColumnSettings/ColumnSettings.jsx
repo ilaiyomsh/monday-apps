@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AttentionBox, Button, Heading } from '@vibe/core';
 import { validateSettings } from '../../domain/settingsSchema';

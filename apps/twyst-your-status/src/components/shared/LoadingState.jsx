@@ -1,4 +1,3 @@
-import React from 'react';
 
 /*
  * A CSS spinner rather than Vibe's <Loader>, for the same reason as ErrorState:

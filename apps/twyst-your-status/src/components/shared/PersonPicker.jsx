@@ -5,7 +5,7 @@
 // Adaptations for the scaffold: the account roster is fetched here via
 // mondayService (the source app read it from a shared usersStore), and logging
 // hooks were dropped. Behavior and markup are otherwise identical.
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Avatar, AvatarGroup } from '@vibe/core';
 import { Check, CloseSmall, Search, Person } from '@vibe/icons';

@@ -6,7 +6,7 @@
  * and made a status field look nothing like the fields above it. A column with a
  * dozen labels now costs the same single row as a text field.
  */
-import React, { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Dropdown as DropdownIcon } from '@vibe/icons';
 import { dropdownOptionsFrom } from '../../domain/columnFields';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';

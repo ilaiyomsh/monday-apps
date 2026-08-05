@@ -1,4 +1,3 @@
-import React from 'react';
 
 /*
  * No @vibe/core here, deliberately. This component sits on the EAGER path (App

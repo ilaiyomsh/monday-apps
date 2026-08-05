@@ -5,7 +5,7 @@
 // position:fixed coordinates are computed against the real viewport ג€” safe even
 // when an ancestor has transform/filter/overflow:hidden, which would otherwise
 // re-anchor fixed positioning (see references/rtl-css-checklist.md).
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { computeFloatingPosition } from '../../utils/overlayPlacement';
 import styles from './Popover.module.css';

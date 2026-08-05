@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { useMondayContext } from './hooks/useMondayContext';
 import OnClickDialog from './components/OnClickDialog/OnClickDialog';
 import LoadingState from './components/shared/LoadingState';

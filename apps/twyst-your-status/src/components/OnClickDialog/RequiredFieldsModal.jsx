@@ -10,7 +10,7 @@
  * The picker passes board/column/item explicitly rather than trusting the modal's
  * monday context to carry a cell selection it never made.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { prefillFieldValue } from '../../domain/columnFields';
 import { buildMultiColumnWritePayload } from '../../domain/columnValueFormats';
 import { getLabelRule } from '../../domain/settingsSchema';

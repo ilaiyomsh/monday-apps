@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { describeViolation } from '../../domain/bypassReason';
 import { periodRange, previousRange } from '../../domain/reportingPeriod';
 import { fetchBypasses } from '../../services/bypassMonitor';
