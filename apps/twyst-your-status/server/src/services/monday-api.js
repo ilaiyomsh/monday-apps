@@ -197,7 +197,14 @@ export function createMondayApi({ fetchImpl, logger } = {}) {
       const data = await query(token, CREATE_WEBHOOK, {
         boardId,
         url,
-        config: JSON.stringify({ columnId }),
+        // change_status_column_value REQUIRES `columnValue` ALONGSIDE `columnId`:
+        // a config of `{columnId}` alone is rejected by monday with
+        // "This config for this event is invalid" (InvalidWebhookConfigException),
+        // so create_webhook throws at the funnel and enroll answers 502. `{$any$:
+        // true}` means "any new label" — the guard wants every change to this
+        // column, then decides per its own rules (verified live 2026-08-05,
+        // monday-api skill references/webhooks.md).
+        config: JSON.stringify({ columnId, columnValue: { $any$: true } }),
       });
       return String(data.create_webhook.id);
     },
