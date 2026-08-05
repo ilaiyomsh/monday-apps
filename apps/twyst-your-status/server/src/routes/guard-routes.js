@@ -55,6 +55,13 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ru
       return;
     }
 
+    // Trace the delivery entering the guard — one greppable line per status
+    // change, so the change→verdict→revert path is followable in `code:logs`.
+    logger.info(
+      `webhook received board=${event.boardId} col=${event.columnId} item=${event.pulseId} actor=${event.userId}`,
+      TAG,
+      { accountId, boardId: String(event.boardId), columnId: String(event.columnId) },
+    );
     // Ack first — monday must never wait on board IO, and must never receive
     // a retry-storm-inducing 5xx after auth.
     res.status(202).json({ ok: true });
@@ -75,7 +82,7 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ru
       })).catch((err) => {
         // handleEvent is fail-soft by contract; this is the last-resort funnel
         // so a rejection can never become an unhandledRejection.
-        logger.error('webhook dispatch failed', TAG, {
+        logger.error(`webhook dispatch failed: ${String(err?.message ?? err)}`, TAG, {
           accountId,
           boardId: String(event.boardId),
           error: String(err?.message ?? err),
@@ -131,7 +138,7 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ru
       logger.info('column enrolled', TAG, { accountId: session.accountId, boardId, columnId, webhookId });
       res.status(200).json({ ok: true, webhookId });
     } catch (err) {
-      logger.error('enroll failed', TAG, { error: String(err?.message ?? err) });
+      logger.error(`enroll failed: ${String(err?.message ?? err)}`, TAG, { error: String(err?.message ?? err) });
       res.status(502).json({ error: 'enroll_failed' });
     }
   });
@@ -167,7 +174,7 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ru
       const events = await bypassLog.queryRange(session.accountId, boardId, columnId, fromMs, toMs);
       res.status(200).json({ count: events.length, events });
     } catch (err) {
-      logger.error('bypasses query failed', TAG, { error: String(err?.message ?? err) });
+      logger.error(`bypasses query failed: ${String(err?.message ?? err)}`, TAG, { error: String(err?.message ?? err) });
       res.status(502).json({ error: 'bypasses_failed' });
     }
   });
@@ -208,7 +215,7 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ru
       const meAuthorized = (await tokenStore.getOwnerToken(session.accountId, String(session.userId))) != null;
       res.status(200).json({ activated: true, enrolled, primaryAuthorized, meAuthorized });
     } catch (err) {
-      logger.error('status probe failed', TAG, { error: String(err?.message ?? err) });
+      logger.error(`status probe failed: ${String(err?.message ?? err)}`, TAG, { error: String(err?.message ?? err) });
       res.status(502).json({ error: 'status_failed' });
     }
   });

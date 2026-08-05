@@ -132,6 +132,13 @@ describe('POST /api/guard/webhook', () => {
         previousValue: { label: { index: 0, text: 'ממתין' } },
       })
     );
+    // A delivery emits a single greppable trace line so a status change is
+    // followable in code:logs from the moment it enters the guard.
+    const traceLine = deps.logger.info.mock.calls.find(
+      ([msg]) => typeof msg === 'string' && msg.startsWith('webhook received'),
+    );
+    expect(traceLine).toBeDefined();
+    expect(traceLine[0]).toContain('col=status_col');
   });
 
   it('rejects a validly signed event with 400 and never dispatches when the ?account= query param is missing', async () => {
@@ -578,5 +585,13 @@ describe('GET /api/guard/bypasses', () => {
 
     expect(res.status).toBe(502);
     expect(res.body).toEqual({ error: 'bypasses_failed' });
+    // The failure CAUSE must be in the message itself — code:logs renders only
+    // `message`, dropping context, so a static "bypasses query failed" would hide
+    // the reason (the blindness this fold fixes).
+    const errLine = deps.logger.error.mock.calls.find(
+      ([msg]) => typeof msg === 'string' && msg.includes('bypasses query failed'),
+    );
+    expect(errLine).toBeDefined();
+    expect(errLine[0]).toContain('log store down');
   });
 });
