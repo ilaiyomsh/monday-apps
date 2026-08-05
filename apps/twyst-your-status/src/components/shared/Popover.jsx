@@ -125,5 +125,3 @@ export function Popover({
   );
 }
 
-export default Popover;
-

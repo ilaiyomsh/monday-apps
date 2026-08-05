@@ -23,11 +23,6 @@ export function nextNewLabelClientId() {
   return `new:${newLabelSeq}`;
 }
 
-/** Reset only in tests. */
-export function __resetNewLabelSeqForTests() {
-  newLabelSeq = 0;
-}
-
 /** One past the highest index in a draft — where the next row sorts. */
 function nextDraftIndex(draft) {
   return (Array.isArray(draft) ? draft : [])

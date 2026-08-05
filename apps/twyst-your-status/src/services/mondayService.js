@@ -2,14 +2,7 @@ import mondaySdk from 'monday-sdk-js';
 import logger from '../utils/logger';
 
 const monday = mondaySdk();
-const STORAGE_RETRY_DELAY_MS = 350;
 const API_VERSION = '2026-04';
-
-function wait(milliseconds) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, milliseconds);
-  });
-}
 
 function safeStringify(value) {
   try {
@@ -70,11 +63,6 @@ const mondayService = {
     });
   },
 
-  async getSessionToken() {
-    const response = await monday.get('sessionToken');
-    return response.data;
-  },
-
   async query(query, variables = {}) {
     const response = await monday.api(query, { variables, apiVersion: API_VERSION });
 
@@ -99,10 +87,6 @@ const mondayService = {
 
   closeAppFeatureModal() {
     return monday.execute('closeAppFeatureModal');
-  },
-
-  openItemCard(itemId) {
-    monday.execute('openItemCard', { itemId });
   },
 
   showNotice(message, type = 'success') {
@@ -130,24 +114,6 @@ const mondayService = {
     const key = columnConfigKey(boardId, columnId);
     const response = await monday.storage.setItem(key, JSON.stringify(value));
     assertStorageWriteOk(response, key, 'column-config');
-  },
-
-  async getAppStorage(key) {
-    let response = await monday.storage.getItem(key);
-    assertStorageReadOk(response, key);
-
-    if (response.data?.value == null) {
-      await wait(STORAGE_RETRY_DELAY_MS);
-      response = await monday.storage.getItem(key);
-      assertStorageReadOk(response, key);
-    }
-
-    return parseStoredValue(response.data?.value, key, 'app');
-  },
-
-  async setAppStorage(key, value) {
-    const response = await monday.storage.setItem(key, JSON.stringify(value));
-    assertStorageWriteOk(response, key, 'app');
   },
 };
 

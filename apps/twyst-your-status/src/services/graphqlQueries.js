@@ -139,26 +139,6 @@ export const GET_ACCOUNT_TEAMS = `
 `;
 
 /**
- * Required-field values for one item. The selection comes from the columnFields
- * registry: `text`/`value` alone are NULL for people/dropdown/relation columns on
- * API 2025-04+, so every supported type contributes its typed fragment, and
- * `column.settings` rides along for the option-based controls.
- */
-export const GET_ITEM_FORM_VALUES = `
-  query GetItemFormValues(
-    $itemIds: [ID!]
-    $columnIds: [String!]
-  ) {
-    items(ids: $itemIds) {
-      id
-      column_values(ids: $columnIds) {
-        ${ALL_COLUMN_VALUE_FIELDS}
-      }
-    }
-  }
-`;
-
-/**
  * Everything the required-fields modal needs, in one round trip: the gated status
  * column's labels (to name the label being written) plus the item's current values
  * for the required columns. The modal is a separate iframe with no state from the

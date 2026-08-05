@@ -369,5 +369,3 @@ export function PersonPicker({
     </>
   );
 }
-
-export default PersonPicker;
