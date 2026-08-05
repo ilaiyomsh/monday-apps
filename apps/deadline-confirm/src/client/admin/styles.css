@@ -121,6 +121,24 @@ body {
   background: var(--allgrey-background-color, #fafbfc);
 }
 
+.dc-block-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+}
+
+.dc-block-toggle:hover .dc-hint {
+  color: var(--primary-text-color, #323338);
+}
+
 .dc-block {
   border: 1px dashed var(--ui-border-color, #d0d4e4);
   border-radius: 6px;

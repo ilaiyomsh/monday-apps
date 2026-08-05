@@ -47,6 +47,8 @@ const digest = (clusters: DigestClusterDraft[]): DigestDraft => ({
   usersBoardId: '18422783851',
   usersPeopleColumnId: 'person',
   usersEmailColumnId: 'email_mm5d3357',
+  recipientGateColumnId: null,
+  recipientGateLabelId: null,
   subject: 'המשימות שלך — נדרש עדכון סטטוס',
   sendHour: 8,
   blocks: [newDigestTextBlock('שלום {{שם}},'), ...clusters],

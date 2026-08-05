@@ -583,7 +583,13 @@ describe('createMondayApi — createColumnWebhook', () => {
       })
     );
     expect(typeof body.variables.config).toBe('string');
-    expect(body.variables.config).toContain('"columnId":"status_col"');
+    // The config MUST carry both keys: change_status_column_value rejects a
+    // `{columnId}`-only config ("This config for this event is invalid"), which
+    // makes create_webhook throw and enroll answer 502 (verified live 2026-08-05).
+    const config = JSON.parse(body.variables.config);
+    expect(config.columnId).toBe('status_col');
+    // `columnValue` is REQUIRED alongside columnId; {$any$: true} = any new label.
+    expect(config.columnValue).toEqual({ $any$: true });
   });
 
   it('resolves the created webhook id as a STRING even when the API returns a number', async () => {

@@ -104,6 +104,14 @@ export interface DigestConfig {
   usersBoardId: string;
   usersPeopleColumnId: string;
   usersEmailColumnId: string;
+  /**
+   * Recipient label gate (round348): a status column on the USERS board.
+   * EITHER this or recipientGateLabelId absent -> the gate is off and every
+   * row qualifies, same as every digest before this feature.
+   */
+  recipientGateColumnId?: string | null;
+  /** The label id that must match on recipientGateColumnId. 0 is valid. */
+  recipientGateLabelId?: number | null;
   /** May contain NAME_TOKEN — resolved per recipient at send time. */
   subject: string;
   /** Hour (0–23, Asia/Jerusalem) when the daily digest is scheduled. Default 8. */
@@ -139,7 +147,8 @@ export interface DigestRecipientSummary {
 export interface DigestSkippedUser {
   itemId: string;
   name: string;
-  reason: 'no_email' | 'no_person' | 'multi_person';
+  /** not_labeled: the recipient label gate blocked this row (round348 §E). */
+  reason: 'no_email' | 'no_person' | 'multi_person' | 'not_labeled';
 }
 
 export interface DigestPreviewResponse {
@@ -173,6 +182,20 @@ export interface DigestSendResponse {
   results: DigestSendResult[];
   skippedUsers: DigestSkippedUser[];
   truncated: boolean;
+}
+
+/**
+ * POST /api/digest/run-scheduled — the same per-tenant run the cron performs
+ * by hand, plus the per-employee CSV report (round348). `durationMs` covers the
+ * digest run only (the report send is excluded) — what §7.3 compares against the
+ * platform's 300s cron timeout. `reportSent` is false when the tenant has no
+ * connected mailbox or the report send itself failed; the digest send above is
+ * unaffected either way.
+ */
+export interface DigestRunScheduledResponse extends DigestSendResponse {
+  slot: string;
+  durationMs: number;
+  reportSent: boolean;
 }
 
 export type OauthStatus = 'connected' | 'disconnected' | 'broken';

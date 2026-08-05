@@ -29,8 +29,17 @@ Config examples:
 | Event | config |
 |---|---|
 | `change_specific_column_value` | `{"columnId": "column_id"}` |
-| `change_status_column_value` | `{"columnId": "column_id", "columnValue": {"index": <labelId>}}` (or `{"$any$": true}`) |
+| `change_status_column_value` | `{"columnId": "column_id", "columnValue": {"index": <labelId>}}` (or `{"columnId": "column_id", "columnValue": {"$any$": true}}` for any label) |
 | `item_moved_to_specific_group` | `{"groupId": "group_id"}` |
+
+**GOTCHA — `change_status_column_value` requires BOTH keys (verified live 2026-08-05, api 2026-04).**
+A config of `{"columnId": "..."}` ALONE is rejected: `create_webhook` returns a soft error
+`"This config for this event is invalid"` (`InvalidWebhookConfigException`, `status_code: 200`)
+inside a 200 body — so an API funnel that throws on soft errors surfaces it as a 5xx, not a 4xx.
+The `columnValue` key is mandatory; use `{"$any$": true}` to fire on every new label for the
+column (what a per-column guard wants). `change_specific_column_value` is the one that takes
+`{"columnId": "..."}` alone — do not swap their config shapes. `{"$any$": true}` bare (no
+`columnId`) is NOT accepted for `change_status_column_value` in this API version.
 
 ## Challenge handshake — registration fails without it
 
