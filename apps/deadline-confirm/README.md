@@ -45,7 +45,7 @@ USE_LOCAL_STORAGE=true npm start
 4. Dev Center: Administration View → `<BASE_URL>/admin`; OAuth scopes + callback.
 5. במסך האדמין: חיבור OAuth, לוח, כפתורים, הפעלת מייל מסכם, שעת שליחה, מפתח.
 6. Scheduler (אחרי פריסה — **שלב ידני; ב-2026-08-05 נמצא שהוא לא בוצע מעולם,
-   כלומר לא הייתה שליחה אוטומטית**):
+   כלומר לא הייתה שליחה אוטומטית**). המסמך המלא: **`docs/scheduling.md`**:
    `mapps scheduler:create -a 11704868 -n digest-send -s "0 * * * *" -e "digest-send" -r 0 -t 300`
    - שעתי UTC **חובה** — האפליקציה מסננת לפי `sendHour` (ירושלים), כך שביטוי
      שאינו שעתי משמעו שטננטים בשעות אחרות לא יקבלו דבר לעולם.

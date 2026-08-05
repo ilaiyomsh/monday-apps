@@ -214,8 +214,8 @@ src/
   oversized body answers 413 `payload_too_large` instead of 500.
   **`POST /api/secret/rotate` → `{ ok: true, secret: '****xxxx' }`** (masked
   only — full secret never leaves the server).
-- **V6 scheduler (registered 2026-08-05 — before that date NOTHING was sent
-  automatically):** `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`)
+- **V6 scheduler — full account in `docs/scheduling.md`** (registered 2026-08-05;
+  before that date NOTHING was sent automatically): `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`)
   walks `ALLOWED_ACCOUNT_IDS`, runs tenants whose `digest.sendHour` matches the
   current Asia/Jerusalem hour; then optional operator summary to
   `OPERATOR_EMAIL`. The platform cron must be **hourly** (`0 * * * *` UTC) — the
