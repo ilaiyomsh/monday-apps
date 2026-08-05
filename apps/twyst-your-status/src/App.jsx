@@ -1,9 +1,9 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy } from 'react';
+import { useBootLoaderRelease } from './hooks/useBootLoaderRelease';
 import { useMondayContext } from './hooks/useMondayContext';
 import OnClickDialog from './components/OnClickDialog/OnClickDialog';
 import LoadingState from './components/shared/LoadingState';
 import ErrorState from './components/shared/ErrorState';
-import { dismissBootLoader } from './utils/bootLoader';
 
 // Settings surfaces open rarely; keep them off the picker's critical path.
 const SettingsLauncher = lazy(() => import('./components/ColumnSettings/SettingsLauncher'));
@@ -54,9 +54,7 @@ function App() {
   // spinner. Every other route drops it at once. An error releases it too: a failure
   // must not sit behind a spinner.
   const overlayHeldByRoute = (route === 'picker' || route === 'required-fields') && !error;
-  useEffect(() => {
-    if (!overlayHeldByRoute) dismissBootLoader();
-  }, [overlayHeldByRoute]);
+  useBootLoaderRelease(overlayHeldByRoute);
 
   if (loading) {
     // Under the overlay: render nothing rather than a second loader. A loader of

@@ -22,6 +22,8 @@
  * back verbatim. unwrapStoredValue() is the one place that difference lives.
  */
 
+import { columnConfigStorageKey } from '../../../src/domain/columnConfigKey.js';
+
 /** Unwrap apps-sdk 0.1.4's `{ value: ... }` primitive wrapping (both shapes). */
 export function unwrapStoredValue(raw) {
   if (raw == null) return null;
@@ -164,7 +166,7 @@ export function createTokenStore({ secureStorage, oauthClient, logger, now = () 
 export function createRulesStore({ storageFactory, logger }) {
   return {
     async getRules(token, boardId, columnId) {
-      const key = `twystStatus:${boardId}:${columnId}`;
+      const key = columnConfigStorageKey(boardId, columnId);
       const stored = unwrapStoredValue(await storageFactory(token).get(key));
       if (stored == null || stored === '') return null;
       if (typeof stored === 'object') return stored;

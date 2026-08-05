@@ -5,7 +5,7 @@
 // Adaptations for the scaffold: the account roster is fetched here via
 // mondayService (the source app read it from a shared usersStore), and logging
 // hooks were dropped. Behavior and markup are otherwise identical.
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Avatar, AvatarGroup } from '@vibe/core';
 import { Check, CloseSmall, Search, Person } from '@vibe/icons';
@@ -138,23 +138,24 @@ export function PersonPicker({
     };
   }, [open]);
 
+  const reposition = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const next = computeFloatingPosition({
+      anchorRect: rect,
+      preferred: 'bottom-start',
+      popupWidth: Math.max(rect.width, 300),
+      popupHeight: 430,
+      offset: 4,
+    });
+    if (!next) return;
+    setPos({ top: next.top, left: next.left, minWidth: Math.max(rect.width, 280) });
+  }, []);
+
   // Reposition on scroll/resize while open (capture-phase scroll catches
   // scrolling containers, not just the window).
   useEffect(() => {
     if (!open) return undefined;
-    const reposition = () => {
-      const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const next = computeFloatingPosition({
-        anchorRect: rect,
-        preferred: 'bottom-start',
-        popupWidth: Math.max(rect.width, 300),
-        popupHeight: 430,
-        offset: 4,
-      });
-      if (!next) return;
-      setPos({ top: next.top, left: next.left, minWidth: Math.max(rect.width, 280) });
-    };
     reposition();
     window.addEventListener('resize', reposition);
     window.addEventListener('scroll', reposition, true);
@@ -205,19 +206,7 @@ export function PersonPicker({
       setSearch('');
       return;
     }
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) {
-      const next = computeFloatingPosition({
-        anchorRect: rect,
-        preferred: 'bottom-start',
-        popupWidth: Math.max(rect.width, 300),
-        popupHeight: 430,
-        offset: 4,
-      });
-      if (next) {
-        setPos({ top: next.top, left: next.left, minWidth: Math.max(rect.width, 280) });
-      }
-    }
+    reposition();
     setOpen(true);
   };
 

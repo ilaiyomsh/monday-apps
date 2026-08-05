@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ColorPicker } from '@vibe/core';
 import {
@@ -7,7 +7,9 @@ import {
   toVibeColorName,
   VIBE_STATUS_COLOR_NAMES,
 } from '../../domain/statusColors';
+import { useDismissOnOutside } from '../../hooks/useDismissOnOutside';
 import logger from '../../utils/logger';
+import { clampOverlayLeft } from '../../utils/overlayPlacement';
 import './StatusColorPicker.css';
 
 /**
@@ -37,24 +39,7 @@ export default function StatusColorPicker({
     (name) => name === vibeValue || !usedVibe.has(name),
   );
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDown = (event) => {
-      if (popoverRef.current?.contains(event.target) || triggerRef.current?.contains(event.target)) {
-        return;
-      }
-      setOpen(false);
-    };
-    const onEsc = (event) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onEsc, true);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onEsc, true);
-    };
-  }, [open]);
+  useDismissOnOutside(open, [popoverRef, triggerRef], () => setOpen(false));
 
   const openPicker = () => {
     if (disabled) return;
@@ -62,10 +47,7 @@ export default function StatusColorPicker({
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
       const popoverWidth = 220;
-      const left = Math.min(
-        Math.max(8, rect.left),
-        Math.max(8, window.innerWidth - popoverWidth - 8),
-      );
+      const left = clampOverlayLeft(rect.left, popoverWidth, window.innerWidth);
       setPos({ top: rect.bottom + 6, left });
       setOpen(true);
     } catch (err) {

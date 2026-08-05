@@ -14,11 +14,11 @@ import {
 } from '../../services/graphqlQueries';
 import mondayService from '../../services/mondayService';
 import { loadUserTeamIds } from '../../services/teamsAccess';
+import { useBootLoaderRelease } from '../../hooks/useBootLoaderRelease';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
-import { dismissBootLoader } from '../../utils/bootLoader';
 import { requiredFormModalSize } from '../../utils/requiredFormModalSize';
-import ErrorState from '../shared/ErrorState';
+import ErrorState, { SETTINGS_LOAD_ERROR_MESSAGE } from '../shared/ErrorState';
 import './OnClickDialog.css';
 
 /** Route of the fill form, opened as its own sized modal. See App.resolveAppRoute. */
@@ -284,12 +284,10 @@ function OnClickDialog({ context }) {
   // through the context phase and hands it here; this is the last owner, so a
   // dismissal that never fires means a dialog stuck behind a spinner.
   const stillLoadingDialog = (settingsLoading || dataPending) && !settingsError;
-  useEffect(() => {
-    if (!stillLoadingDialog) dismissBootLoader();
-  }, [stillLoadingDialog]);
+  useBootLoaderRelease(stillLoadingDialog);
 
   if (settingsError) {
-    return <ErrorState message="טעינת ההגדרות נכשלה. נסו שוב." onRetry={reloadSettings} />;
+    return <ErrorState message={SETTINGS_LOAD_ERROR_MESSAGE} onRetry={reloadSettings} />;
   }
 
   /*

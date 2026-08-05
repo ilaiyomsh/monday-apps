@@ -36,9 +36,11 @@ import mondayService from '../../services/mondayService';
 import BypassMonitor from './BypassMonitor';
 import { loadAccountTeams } from '../../services/teamsAccess';
 import useColumnSettings from '../../hooks/useColumnSettings';
+import { useDismissOnOutside } from '../../hooks/useDismissOnOutside';
 import logger from '../../utils/logger';
+import { clampOverlayLeft } from '../../utils/overlayPlacement';
 import { VERSION_LABEL } from '../../utils/versionLabel';
-import ErrorState from '../shared/ErrorState';
+import ErrorState, { SETTINGS_LOAD_ERROR_MESSAGE } from '../shared/ErrorState';
 import LoadingState from '../shared/LoadingState';
 import { PersonPicker } from '../shared/PersonPicker';
 import StatusColorPicker from './StatusColorPicker';
@@ -46,6 +48,8 @@ import './ColumnSettings.css';
 
 const TEAMS_SCOPE_HINT =
   'חסר הסקופ teams:read — בחירת צוותים לא זמינה.';
+
+const byIdMap = (list, valueOf) => Object.fromEntries((list ?? []).map((x) => [String(x.id), valueOf(x)]));
 
 function OptionChecklist({ options, values, disabled, onChange, emptyText }) {
   const selected = new Set((values ?? []).map(String));
@@ -94,24 +98,7 @@ function SelectDropdown({
   const selected = options.find((option) => String(option.value) === String(value));
   const label = selected?.label || placeholder;
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDown = (event) => {
-      if (menuRef.current?.contains(event.target) || triggerRef.current?.contains(event.target)) {
-        return;
-      }
-      setOpen(false);
-    };
-    const onEsc = (event) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onEsc, true);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onEsc, true);
-    };
-  }, [open]);
+  useDismissOnOutside(open, [menuRef, triggerRef], () => setOpen(false));
 
   const openMenu = () => {
     if (disabled) return;
@@ -119,10 +106,7 @@ function SelectDropdown({
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
       const width = Math.max(rect.width, 200);
-      const left = Math.min(
-        Math.max(8, rect.left),
-        Math.max(8, window.innerWidth - width - 8),
-      );
+      const left = clampOverlayLeft(rect.left, width, window.innerWidth);
       setPos({ top: rect.bottom + 4, left, width });
       setOpen(true);
     } catch (err) {
@@ -624,6 +608,20 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     [metadata, columnId],
   );
 
+  /*
+   * round321 — the labels a transition may point AT: every row except the source
+   * itself, and except a default row that neither exists on the LIVE column nor is
+   * being named in this visit. Existence comes from the live ids, not the draft
+   * name (review-confirmed): an id-5 label whose text was cleared (round313) is
+   * still a real label the picker offers, so it must stay targetable — keying off
+   * the name alone made it silently drop out of every restriction it appeared in.
+   */
+  const liveHasDefaultLabel = useMemo(
+    () => normalizeStatusLabels(statusColumn?.settings)
+      .some((live) => !live.isDeactivated && String(live.id) === String(RESERVED_EMPTY_LABEL_ID)),
+    [statusColumn],
+  );
+
   useEffect(() => {
     if (!statusColumn) return;
     const all = normalizeStatusLabels(statusColumn.settings);
@@ -669,21 +667,9 @@ function ColumnSettings({ context, variant = 'overlay' }) {
   const draftOwners = normalizeOwners(draft?.owners);
 
   // round323 — id→name maps the bypass monitor resolves its records against.
-  const labelsById = useMemo(() => {
-    const map = {};
-    (labelsDraft ?? []).forEach((label) => { map[String(label.id)] = label.label; });
-    return map;
-  }, [labelsDraft]);
-  const columnsById = useMemo(() => {
-    const map = {};
-    (metadata?.columns ?? []).forEach((column) => { map[String(column.id)] = column.title; });
-    return map;
-  }, [metadata]);
-  const usersById = useMemo(() => {
-    const map = {};
-    (metadata?.users ?? []).forEach((user) => { map[String(user.id)] = user.name; });
-    return map;
-  }, [metadata]);
+  const labelsById = useMemo(() => byIdMap(labelsDraft, (label) => label.label), [labelsDraft]);
+  const columnsById = useMemo(() => byIdMap(metadata?.columns, (column) => column.title), [metadata]);
+  const usersById = useMemo(() => byIdMap(metadata?.users, (user) => user.name), [metadata]);
   const addOwnerId = (userId) => setDraft((current) => ({ ...current, owners: addOwner(current.owners, userId) }));
   const removeOwnerId = (userId) => setDraft((current) => ({ ...current, owners: removeOwner(current.owners, userId) }));
   const makePrimaryOwner = (userId) => setDraft((current) => ({ ...current, owners: setPrimaryOwner(current.owners, userId) }));
@@ -844,10 +830,8 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       // to this list, and a '5' that will not exist after the save must not survive
       // as a target nothing can ever reach (the rule KEY '5' is kept by prune
       // itself, unconditionally).
-      const defaultIsReal = normalizeStatusLabels(statusColumn.settings)
-        .some((live) => !live.isDeactivated && String(live.id) === String(RESERVED_EMPTY_LABEL_ID));
       let activeLabelIds = labelsDraft
-        .filter((label) => !label.isDefaultEmpty || label.label.trim() !== '' || defaultIsReal)
+        .filter((label) => !label.isDefaultEmpty || label.label.trim() !== '' || liveHasDefaultLabel)
         .map((label) => String(label.id));
 
       if (hasPendingLabelEdits(labelsDraft, labelsBaseline)) {
@@ -1071,7 +1055,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     return <LoadingState message="טוען הגדרות…" />;
   }
   if (settingsError) {
-    return <ErrorState message="טעינת ההגדרות נכשלה. נסו שוב." onRetry={reloadSettings} />;
+    return <ErrorState message={SETTINGS_LOAD_ERROR_MESSAGE} onRetry={reloadSettings} />;
   }
   if (metaError) {
     return <ErrorState message="טעינת נתוני הלוח נכשלה. נסו שוב." onRetry={loadMetadata} />;
@@ -1086,16 +1070,6 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     -1,
   );
 
-  /*
-   * round321 — the labels a transition may point AT: every row except the source
-   * itself, and except a default row that neither exists on the LIVE column nor is
-   * being named in this visit. Existence comes from the live ids, not the draft
-   * name (review-confirmed): an id-5 label whose text was cleared (round313) is
-   * still a real label the picker offers, so it must stay targetable — keying off
-   * the name alone made it silently drop out of every restriction it appeared in.
-   */
-  const liveHasDefaultLabel = normalizeStatusLabels(statusColumn.settings)
-    .some((live) => !live.isDeactivated && String(live.id) === String(RESERVED_EMPTY_LABEL_ID));
   const transitionTargetsFor = (source) => labelsDraft
     .filter((other) => other.clientKey !== source.clientKey)
     .filter((other) => !other.isDefaultEmpty || other.label.trim() !== '' || liveHasDefaultLabel)

@@ -26,6 +26,7 @@
 
 import logger from '../utils/logger.js';
 import { resolveGuardBase } from './guardBase.js';
+import { getSessionTokenViaSdk } from './sessionToken.js';
 
 /**
  * @param {{
@@ -39,7 +40,7 @@ export async function startGuardAuthorization(deps = {}) {
   const base = resolveGuardBase(deps.guardUrl);
   if (base === null) return 'disabled';
 
-  const getSessionToken = deps.sessionTokenProvider ?? defaultSessionTokenProvider;
+  const getSessionToken = deps.sessionTokenProvider ?? getSessionTokenViaSdk;
   const openUrl = deps.openImpl ?? defaultOpen;
 
   try {
@@ -64,12 +65,4 @@ function defaultOpen(url) {
   // No 'noopener': the opened page is our own guard origin (we control it), and
   // omitting it lets us detect a popup-blocked null return.
   return window.open(url, '_blank');
-}
-
-async function defaultSessionTokenProvider() {
-  // Dynamic import keeps this module inert for suites that stub the SDK — the
-  // dev-harness alias (VITE_MONDAY_MOCK) resolves here exactly as guardEnroll does.
-  const { default: mondaySdk } = await import('monday-sdk-js');
-  const response = await mondaySdk().get('sessionToken');
-  return response?.data;
 }

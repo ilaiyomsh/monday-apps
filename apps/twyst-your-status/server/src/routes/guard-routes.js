@@ -97,6 +97,15 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ru
     return session;
   };
 
+  // Answers 409 itself and returns a falsy reader, so every caller must
+  // `if (!reader) return;` — /api/guard/status deliberately does NOT use this (it
+  // answers 200 with an all-false body instead; see the comment there).
+  const requireReader = async (accountId, res) => {
+    const reader = await tokenStore.getReaderToken(accountId);
+    if (!reader) res.status(409).json({ error: 'not_activated' });
+    return reader;
+  };
+
   const isBoardOwner = async (token, boardId, userId) => {
     const { ownerIds, teamOwnerIds } = await api.getBoardOwnership(token, boardId);
     if (ownerIds.includes(String(userId))) return true;
@@ -116,11 +125,8 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ru
         return;
       }
 
-      const reader = await tokenStore.getReaderToken(session.accountId);
-      if (!reader) {
-        res.status(409).json({ error: 'not_activated' });
-        return;
-      }
+      const reader = await requireReader(session.accountId, res);
+      if (!reader) return;
       if (!(await isBoardOwner(reader.token, boardId, session.userId))) {
         res.status(403).json({ error: 'not_board_owner' });
         return;
@@ -158,11 +164,8 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ru
         return;
       }
 
-      const reader = await tokenStore.getReaderToken(session.accountId);
-      if (!reader) {
-        res.status(409).json({ error: 'not_activated' });
-        return;
-      }
+      const reader = await requireReader(session.accountId, res);
+      if (!reader) return;
       // Authorize against the column's own owner list (read from the rules blob).
       const rules = await rulesStore.getRules(reader.token, boardId, columnId);
       const owners = normalizeOwners(rules?.owners);

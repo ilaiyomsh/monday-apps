@@ -17,6 +17,12 @@
  * are fixed light-mode greys — this screen was unreadable in monday's dark themes.
  */
 
+/**
+ * The settings-load failure. All three surfaces that read the rules blob show this
+ * one string with a retry, so the copy cannot drift per surface.
+ */
+export const SETTINGS_LOAD_ERROR_MESSAGE = 'טעינת ההגדרות נכשלה. נסו שוב.';
+
 const iconStyle = {
   width: '48px',
   height: '48px',

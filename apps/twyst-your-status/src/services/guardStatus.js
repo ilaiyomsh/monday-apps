@@ -24,6 +24,7 @@
 
 import logger from '../utils/logger.js';
 import { resolveGuardBase } from './guardBase.js';
+import { getSessionTokenViaSdk } from './sessionToken.js';
 
 const UNKNOWN = { activated: null, enrolled: null, primaryAuthorized: null, meAuthorized: null };
 
@@ -44,7 +45,7 @@ export async function getGuardStatus({ boardId, columnId }, deps = {}) {
   if (base === null) return UNKNOWN; // dev-harness mock: no backend
 
   const doFetch = deps.fetchImpl ?? globalThis.fetch;
-  const getSessionToken = deps.sessionTokenProvider ?? defaultSessionTokenProvider;
+  const getSessionToken = deps.sessionTokenProvider ?? getSessionTokenViaSdk;
 
   try {
     const sessionToken = await getSessionToken();
@@ -68,10 +69,4 @@ export async function getGuardStatus({ boardId, columnId }, deps = {}) {
     logger.error('guardStatus', 'failed to read guard status', err);
     return UNKNOWN;
   }
-}
-
-async function defaultSessionTokenProvider() {
-  const { default: mondaySdk } = await import('monday-sdk-js');
-  const response = await mondaySdk().get('sessionToken');
-  return response?.data;
 }

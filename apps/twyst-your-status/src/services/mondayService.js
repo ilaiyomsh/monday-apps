@@ -1,4 +1,5 @@
 import mondaySdk from 'monday-sdk-js';
+import { columnConfigStorageKey } from '../domain/columnConfigKey';
 import logger from '../utils/logger';
 
 const monday = mondaySdk();
@@ -34,11 +35,6 @@ function assertStorageReadOk(response, key) {
   if (response?.data?.success === false) {
     throw new Error(`monday storage read failed for key "${key}": ${describeStorageError(response)}`);
   }
-}
-
-// Column-view dialogs have no instanceId — use GLOBAL storage keyed by board+column.
-function columnConfigKey(boardId, columnId) {
-  return `twystStatus:${boardId}:${columnId}`;
 }
 
 function parseStoredValue(raw, key, scope) {
@@ -103,7 +99,7 @@ const mondayService = {
   // RETRY_DELAY_MS in that hook, and getColumnConfig in apps/team-people-column,
   // which twyst was copied from and which never grew this second retry.
   async getColumnConfig(boardId, columnId) {
-    const key = columnConfigKey(boardId, columnId);
+    const key = columnConfigStorageKey(boardId, columnId);
     const response = await monday.storage.getItem(key);
     assertStorageReadOk(response, key);
 
@@ -111,7 +107,7 @@ const mondayService = {
   },
 
   async setColumnConfig(boardId, columnId, value) {
-    const key = columnConfigKey(boardId, columnId);
+    const key = columnConfigStorageKey(boardId, columnId);
     const response = await monday.storage.setItem(key, JSON.stringify(value));
     assertStorageWriteOk(response, key, 'column-config');
   },
