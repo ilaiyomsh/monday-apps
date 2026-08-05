@@ -10,6 +10,20 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.13.5 — 2026-08-05
+
+round352 — הודעת כשל התיקייה אומרת גם **איך מפעילים את ההרשאה בפועל**.
+
+דיווח רביעי של "הלוחות לא נכנסים לתיקייה" — הפעם **אחרי** שההרשאה `workspaces:write`
+נוספה ב-Developer Center — חשף שהמשפט של round346 היה חלקי: לפי הדוקומנטציה הרשמית
+(אומת 2026-08-05), עריכת הרשאות משנה את **גרסת הטיוטה בלבד**; היא נכנסת לתוקף רק כשהגרסה
+**מקודמת ללייב (Promote)**, ואז כל חשבון שהאפליקציה מותקנת בו מאשר מחדש את ההרשאות.
+התקנה חדשה שנעשית לפני הקידום ממשיכה לקבל את ההרשאות הישנות — ולכן ההוספה "לא עבדה".
+
+ההודעה למסך (וגם ל-Axiom) כוללת מעכשיו את המסלול המלא: הוספת ההרשאה ← קידום הגרסה ←
+אישור מחדש. בלי שינוי התנהגות מעבר לנוסח; הבדיקות הוקשחו לוודא שהצעדים לא ייעלמו שוב
+(red→green + שתי מוטציות שנהרגו).
+
 ## 2.13.4 — 2026-08-04
 
 round351 — כתיבה strict שנכשלה מגלגלת לאחור את העדכון שנרשם בזיכרון.
