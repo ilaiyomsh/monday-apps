@@ -426,7 +426,16 @@ colour, not yours. The palette (ids 0–11, read back from a 12-label probe):
 `0` orange `#fdab3d` · `1` green-shadow `#00c875` · `2` red-shadow `#df2f4a` ·
 `3` blue-links `#007eb5` · `4` purple `#9d50dd` · `5` grey `#c4c4c4` ·
 `6` grass-green `#037f4c` · `7` bright-blue `#579bfc` · `8` mustered `#cab641` ·
-`9` yellow `#ffcb00` · `10` soft-black `#333333` · `11` dark-red `#bb3354`
+`9` yellow `#ffcb00` · `10` soft-black `#333333` · `11` dark-red `#bb3354` ·
+`12` dark-pink `#ff007f` · `13` light-pink `#ff5ac4` · `14` dark-purple `#784bd1` ·
+`15` lime-green `#9cd326` · `16` turquoise `#66ccff` · `17` trolley-grey `#757575` ·
+`18` brown `#7f5347` · `19` dark-orange `#ff6d3b` (12–19 read back from a 16-label probe,
+verified live 2026-08-05, sandbox 16291824)
+
+- **Label id `5` is monday's default grey, and it CAN be given a text at creation**
+  (`labels: {"5": "טרם החל"}` round-trips, keeps `grey #c4c4c4`, verified live 2026-08-05).
+  An EMPTY cell is still *no value* — monday never auto-assigns id 5 — so an app that wants
+  the grey label to read as the empty state must render id 5's text for empty values itself.
 
 Consequences to design around:
 
