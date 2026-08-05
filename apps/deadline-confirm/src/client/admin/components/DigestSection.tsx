@@ -1,8 +1,13 @@
-// v4 — the "מייל מסכם" (digest) tab: users-board mapping, section rules,
-// preview against the SAVED config, and the phase-1 manual send. Nothing here
-// touches the existing tabs' behavior.
+// The "מייל מסכם" (digest) tab: users-board mapping, the subject block, the
+// BODY BLOCK EDITOR (DigestBlocksSection — 0.15.0), preview against the SAVED
+// config, and the manual send + AMP debug lane.
+//
+// 0.15.0 moved the cluster settings into the block list, so this file no longer
+// owns them: what is left here is the delivery configuration (who gets the mail,
+// when) plus the subject — which is itself a block, pinned first, because it is
+// the one piece of text that is not part of the body.
 
-import { useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { Button, Dropdown, TextField, Toggle } from '@vibe/core';
 import type {
   ActionButton,
@@ -10,13 +15,15 @@ import type {
   Board,
   DigestPreviewResponse,
   DigestRawSendResponse,
+  DigestRunScheduledResponse,
   DigestSendResponse,
 } from '../types';
-import type { DigestDraft, DigestSectionDraft } from '../draft';
-import { newDigestSection } from '../draft';
+import type { DigestDraft } from '../draft';
 import { apiFetch, ApiError, formatApiFailure } from '../services/api';
 import { fetchBoardColumns } from '../services/monday';
 import { ampByteLength, ampSizeWarning, defaultDebugSubject, validateRawSend } from '../amp-debug';
+import { NAME_TOKEN, applyTokens, insertAt } from '../digest-blocks';
+import { DigestBlocksSection } from './DigestBlocksSection';
 import logger from '../utils/logger';
 
 interface Option {
@@ -67,6 +74,12 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const [sendResult, setSendResult] = useState<DigestSendResponse | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
 
+  // Round348 — run the scheduled action by hand: same send as above, plus the
+  // per-employee CSV report (§5.2) that only the cron produced until now.
+  const [runPhase, setRunPhase] = useState<'idle' | 'confirm' | 'sending'>('idle');
+  const [runResult, setRunResult] = useState<DigestRunScheduledResponse | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+
   // AMP debug lane: the preview's amp4email document, editable, sent as typed.
   const [ampDraft, setAmpDraft] = useState('');
   const [ampTo, setAmpTo] = useState('');
@@ -107,36 +120,16 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const boardOptions = boards.map((b) => toOption(b.id, b.name));
   const peopleOptions = usersColumns.filter((c) => c.type === 'people').map((c) => toOption(c.id, c.title));
   const emailOptions = usersColumns.filter((c) => c.type === 'email').map((c) => toOption(c.id, c.title));
-  const dateOptions = tasksColumns.filter((c) => c.type === 'date').map((c) => toOption(c.id, c.title));
-  const textOptions = tasksColumns.filter((c) => c.type === 'text').map((c) => toOption(c.id, c.title));
-  const buttonOptions = buttons
-    .filter((b) => b.name.trim().length > 0)
-    .map((b) => toOption(b.id, b.name));
-
-  const patchSection = (id: string, patch: Partial<DigestSectionDraft>) => {
-    onChange({ sections: digest.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
-  };
-
-  // Section order IS the priority (owner decision 2026-08-04): buildDigest lets
-  // the first matching section claim a task. These arrows are the whole
-  // priority UI — no separate priority field exists.
-  const moveSection = (index: number, delta: -1 | 1) => {
-    const target = index + delta;
-    if (target < 0 || target >= digest.sections.length) return;
-    const sections = [...digest.sections];
-    [sections[index], sections[target]] = [sections[target], sections[index]];
-    onChange({ sections });
-  };
-
-  // The status-condition options for a section = the labels of the status
-  // column that the section's action button writes to (owner decision: the
-  // condition lives on the button's status column).
-  const statusLabelOptionsFor = (buttonId: string | null): Option[] => {
-    const button = buttons.find((b) => b.id === buttonId);
-    if (!button) return [];
-    const column = tasksColumns.find((c) => c.id === button.statusColumnId);
-    return (column?.labels ?? []).map((l) => toOption(String(l.id), l.label));
-  };
+  // Recipient label gate (round348 §E) — a status column on the SAME users
+  // board, plus one of its labels. Both optional; see the hint below the row.
+  const gateColumnOptions = usersColumns.filter((c) => c.type === 'status').map((c) => toOption(c.id, c.title));
+  const gateLabelOptions: Option[] = (
+    usersColumns.find((c) => c.id === digest.recipientGateColumnId)?.labels ?? []
+  ).map((l) => toOption(String(l.id), l.label));
+  const gateLabelValue =
+    digest.recipientGateLabelId !== null
+      ? (gateLabelOptions.find((o) => o.value === String(digest.recipientGateLabelId)) ?? null)
+      : null;
 
   const loadPreview = async (recipient: string | null) => {
     setPreviewLoading(true);
@@ -151,7 +144,11 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
       // previous send's outcome no longer describes what is in the box.
       setAmpDraft(res.amp ?? '');
       setAmpTo(shown ?? '');
-      setAmpSubject(defaultDebugSubject(digest.subject));
+      // Show the subject the send path would produce for THIS recipient — the
+      // token is resolved per recipient, so an unresolved {{שם}} in the debug
+      // field would be a different message from the real one.
+      const shownName = res.recipients.find((r) => r.email === shown)?.name ?? '';
+      setAmpSubject(defaultDebugSubject(applyTokens(digest.subject, { name: shownName })));
       setRawResult(null);
       setRawError(null);
     } catch (err) {
@@ -234,6 +231,23 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
     }
   };
 
+  const doRunScheduled = async () => {
+    setRunPhase('sending');
+    setRunError(null);
+    setRunResult(null);
+    try {
+      const res = await apiFetch<DigestRunScheduledResponse>('/api/digest/run-scheduled', {
+        method: 'POST',
+      });
+      setRunResult(res);
+    } catch (err) {
+      logger.error('admin', 'digest_run_scheduled_failed', err);
+      setRunError(guardMessage(err));
+    } finally {
+      setRunPhase('idle');
+    }
+  };
+
   return (
     <>
       <section className="dc-section">
@@ -268,6 +282,8 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                       usersBoardId: opt?.value ?? null,
                       usersPeopleColumnId: null,
                       usersEmailColumnId: null,
+                      recipientGateColumnId: null,
+                      recipientGateLabelId: null,
                     })
                   }
                   clearable={false}
@@ -301,14 +317,6 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
               <div className="dc-hint">בלוח שנבחר אין עמודת אימייל — הוסיפו אחת במאנדיי.</div>
             )}
             <div className="dc-row">
-              <div className="dc-field" style={{ minWidth: 320 }}>
-                <label>נושא המייל</label>
-                <TextField
-                  value={digest.subject}
-                  placeholder="נושא"
-                  onChange={(value: string) => onChange({ subject: value })}
-                />
-              </div>
               <div className="dc-field" style={{ maxWidth: 160 }}>
                 <label>שעת שליחה (0–23, ישראל)</label>
                 <TextField
@@ -323,174 +331,61 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                 />
               </div>
             </div>
+            <div className="dc-row">
+              <div className="dc-field">
+                <label>עמודת סטטוס לסינון נמענים (אופציונלי)</label>
+                <Dropdown
+                  placeholder={usersColumnsLoading ? 'טוען עמודות…' : 'ללא סינון — כולם מקבלים'}
+                  disabled={!digest.usersBoardId || usersColumnsLoading}
+                  options={gateColumnOptions}
+                  value={findOption(gateColumnOptions, digest.recipientGateColumnId)}
+                  onChange={(opt: Option | null) =>
+                    onChange({
+                      recipientGateColumnId: opt?.value ?? null,
+                      recipientGateLabelId: null,
+                    })
+                  }
+                  clearable
+                />
+              </div>
+              <div className="dc-field">
+                <label>לייבל שמאשר קבלת מייל</label>
+                <Dropdown
+                  placeholder={!digest.recipientGateColumnId ? 'בחרו קודם עמודת סטטוס' : 'בחרו לייבל'}
+                  disabled={!digest.recipientGateColumnId}
+                  options={gateLabelOptions}
+                  value={gateLabelValue}
+                  onChange={(opt: Option | null) =>
+                    onChange({ recipientGateLabelId: opt ? Number(opt.value) : null })
+                  }
+                  clearable
+                />
+              </div>
+            </div>
+            <div className="dc-hint">
+              ברירת מחדל — <b>ללא סינון</b>: כל שורה בלוח המשתמשים מקבלת את המייל, בדיוק כמו היום.
+              אם בוחרים עמודה <b>וגם</b> לייבל, רק שורות שמסומן להן הלייבל הזה יקבלו את המייל —
+              דרך לכבות את המייל לאדם ספציפי בלי לגעת בשאר ההגדרות. שורה שנחסמה כך תופיע בדוח
+              ה-CSV עם הסיבה "לא מסומן לקבלת מייל".
+            </div>
           </>
         )}
       </section>
 
       {digest.enabled && (
-        <section className="dc-section">
-          <h2>מקבצי משימות</h2>
-          <div className="dc-hint">
-            כל מקבץ הוא טבלה במייל: עמודת תאריך שקובעת "באיחור" (תאריך שעבר — כולל היום),
-            תנאי סטטוס שקובע אילו משימות נכנסות, ותפריט נפתח מעוצב (תגית צבע → אפשרויות)
-            לבחירת סטטוס חדש מהכפתורים שנבחרו כאן.
-            <br />
-            סדר המקבצים קובע עדיפות: משימה שמתאימה לתנאים של כמה מקבצים תופיע רק
-            בגבוה ביותר מביניהם. סדרו עם החיצים.
-          </div>
-          {digest.sections.map((section, sectionIndex) => {
-            const primaryButtonId = section.buttonIds[0] ?? section.buttonId;
-            const statusOptions = statusLabelOptionsFor(primaryButtonId);
-            const selectedStatus = statusOptions.filter((o) =>
-              section.includeStatusLabelIds.includes(Number(o.value))
-            );
-            const selectedButtons = buttonOptions.filter((o) => section.buttonIds.includes(o.value));
-            return (
-              <div key={section.id} className="dc-card">
-                <div className="dc-row">
-                  <div className="dc-field" style={{ minWidth: 280 }}>
-                    <label>כותרת המקבץ</label>
-                    <TextField
-                      value={section.title}
-                      placeholder="למשל: משימות שנדרש לסיים"
-                      onChange={(value: string) => patchSection(section.id, { title: value })}
-                    />
-                  </div>
-                  <div className="dc-field">
-                    <label>עמודת תאריך (בלוח המשימות)</label>
-                    <Dropdown
-                      placeholder={tasksColumnsLoading ? 'טוען…' : 'בחרו עמודת תאריך'}
-                      options={dateOptions}
-                      value={findOption(dateOptions, section.dateColumnId)}
-                      onChange={(opt: Option | null) =>
-                        patchSection(section.id, {
-                          dateColumnId: opt?.value ?? null,
-                          // capture the board column title → email header
-                          dateColumnTitle: opt?.label ?? '',
-                        })
-                      }
-                      clearable={false}
-                    />
-                  </div>
-                  <div className="dc-field" style={{ minWidth: 220 }}>
-                    <label>כפתורי פעולה (עמודות במייל)</label>
-                    <Dropdown
-                      multi
-                      multiline
-                      placeholder="בחרו כפתור אחד או יותר"
-                      options={buttonOptions}
-                      value={selectedButtons}
-                      onChange={(opts: Option[] | null) => {
-                        const buttonIds = (opts ?? []).map((o) => o.value);
-                        const nextPrimary = buttonIds[0] ?? null;
-                        const primaryChanged = nextPrimary !== primaryButtonId;
-                        patchSection(section.id, {
-                          buttonIds,
-                          buttonId: nextPrimary,
-                          // switching the primary button changes the status column → reset filter
-                          ...(primaryChanged ? { includeStatusLabelIds: [] } : {}),
-                        });
-                      }}
-                      clearable={false}
-                    />
-                  </div>
-                  {digest.sections.length > 1 && (
-                    <>
-                      <Button
-                        kind={Button.kinds.TERTIARY}
-                        disabled={sectionIndex === 0}
-                        ariaLabel="העלאת עדיפות המקבץ"
-                        onClick={() => moveSection(sectionIndex, -1)}
-                      >
-                        ↑
-                      </Button>
-                      <Button
-                        kind={Button.kinds.TERTIARY}
-                        disabled={sectionIndex === digest.sections.length - 1}
-                        ariaLabel="הורדת עדיפות המקבץ"
-                        onClick={() => moveSection(sectionIndex, 1)}
-                      >
-                        ↓
-                      </Button>
-                      <Button
-                        kind={Button.kinds.TERTIARY}
-                        onClick={() => onChange({ sections: digest.sections.filter((s) => s.id !== section.id) })}
-                      >
-                        הסרה
-                      </Button>
-                    </>
-                  )}
-                </div>
-                <div className="dc-row">
-                  <div className="dc-field" style={{ minWidth: 280 }}>
-                    <label>עמודת טקסט חובה (אופציונלי)</label>
-                    <Dropdown
-                      placeholder={
-                        tasksColumnsLoading
-                          ? 'טוען…'
-                          : textOptions.length === 0
-                            ? 'אין עמודות טקסט בלוח'
-                            : 'ללא — אין שדה טקסט'
-                      }
-                      disabled={tasksColumnsLoading || textOptions.length === 0}
-                      options={textOptions}
-                      value={findOption(textOptions, section.noteColumnId)}
-                      onChange={(opt: Option | null) =>
-                        patchSection(section.id, {
-                          noteColumnId: opt?.value ?? null,
-                          // capture the board column title → email header
-                          noteColumnTitle: opt?.label ?? '',
-                        })
-                      }
-                      clearable
-                    />
-                    <div className="dc-hint">
-                      כשבוחרים עמודה, כל שורה במקבץ מקבלת שדה טקסט במייל — <b>אי אפשר לסמן משימה
-                      בלי למלא אותו</b>, וכפתור האישור נשאר מנוטרל עד שכל השורות שסומנו מולאו.
-                      הערך נכתב לעמודה הזו ודורס את מה שהיה בה. ריק = אין שדה ואין חובה.
-                    </div>
-                  </div>
-                </div>
-                <div className="dc-row">
-                  <div className="dc-field" style={{ minWidth: 320, flex: 1 }}>
-                    <label>הצג רק משימות שהסטטוס שלהן (בעמודת הכפתור הראשון):</label>
-                    <Dropdown
-                      multi
-                      multiline
-                      placeholder={
-                        !primaryButtonId ? 'בחרו קודם כפתור פעולה' : 'בחרו סטטוסים שנכנסים למקבץ'
-                      }
-                      disabled={!primaryButtonId}
-                      options={statusOptions}
-                      value={selectedStatus}
-                      onChange={(opts: Option[] | null) =>
-                        patchSection(section.id, {
-                          includeStatusLabelIds: (opts ?? []).map((o) => Number(o.value)),
-                        })
-                      }
-                      clearable={false}
-                    />
-                    <div className="dc-hint">
-                      רק משימות בסטטוסים שנבחרו יופיעו במקבץ — כך משימות שכבר טופלו (למשל "בוצע") לא ייכנסו.
-                      הכפתור הראשון קובע את עמודת הסטטוס לסינון; כל הכפתורים שנבחרו מופיעים בתפריט הנפתח במייל.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          {digest.sections.length < 4 && (
-            <div>
-              <Button
-                kind={Button.kinds.SECONDARY}
-                onClick={() => onChange({ sections: [...digest.sections, newDigestSection()] })}
-              >
-                + מקבץ נוסף
-              </Button>
-            </div>
-          )}
-        </section>
+        <SubjectBlock subject={digest.subject} onChange={(subject) => onChange({ subject })} />
       )}
+
+      {digest.enabled && (
+        <DigestBlocksSection
+          tasksColumns={tasksColumns}
+          tasksColumnsLoading={tasksColumnsLoading}
+          buttons={buttons}
+          digest={digest}
+          onChange={onChange}
+        />
+      )}
+
 
       <section className="dc-section">
         <h2>תצוגה מקדימה ושליחה</h2>
@@ -499,6 +394,11 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
             יש שינויים שלא נשמרו — התצוגה המקדימה והשליחה משקפות את ההגדרות השמורות בלבד.
           </div>
         )}
+        <div className="dc-hint">
+          <b>שליחה עכשיו</b> שולחת את המייל המסכם לכל הנמענים, מיד.{' '}
+          <b>הרצת הפעולה המתוזמנת</b> עושה את אותו הדבר <b>וגם</b> מפיקה ושולחת את דוח ה-CSV
+          לתיבת השולח — בדיוק כמו הרצה אוטומטית של הקרון.
+        </div>
         <div className="dc-row">
           <Button
             kind={Button.kinds.SECONDARY}
@@ -525,9 +425,29 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
               </Button>
             </>
           )}
+          {runPhase !== 'confirm' ? (
+            <Button
+              kind={Button.kinds.SECONDARY}
+              onClick={() => setRunPhase('confirm')}
+              loading={runPhase === 'sending'}
+              disabled={runPhase === 'sending'}
+            >
+              הרצת הפעולה המתוזמנת
+            </Button>
+          ) : (
+            <>
+              <Button color={Button.colors.NEGATIVE} onClick={() => void doRunScheduled()}>
+                לאשר הרצה לכל הנמענים + דוח
+              </Button>
+              <Button kind={Button.kinds.TERTIARY} onClick={() => setRunPhase('idle')}>
+                ביטול
+              </Button>
+            </>
+          )}
         </div>
         {previewError && <div className="dc-error">{previewError}</div>}
         {sendError && <div className="dc-error">{sendError}</div>}
+        {runError && <div className="dc-error">{runError}</div>}
 
         {sendResult && (
           <div className="dc-field">
@@ -546,6 +466,30 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                 {sendResult.skippedUsers.map((s) => s.name).join(', ')}
               </div>
             )}
+          </div>
+        )}
+
+        {runResult && (
+          <div className="dc-field">
+            <label>{runResult.ok ? 'ההרצה הסתיימה בהצלחה ✓' : 'ההרצה הסתיימה עם שגיאות'}</label>
+            <ul style={{ margin: 0, paddingInlineStart: 18 }}>
+              {runResult.results.map((r) => (
+                <li key={r.email} className={r.ok ? 'dc-success' : 'dc-error'}>
+                  {r.name} ({r.email}) — {r.ok ? `נשלחו ${r.taskCount} משימות ✓` : `נכשל: ${r.error ?? ''}`}
+                </li>
+              ))}
+              {runResult.results.length === 0 && <li className="dc-hint">אין נמענים עם משימות ממתינות — לא נשלח דבר.</li>}
+            </ul>
+            {runResult.skippedUsers.length > 0 && (
+              <div className="dc-hint">
+                דולגו {runResult.skippedUsers.length} שורות בלוח המשתמשים (חסר אימייל או איש):{' '}
+                {runResult.skippedUsers.map((s) => s.name).join(', ')}
+              </div>
+            )}
+            <div className="dc-hint">
+              משך ריצה: {runResult.durationMs.toLocaleString('en-US')} מ״ש · דוח ה-CSV{' '}
+              {runResult.reportSent ? 'נשלח לתיבת השולח שלכם ✓' : 'לא נשלח (אין תיבה מחוברת, או שהשליחה נכשלה)'}
+            </div>
           </div>
         )}
 
@@ -704,7 +648,9 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                           ? 'חסר איש'
                           : s.reason === 'multi_person'
                             ? 'יותר מאיש אחד'
-                            : s.reason;
+                            : s.reason === 'not_labeled'
+                              ? 'לא מסומן לקבלת מייל'
+                              : s.reason;
                     return `${s.name} (${reason})`;
                   })
                   .join(', ')}
@@ -714,5 +660,67 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
         )}
       </section>
     </>
+  );
+}
+
+/**
+ * The SUBJECT BLOCK — pinned first and not part of the body list, because it is
+ * the one authored string that is not rendered inside the email. It takes the
+ * same dynamic field, inserted at the caret, which is why this is a native input
+ * and not a Vibe TextField (the caret position is the feature).
+ */
+function SubjectBlock({
+  subject,
+  onChange,
+}: {
+  subject: string;
+  onChange: (next: string) => void;
+}) {
+  const ref = useRef<HTMLInputElement | null>(null);
+
+  const insertToken = () => {
+    const el = ref.current;
+    const start = el?.selectionStart ?? subject.length;
+    const end = el?.selectionEnd ?? start;
+    const { text, caret } = insertAt(subject, start, end);
+    onChange(text);
+    requestAnimationFrame(() => {
+      const node = ref.current;
+      if (!node) return;
+      node.focus();
+      node.setSelectionRange(caret, caret);
+    });
+  };
+
+  return (
+    <section className="dc-section">
+      <h2>בלוק נושא המייל</h2>
+      <div className="dc-hint">
+        השורה שהנמען רואה בתיבת הדואר. אפשר לשבץ בה את השדה הדינמי <code>{NAME_TOKEN}</code> —
+        למשל <span dir="rtl">"המשימות של {NAME_TOKEN} להיום"</span>. עד 120 תווים.
+      </div>
+      <div className="dc-row" style={{ alignItems: 'center' }}>
+        <div className="dc-field" style={{ minWidth: 360, flex: 1 }}>
+          <label>נושא</label>
+          <input
+            ref={ref}
+            className="dc-input"
+            dir="rtl"
+            type="text"
+            maxLength={120}
+            value={subject}
+            placeholder="נושא המייל"
+            onChange={(e) => onChange(e.target.value)}
+          />
+        </div>
+        <Button size="xs" kind="secondary" onClick={insertToken}>
+          + הוסף שם משתמש
+        </Button>
+        <span className={subject.trim().length === 0 ? 'dc-error' : 'dc-hint'}>
+          {subject.length}/120
+          {subject.trim().length === 0 && ' · נושא ריק — לא ניתן לשמור'}
+        </span>
+      </div>
+    </section>
   );
 }

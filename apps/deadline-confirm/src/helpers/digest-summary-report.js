@@ -3,7 +3,7 @@
 // Pure: no network, no storage. The scheduler owns the trigger and the target;
 // this module owns the bytes and the wording.
 //
-// Three decisions are encoded here and each has a failure it prevents:
+// Four decisions are encoded here and each has a failure it prevents:
 //
 //  - **UTF-8 BOM first.** Excel with no BOM falls back to the local ANSI
 //    codepage and every Hebrew name opens as mojibake. The file is for a human
@@ -16,6 +16,13 @@
 //    reason (0 tasks / already sent in this slot / an unusable users-board row)
 //    goes in the last column. A missing row is information that vanished, and
 //    "nobody is missing" is exactly what this report exists to prove.
+//  - **A dedicated `סטטוס` (outcome) column, round348.** The free-text `שגיאה`
+//    column carries non-error reasons too ("already sent", "no open tasks"),
+//    which made it useless to FILTER for real SMTP failures in Excel — a filter
+//    on free text also catches every benign skip. `סטטוס` is the coarse
+//    (sent / skipped / failed) bucket `kind` maps to; `שגיאה` stays the
+//    free-text detail, unchanged. Both come from the SAME lookup (`KIND_META`)
+//    so a new `kind` can never update one column and forget the other.
 //
 // The last column is headed `שגיאה` per the owner's column list, and it is the
 // only free-text slot there — so the non-error reasons ride in it too. `kind`
@@ -27,13 +34,23 @@ import { buildMultipartMixed } from './mime-mixed.js';
 const COLUMN_EMPLOYEE = 'עובד';
 const COLUMN_EMAIL = 'אימייל';
 const COLUMN_TOTAL = 'סה"כ';
+const COLUMN_OUTCOME = 'סטטוס';
 const COLUMN_ERROR = 'שגיאה';
+
+/** The three values `סטטוס` may hold — coarse enough to filter on in Excel. */
+const OUTCOME_SENT = 'נשלח';
+const OUTCOME_SKIPPED = 'דולג';
+const OUTCOME_FAILED = 'נכשל';
 
 /** Hebrew wording for a users-board row that never became a recipient. */
 const SKIP_REASONS = {
   no_email: 'דולג: אין אימייל בשורה',
   no_person: 'דולג: אין עובד משויך',
   multi_person: 'דולג: יותר מעובד אחד בשורה',
+  // The recipient label gate (round348 §E) blocked this row — the ONLY
+  // non-error skip reason that is a deliberate opt-out rather than a data
+  // problem, so the file states it in those terms.
+  not_labeled: 'דולג: לא מסומן לקבלת מייל',
 };
 
 /** A filename parameter must survive a MIME header — and not be a path. */
@@ -78,31 +95,41 @@ function csvField(value) {
 }
 
 /**
- * The last column's text for one row.
- * @param {{ kind: string, error?: string, reason?: string }} row
- * @returns {string}
+ * `kind` -> { outcome, note(row) }, the ONE place that maps a row kind to both
+ * CSV columns — so a new kind can never update the free-text detail and forget
+ * the coarse outcome bucket, or the reverse.
  */
-function rowNote(row) {
-  switch (row.kind) {
-    case 'sent':
-      return '';
-    case 'failed':
-      // The transport's own message IS the diagnosis (same contract as the
-      // smtp-sender seam) — never a generic "failed".
-      return String(row.error ?? 'שליחה נכשלה');
-    case 'already_sent':
-      return 'כבר נשלח בסלוט הזה';
-    case 'no_tasks':
-      return 'אין משימות פתוחות';
-    case 'skipped':
-      // An unknown reason is still named: a blank cell would read as "sent".
-      return SKIP_REASONS[row.reason] ?? `דולג: ${row.reason ?? 'לא ידוע'}`;
-    default:
-      // A row whose kind is unrecognized has probably lost its counts too, and
-      // a report that quietly reads as "0 tasks, all fine" is worse than a
-      // logged failure. The scheduler catches this and logs it.
-      throw fail('unknown_summary_row_kind', `unknown summary row kind: ${row.kind}`);
+const KIND_META = {
+  sent: { outcome: OUTCOME_SENT, note: () => '' },
+  failed: {
+    outcome: OUTCOME_FAILED,
+    // The transport's own message IS the diagnosis (same contract as the
+    // smtp-sender seam) — never a generic "failed".
+    note: (row) => String(row.error ?? 'שליחה נכשלה'),
+  },
+  already_sent: { outcome: OUTCOME_SKIPPED, note: () => 'כבר נשלח בסלוט הזה' },
+  no_tasks: { outcome: OUTCOME_SKIPPED, note: () => 'אין משימות פתוחות' },
+  skipped: {
+    outcome: OUTCOME_SKIPPED,
+    // An unknown reason is still named: a blank cell would read as "sent".
+    note: (row) => SKIP_REASONS[row.reason] ?? `דולג: ${row.reason ?? 'לא ידוע'}`,
+  },
+};
+
+/**
+ * The two CSV columns (`סטטוס`, `שגיאה`) for one row.
+ * @param {{ kind: string, error?: string, reason?: string }} row
+ * @returns {{ outcome: string, note: string }}
+ */
+function rowMeta(row) {
+  const meta = KIND_META[row.kind];
+  if (!meta) {
+    // A row whose kind is unrecognized has probably lost its counts too, and
+    // a report that quietly reads as "0 tasks, all fine" is worse than a
+    // logged failure. The scheduler catches this and logs it.
+    throw fail('unknown_summary_row_kind', `unknown summary row kind: ${row.kind}`);
   }
+  return { outcome: meta.outcome, note: meta.note(row) };
 }
 
 /**
@@ -120,11 +147,12 @@ export function buildDigestSummaryCsv({ sections, rows }) {
     COLUMN_EMAIL,
     ...cols.map((s) => s.title ?? ''),
     COLUMN_TOTAL,
+    COLUMN_OUTCOME,
     COLUMN_ERROR,
   ];
   const lines = [header.map(csvField).join(',')];
   for (const row of rows ?? []) {
-    const note = rowNote(row);
+    const { outcome, note } = rowMeta(row);
     const counts = row.counts ?? {};
     lines.push(
       [
@@ -134,6 +162,7 @@ export function buildDigestSummaryCsv({ sections, rows }) {
         // reader and only one of them is true.
         ...cols.map((s) => String(counts[s.id] ?? 0)),
         String(row.total ?? 0),
+        csvField(outcome),
         csvField(note),
       ].join(',')
     );

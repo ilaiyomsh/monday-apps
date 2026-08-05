@@ -146,7 +146,7 @@ due באותה שעה**.
 | יעד | **תיבת השולח של אותו טננט** (`${accountId}:google_sender`), שליחה לעצמה |
 | טריגר | **ריצת cron בלבד** |
 | שם הקובץ | `digest-summary-<slot>.csv` |
-| עמודות | `עובד \| אימייל \| <מקבץ 1> \| <מקבץ 2> \| … \| סה"כ \| שגיאה` |
+| עמודות | `עובד \| אימייל \| <מקבץ 1> \| <מקבץ 2> \| … \| סה"כ \| סטטוס \| שגיאה` |
 | מבנה MIME | `multipart/mixed`: גוף `text/plain` + הקובץ כ-attachment |
 
 **היעד הוא תיבת השולח ולא `OPERATOR_EMAIL`.** הדוח נוסע עם התיבה: מחליפים
@@ -168,15 +168,25 @@ due באותה שעה**.
 מתחת לכותרת הלא נכונה.
 
 **שורה לכל עובד, כולל מי שלא נשלח לו.** זו כל הטענה של הקובץ, ולכן העמודה
-האחרונה נושאת גם סיבות שאינן שגיאות:
+האחרונה נושאת גם סיבות שאינן שגיאות.
 
-| מצב | עמודת שגיאה |
-|---|---|
-| נשלח | ריק |
-| כשל SMTP | ההודעה של השרת עצמו (`smtp auth failed: 535` וכו') |
-| כבר נשלח בסלוט הזה (§4) | `כבר נשלח בסלוט הזה` |
-| 0 משימות פתוחות | `אין משימות פתוחות` |
-| שורה בלוח העובדים שלא נפתרה | `דולג: אין אימייל בשורה` / `דולג: אין עובד משויך` / `דולג: יותר מעובד אחד בשורה` |
+**A dedicated `סטטוס` (outcome) column (round348).** Until now, filtering
+"error not empty" in Excel also caught every benign skip — there was no way
+to isolate a real SMTP failure. `סטטוס` fixes that: only three values, built
+to be filtered on:
+
+| Case | סטטוס (outcome) | שגיאה (free text, unchanged) |
+|---|---|---|
+| Sent | `נשלח` | empty |
+| SMTP failure | `נכשל` | the transport's own message (`smtp auth failed: 535` etc.) |
+| Already sent this slot (§4) | `דולג` | `כבר נשלח בסלוט הזה` |
+| 0 open tasks | `דולג` | `אין משימות פתוחות` |
+| Unresolved users-board row | `דולג` | `דולג: אין אימייל בשורה` / `דולג: אין עובד משויך` / `דולג: יותר מעובד אחד בשורה` |
+
+Both columns are derived from the same lookup (`KIND_META` in
+`digest-summary-report.js`), so a new `kind` can never update one column and
+forget the other. An unrecognized `kind` still **throws**
+(`unknown_summary_row_kind`) — round348 left that alone.
 
 הסדר: קודם מי שיש לו משימות, אחר כך מי שאין לו, ולבסוף שורות שלא נפתרו לעובד.
 
@@ -300,12 +310,30 @@ mapps scheduler:run -a 11704868 -n digest-send
 היא מעכבת את הדיג'סט, ובאמצע פעימה שנהרגה הדוח של §5.2 **לא נשלח** (הוא נשלח
 בסוף), כך שריצה איטית קונה גם עיוורון לדוח.
 
-### 7.4 שעה שהוחמצה אינה מושלמת
+### 7.4 ~~A missed hour is never caught up~~ — implemented in round348
 
-ההשוואה היא לשעה **שלמה**. אם פעימה מתעכבת וחוצה את גבול השעה, אותו טננט
-מפוספס לאותו יום — אין השלמה אוטומטית, רק `resend-today` ידני. עכשיו,
-כשיש סימון per-slot, אפשר להוסיף השלמה בבטחה (פעימה תשלים למי שטרם קיבל
-באותו slot) — **לא מיושם**, לא נדרש עדיין.
+Was: the comparison is to a **whole hour** (`sendHour !== hour`). A tick that
+is delayed and crosses the hour boundary misses the tenant for the entire
+day — no automatic catch-up, only a manual `resend-today`.
+
+**Now:** an hour that has already passed today is a catch-up candidate —
+every tick from that hour on retries the tenant, relying on the per-slot
+marker (`skipAlreadySent`, `digest-run.js`) to avoid a double send. A tick
+that already mailed everyone does not send again; a tick that died mid-run
+(e.g. hitting the §7.3 timeout) completes only whoever has not received it
+yet. The `due` flag (the audience for the operator summary + the CSV report)
+changed accordingly: at the tenant's own scheduled hour it is always true
+(even zero recipients is the normal reporting moment); on a catch-up hour it
+is true **only** when something actually happened (`sent>0` or `failed>0`) —
+otherwise every remaining hour of the day would re-report "nothing new,"
+exactly the hourly noise §5.1 already fixed once, for a different reason.
+
+**Cost:** a tenant already fully sent today is re-checked against the boards
+every remaining hour — the same two-board-read overhead §7.3 measures for a
+tick that sends nobody anything. Accepted overhead: there is no cheaper way
+to know "nothing left to do" without asking.
+
+Tests: `tests/scheduler-catchup.test.js`.
 
 ### 7.5 ~~קובץ סיכום פר עובד~~ — מיושם ב-0.14.0, ראה §5.2
 
@@ -335,6 +363,7 @@ mapps scheduler:run -a 11704868 -n digest-send
 | `tests/scheduler-summary-gate.test.js` | מי נחשב due לצורך הסיכום |
 | `tests/scheduler-summary-file.test.js` | מי מקבל את הדוח ומתי (§5.2) |
 | `tests/scheduler-duration.test.js` | מדידת זמן הריצה (§7.3) |
+| `tests/scheduler-catchup.test.js` | missed-hour catch-up, with no noise to the summary/report (§7.4) |
 | `tests/digest-summary-report.test.js` | הבייטים של ה-CSV, ה-BOM, הנוסח |
 | `tests/digest-summary-rows.test.js` | מאיפה המספרים — שורה לכל עובד |
 | `tests/mime-mixed.test.js` | העוטף, כולל אלטרנטיב מקונן בייט-אחר-בייט |

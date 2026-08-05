@@ -200,9 +200,9 @@ describe('cron tick — the per-employee summary file', () => {
     const csv = decodeCsv(reportCalls(send, 'sender-a@tenant.example')[0]);
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     const lines = csv.replace(/^\uFEFF/, '').split('\r\n');
-    expect(lines[0]).toBe('עובד,אימייל,להתחיל:,"סה""כ",שגיאה');
-    expect(lines[1]).toBe('דנה,dana@example.com,1,1,');
-    expect(lines[2]).toBe('רון,ron@example.com,0,0,אין משימות פתוחות');
+    expect(lines[0]).toBe('עובד,אימייל,להתחיל:,"סה""כ",סטטוס,שגיאה');
+    expect(lines[1]).toBe('דנה,dana@example.com,1,1,נשלח,');
+    expect(lines[2]).toBe('רון,ron@example.com,0,0,דולג,אין משימות פתוחות');
   });
 
   it('reports the file count in the tick response', async () => {

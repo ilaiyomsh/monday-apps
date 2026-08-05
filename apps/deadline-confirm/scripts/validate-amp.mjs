@@ -67,6 +67,22 @@ const cluster = (over = {}) => ({
 
 const recipient = (sections) => ({ name: 'דנה כהן', personId: '501', sections });
 
+/** A text block as the admin stores it (0.15.0 — the body is a block list). */
+const text = (over = {}) => ({
+  type: 'text',
+  id: 'x_sample01',
+  text: 'שלום {{שם}},',
+  direction: 'rtl',
+  font: 'Default',
+  fontSize: 18,
+  align: 'right',
+  color: '#323338',
+  bold: true,
+  ...over,
+});
+
+const clusterBlock = (id = 's_a0000001') => ({ type: 'cluster', id });
+
 /**
  * Every shape the renderer can produce that differs STRUCTURALLY. Each one
  * exercises markup the others do not, so a rule broken by one binding cannot
@@ -106,6 +122,34 @@ const SAMPLES = [
         tasks: [task('9003', 'הגשת דוח')],
       }),
     ]),
+  },
+  {
+    // 0.15.0: the body is operator-authored blocks. Every generated .tb<n> rule
+    // and every text div has to pass the same strict-CSS check as the rest of the
+    // document — the properties are reused from validated rules, but only the
+    // validator can say so.
+    name: 'text blocks around a cluster (generated .tb rules, rtl + ltr, bold)',
+    recipient: recipient([cluster()]),
+    blocks: [
+      text(),
+      text({ id: 'x_sample02', text: 'רשימת המשימות:', fontSize: 14, bold: false, color: '#676879' }),
+      clusterBlock(),
+      text({
+        id: 'x_sample03',
+        text: 'Sent automatically.\nDo not reply.',
+        direction: 'ltr',
+        align: 'left',
+        font: 'Georgia',
+        fontSize: 12,
+        bold: false,
+        color: '#9699A6',
+      }),
+    ],
+  },
+  {
+    name: 'text block beside a mapped cluster (notes CSS + text CSS in one sheet)',
+    recipient: recipient([cluster({ noteColumnId: 'text_note', noteColumnTitle: 'סיכום ביצוע' })]),
+    blocks: [text({ font: 'Times New Roman' }), clusterBlock()],
   },
   {
     name: 'same task in TWO mapped clusters (two independent forms, shared note state)',
@@ -149,7 +193,12 @@ async function main() {
 
   let invalid = 0;
   for (const sample of SAMPLES) {
-    const html = renderDigestAmp({ ...RENDER_ARGS, recipient: sample.recipient });
+    const html = renderDigestAmp({
+      ...RENDER_ARGS,
+      recipient: sample.recipient,
+      // Samples without `blocks` exercise the legacy call shape (clusters only).
+      blocks: sample.blocks,
+    });
     const result = validator.validateString(html, 'AMP4EMAIL');
     const errors = result.errors.filter((e) => e.severity === 'ERROR');
     const warnings = result.errors.filter((e) => e.severity !== 'ERROR');

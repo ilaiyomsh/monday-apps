@@ -33,8 +33,28 @@ import { generateSecret, maskSecret } from '../services/secret.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
 import { renderDigestPlain } from '../helpers/digest-plain.js';
 import { buildMultipartAlternative } from '../helpers/mime-alternative.js';
-import { buildDigest, digestTaskColumnIds, decorateRecipientSections } from '../services/digest-service.js';
+import {
+  buildDigest,
+  digestTaskColumnIds,
+  digestUsersColumnIds,
+  decorateRecipientSections,
+} from '../services/digest-service.js';
+import {
+  DIGEST_FONTS,
+  FONT_SIZE_MAX,
+  FONT_SIZE_MIN,
+  MAX_BLOCKS,
+  MAX_CLUSTER_BLOCKS,
+  MAX_TEXT_LENGTH,
+  TEXT_ALIGNS,
+  TEXT_BLOCK_ID_RE,
+  TEXT_DIRECTIONS,
+  legacyBlocksFromSections,
+  normalizeDigestBlocks,
+  sectionsFromBlocks,
+} from '../services/digest-blocks.js';
 import { runDigestForAccount, todayInJerusalem as todayInJerusalemFromRun } from '../services/digest-run.js';
+import { runScheduledForAccount } from '../services/scheduled-run.js';
 import { MondayApiError } from '../services/monday-api.js';
 import { logError, logInfo } from '../helpers/logger.js';
 
@@ -67,6 +87,114 @@ function generateId(prefix) {
 
 const isNonEmptyString = (v, max = Infinity) =>
   typeof v === 'string' && v.length > 0 && v.length <= max;
+
+/**
+ * Validate + normalize ONE digest cluster — a `cluster` block (0.15.0) or a
+ * legacy `sections[]` entry, which carry the same fields.
+ *
+ * Returns `{ section }` or `{ bad: true }`; the CALLER names the offending
+ * field, because the two paths report different ones ('digest.blocks' vs
+ * 'digest.sections') and the field name is part of the API contract.
+ *
+ * @param {object} s
+ * @param {Set<string>} buttonIds ids of the config's action buttons
+ */
+function validateDigestCluster(s, buttonIds) {
+  const bad = { bad: true };
+  if (typeof s !== 'object' || s === null) return bad;
+  if (s.id !== undefined && !(typeof s.id === 'string' && SECTION_ID_RE.test(s.id))) return bad;
+  if (!isNonEmptyString(s.title, 60)) return bad;
+  if (!isNonEmptyString(s.dateColumnId)) return bad;
+  if (!isNonEmptyString(s.dateColumnTitle, 255)) return bad;
+
+  // buttonIds (multi) with legacy fallback to singular buttonId
+  let sectionButtonIds;
+  if (Array.isArray(s.buttonIds) && s.buttonIds.length > 0) {
+    if (!s.buttonIds.every((id) => typeof id === 'string' && buttonIds.has(id))) return bad;
+    sectionButtonIds = [...new Set(s.buttonIds)];
+  } else if (typeof s.buttonId === 'string' && buttonIds.has(s.buttonId)) {
+    sectionButtonIds = [s.buttonId];
+  } else {
+    return bad;
+  }
+
+  // "show by status": a non-empty set of label ids (0 is valid).
+  if (
+    !Array.isArray(s.includeStatusLabelIds) ||
+    s.includeStatusLabelIds.length === 0 ||
+    !s.includeStatusLabelIds.every((n) => Number.isInteger(n) && n >= 0)
+  ) {
+    return bad;
+  }
+
+  // Optional per-cluster note column: mapping it makes a per-task text field
+  // mandatory in the email. Absent/null/'' = no mapping, which is what every
+  // config saved before 0.12.0 carries.
+  let noteColumnId = null;
+  let noteColumnTitle = '';
+  if (s.noteColumnId !== undefined && s.noteColumnId !== null && s.noteColumnId !== '') {
+    if (!isNonEmptyString(s.noteColumnId)) return bad;
+    // The title becomes the email column header — a mapping without one would
+    // render a nameless column, so it is required, not defaulted.
+    if (!isNonEmptyString(s.noteColumnTitle, 255)) return bad;
+    noteColumnId = s.noteColumnId;
+    noteColumnTitle = s.noteColumnTitle;
+  }
+
+  return {
+    section: {
+      id: s.id ?? generateId('s'),
+      title: s.title,
+      dateColumnId: s.dateColumnId,
+      dateColumnTitle: s.dateColumnTitle,
+      buttonId: sectionButtonIds[0],
+      buttonIds: sectionButtonIds,
+      includeStatusLabelIds: [...s.includeStatusLabelIds],
+      noteColumnId,
+      noteColumnTitle,
+    },
+  };
+}
+
+/**
+ * Validate + normalize ONE text block. Every style value is checked against a
+ * closed set: these end up in the amp document's <style> element and in the
+ * body, so `font` is an ALLOWLIST (an arbitrary string here would be
+ * stylesheet injection), the color is a 6-digit hex, and size/alignment/
+ * direction are the same ranges the admin offers. Nothing is coerced —
+ * an out-of-range value is a 400, not a silent clamp, so a broken client is
+ * visible instead of quietly restyling a tenant's mail.
+ *
+ * @param {object} raw
+ */
+function validateDigestTextBlock(raw) {
+  const bad = { bad: true };
+  if (raw.id !== undefined && !(typeof raw.id === 'string' && TEXT_BLOCK_ID_RE.test(raw.id))) return bad;
+  if (typeof raw.text !== 'string' || raw.text.trim().length === 0 || raw.text.length > MAX_TEXT_LENGTH) {
+    return bad;
+  }
+  if (!TEXT_DIRECTIONS.includes(raw.direction)) return bad;
+  if (!DIGEST_FONTS.includes(raw.font)) return bad;
+  if (!Number.isInteger(raw.fontSize) || raw.fontSize < FONT_SIZE_MIN || raw.fontSize > FONT_SIZE_MAX) {
+    return bad;
+  }
+  if (!TEXT_ALIGNS.includes(raw.align)) return bad;
+  if (typeof raw.color !== 'string' || !COLOR_RE.test(raw.color)) return bad;
+  if (raw.bold !== undefined && typeof raw.bold !== 'boolean') return bad;
+  return {
+    block: {
+      type: 'text',
+      id: raw.id ?? generateId('x'),
+      text: raw.text,
+      direction: raw.direction,
+      font: raw.font,
+      fontSize: raw.fontSize,
+      align: raw.align,
+      color: raw.color,
+      bold: raw.bold === true,
+    },
+  };
+}
 
 /**
  * Validate + normalize the v2 config. Returns { field } on the FIRST
@@ -128,66 +256,88 @@ function validateConfig(body) {
     if (!isNonEmptyString(raw.usersPeopleColumnId)) return { field: 'digest.usersPeopleColumnId' };
     if (!isNonEmptyString(raw.usersEmailColumnId)) return { field: 'digest.usersEmailColumnId' };
     if (!isNonEmptyString(raw.subject, 120)) return { field: 'digest.subject' };
-    if (!Array.isArray(raw.sections) || raw.sections.length < 1 || raw.sections.length > 4) {
-      return { field: 'digest.sections' };
+
+    // --- recipient label gate (round348 §E, optional) ------------------------
+    // Column and label travel independently: EITHER absent means the gate is
+    // OFF and every users-board row qualifies, same as every digest before
+    // this feature (digest-service.js's buildDigest). A reversed default would
+    // silently mute mail for every existing tenant the moment they upgrade,
+    // with nobody having touched the setting.
+    let recipientGateColumnId = null;
+    if (raw.recipientGateColumnId !== undefined && raw.recipientGateColumnId !== null) {
+      if (!isNonEmptyString(raw.recipientGateColumnId)) {
+        return { field: 'digest.recipientGateColumnId' };
+      }
+      recipientGateColumnId = raw.recipientGateColumnId;
     }
-    const sections = [];
-    for (const s of raw.sections) {
-      if (typeof s !== 'object' || s === null) return { field: 'digest.sections' };
-      if (s.id !== undefined && !(typeof s.id === 'string' && SECTION_ID_RE.test(s.id))) {
-        return { field: 'digest.sections' };
+    let recipientGateLabelId = null;
+    if (raw.recipientGateLabelId !== undefined && raw.recipientGateLabelId !== null) {
+      // 0 is a valid label id — Number.isInteger, never a truthy/falsy check.
+      if (!Number.isInteger(raw.recipientGateLabelId)) {
+        return { field: 'digest.recipientGateLabelId' };
       }
-      if (!isNonEmptyString(s.title, 60)) return { field: 'digest.sections' };
-      if (!isNonEmptyString(s.dateColumnId)) return { field: 'digest.sections' };
-      if (!isNonEmptyString(s.dateColumnTitle, 255)) return { field: 'digest.sections' };
-      // buttonIds (multi) with legacy fallback to singular buttonId
-      let sectionButtonIds;
-      if (Array.isArray(s.buttonIds) && s.buttonIds.length > 0) {
-        if (!s.buttonIds.every((id) => typeof id === 'string' && buttonIds.has(id))) {
-          return { field: 'digest.sections' };
+      recipientGateLabelId = raw.recipientGateLabelId;
+    }
+
+    // --- the body (0.15.0): an ordered block list, or the legacy sections ----
+    // `blocks` is the source of truth and `sections` is DERIVED from it, in
+    // block order — that derivation is what makes the mail's order the cluster
+    // priority (digest-service lets the first matching section claim a task).
+    // A body with `sections` and no `blocks` is the pre-0.15.0 admin (and every
+    // settings export taken before it): accepted, and given the reconstructed
+    // legacy blocks so storage is never left without them.
+    let sections;
+    let blocks;
+    if (raw.blocks !== undefined && raw.blocks !== null) {
+      if (!Array.isArray(raw.blocks) || raw.blocks.length < 1 || raw.blocks.length > MAX_BLOCKS) {
+        return { field: 'digest.blocks' };
+      }
+      blocks = [];
+      let clusterCount = 0;
+      for (const b of raw.blocks) {
+        if (typeof b !== 'object' || b === null) return { field: 'digest.blocks' };
+        if (b.type === 'text') {
+          const result = validateDigestTextBlock(b);
+          if (result.bad) return { field: 'digest.blocks' };
+          blocks.push(result.block);
+        } else if (b.type === 'cluster') {
+          const result = validateDigestCluster(b, buttonIds);
+          if (result.bad) return { field: 'digest.blocks' };
+          clusterCount += 1;
+          blocks.push({ type: 'cluster', ...result.section });
+        } else {
+          // An unknown type would be silently dropped by the renderers — refuse
+          // it here instead, so a client bug is a 400 and not a missing block.
+          return { field: 'digest.blocks' };
         }
-        sectionButtonIds = [...new Set(s.buttonIds)];
-      } else if (typeof s.buttonId === 'string' && buttonIds.has(s.buttonId)) {
-        sectionButtonIds = [s.buttonId];
-      } else {
-        return { field: 'digest.sections' };
       }
-      // "show by status": a non-empty set of label ids (0 is valid).
+      // At least one cluster: a digest with no tasks in it is not a digest.
+      // The upper bound is the 0.13.x section cap — clusters drive board reads
+      // and the complexity budget, text blocks cost nothing.
+      if (clusterCount < 1 || clusterCount > MAX_CLUSTER_BLOCKS) return { field: 'digest.blocks' };
+      const ids = blocks.map((b) => b.id);
+      if (new Set(ids).size !== ids.length) return { field: 'digest.blocks' };
+      sections = sectionsFromBlocks(blocks);
+    } else {
       if (
-        !Array.isArray(s.includeStatusLabelIds) ||
-        s.includeStatusLabelIds.length === 0 ||
-        !s.includeStatusLabelIds.every((n) => Number.isInteger(n) && n >= 0)
+        !Array.isArray(raw.sections) ||
+        raw.sections.length < 1 ||
+        raw.sections.length > MAX_CLUSTER_BLOCKS
       ) {
         return { field: 'digest.sections' };
       }
-      // Optional per-cluster note column: mapping it makes a per-task text
-      // field mandatory in the email. Absent/null/'' = no mapping, which is
-      // what every config saved before this feature carries.
-      let noteColumnId = null;
-      let noteColumnTitle = '';
-      if (s.noteColumnId !== undefined && s.noteColumnId !== null && s.noteColumnId !== '') {
-        if (!isNonEmptyString(s.noteColumnId)) return { field: 'digest.sections' };
-        // The title becomes the email column header — a mapping without one
-        // would render a nameless column, so it is required, not defaulted.
-        if (!isNonEmptyString(s.noteColumnTitle, 255)) return { field: 'digest.sections' };
-        noteColumnId = s.noteColumnId;
-        noteColumnTitle = s.noteColumnTitle;
+      sections = [];
+      for (const s of raw.sections) {
+        const result = validateDigestCluster(s, buttonIds);
+        if (result.bad) return { field: 'digest.sections' };
+        sections.push(result.section);
       }
-      sections.push({
-        id: s.id ?? generateId('s'),
-        title: s.title,
-        dateColumnId: s.dateColumnId,
-        dateColumnTitle: s.dateColumnTitle,
-        buttonId: sectionButtonIds[0],
-        buttonIds: sectionButtonIds,
-        includeStatusLabelIds: [...s.includeStatusLabelIds],
-        noteColumnId,
-        noteColumnTitle,
-      });
+      if (new Set(sections.map((s) => s.id)).size !== sections.length) {
+        return { field: 'digest.sections' };
+      }
+      blocks = legacyBlocksFromSections(sections);
     }
-    if (new Set(sections.map((s) => s.id)).size !== sections.length) {
-      return { field: 'digest.sections' };
-    }
+
     const sendHour = raw.sendHour === undefined || raw.sendHour === null ? 8 : raw.sendHour;
     if (!Number.isInteger(sendHour) || sendHour < 0 || sendHour > 23) {
       return { field: 'digest.sendHour' };
@@ -196,9 +346,12 @@ function validateConfig(body) {
       usersBoardId: raw.usersBoardId,
       usersPeopleColumnId: raw.usersPeopleColumnId,
       usersEmailColumnId: raw.usersEmailColumnId,
+      recipientGateColumnId,
+      recipientGateLabelId,
       subject: raw.subject,
       sendHour,
       sections,
+      blocks,
     };
   }
 
@@ -261,7 +414,10 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         api.getBoardItems({
           token,
           boardId: digest.usersBoardId,
-          columnIds: [digest.usersPeopleColumnId, digest.usersEmailColumnId],
+          // Also requests the recipient label gate's status column (round348
+          // §E) when configured — the preview must gate the same recipients
+          // the send path would.
+          columnIds: digestUsersColumnIds(digest),
         }),
       ]);
     } catch (err) {
@@ -295,11 +451,18 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     // AMP playground / Gmail (same slot the server will demand). Task filtering
     // still uses `today` above — only the HMAC slot follows `now`.
     const renderArgs = { baseUrl: env.baseUrl, secret, accountId: req.session.accountId };
-    const renderPlainFor = (recipient) => renderDigestPlain({ recipient: withButtons(recipient) });
+    // The preview must show what the SEND path builds, so it resolves the blocks
+    // exactly the same way — including the reconstruction for a config that
+    // predates them (otherwise a legacy tenant would preview a mail with no text
+    // and receive one with text).
+    const blocks = normalizeDigestBlocks(config.digest);
+    const renderPlainFor = (recipient) =>
+      renderDigestPlain({ recipient: withButtons(recipient), blocks });
     const renderAmpFor = (recipient) =>
       renderDigestAmp({
         ...renderArgs,
         recipient: withButtons(recipient),
+        blocks,
         sendHour,
         now: now(),
       });
@@ -470,6 +633,44 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
   // (same pipeline as send; currentSlot is derived from live `now`).
   router.post('/api/digest/resend-today', guarded(handleDigestSend));
 
+  // Round348 — run the scheduled action by hand, for THIS tenant.
+  // Distinct from /api/digest/send in exactly one way that matters: it also
+  // produces the per-employee CSV report (§5.2), which until now only the cron
+  // could make. `skipAlreadySent` stays FALSE (owner decision 2026-08-05): the
+  // button re-sends to everyone every time, and therefore also leaves no
+  // per-slot marker — see services/scheduled-run.js for why both follow.
+  async function handleRunScheduled(req, res) {
+    if (!emailSender) {
+      res.status(409).json({ error: 'email_not_configured' });
+      return;
+    }
+    const out = await runScheduledForAccount({
+      accountId: req.session.accountId,
+      storage,
+      api,
+      baseUrl: env.baseUrl,
+      emailSender,
+      todayIso,
+      now,
+      tag: 'admin_api',
+    });
+    if (out.skip) {
+      res.status(out.skip === 'monday_api_failed' ? 502 : 409).json({ error: out.skip });
+      return;
+    }
+    res.json({
+      ok: out.failed === 0,
+      slot: out.slot,
+      results: out.results,
+      skippedUsers: out.skippedUsers,
+      truncated: out.truncated,
+      durationMs: out.durationMs,
+      reportSent: out.reportSent,
+    });
+  }
+
+  router.post('/api/digest/run-scheduled', guarded(handleRunScheduled));
+
 
   function guarded(handler) {
     return async (req, res) => {
@@ -565,7 +766,16 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
           : null,
       };
 
-      res.json({ config, secret: maskSecret(linkSecret), oauth, google, baseUrl: env.baseUrl });
+      // The digest always leaves here WITH blocks — reconstructed on the way out
+      // for a config stored before 0.15.0. That is deliberate: the admin SPA
+      // then has one shape to edit and needs no migration logic of its own, and
+      // the reconstruction stays in one place (services/digest-blocks.js).
+      // Storage is untouched; the blocks land there on the operator's next save.
+      const stateConfig = config?.digest
+        ? { ...config, digest: { ...config.digest, blocks: normalizeDigestBlocks(config.digest) } }
+        : config;
+
+      res.json({ config: stateConfig, secret: maskSecret(linkSecret), oauth, google, baseUrl: env.baseUrl });
     })
   );
 
