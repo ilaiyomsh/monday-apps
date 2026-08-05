@@ -85,7 +85,7 @@ pnpm dlx "$CLEANUP_JSCPD_VERSION" $CLEANUP_JSCPD_ARGS \
 
 LOC=$(cleanup_loc)
 FILES=$(cleanup_file_count)
-BUNDLE_KB=$( [ -d "$CLEANUP_SPA_DIR/dist" ] && du -sk "$CLEANUP_SPA_DIR/dist" | cut -f1 || echo unknown )
+BUNDLE_KB=$(cleanup_bundle_kb)   # served bytes only — sourcemaps excluded, see cleanup-env.sh
 JSCPD_REPORT="$RAW/jscpd-baseline/jscpd-report.json"
 CLONES=$( [ -f "$JSCPD_REPORT" ] && jq -r '.statistics.total.clones // "unknown"' "$JSCPD_REPORT" || echo unknown )
 DUP_PCT=$( [ -f "$JSCPD_REPORT" ] && jq -r '.statistics.total.percentage // "unknown"' "$JSCPD_REPORT" || echo unknown )

@@ -73,6 +73,19 @@ cleanup_loc() {
     | tr '\n' '\0' | xargs -0 wc -l | tail -1 | awk '{print $1}'
 }
 
+# Bundle metric: the SPA dist EXCLUDING sourcemaps. vite.config.js builds with
+# sourcemap:'hidden', and the deploy workflow strips every .map before pushing, so a plain
+# `du -sk dist` measures something no browser ever downloads — verified 2026-08-05:
+# 2644 KB with maps vs 716 KB of actually-served bundle. Cleanup deltas would vanish in
+# that noise. Both baseline.sh and the verify workflow call THIS function, so before and
+# after are always measured the same way.
+cleanup_bundle_kb() {
+  local dist="$CLEANUP_SPA_DIR/dist"
+  [ -d "$dist" ] || { echo unknown; return; }
+  find "$dist" -type f ! -name '*.map' -exec du -k {} + 2>/dev/null \
+    | awk '{s+=$1} END{print (s ? s : "unknown")}'
+}
+
 cleanup_file_count() {
   git ls-files "$CLEANUP_SPA_DIR/src" "$CLEANUP_SRV_DIR/src" \
     | grep -vE '\.(test|spec)\.[jt]sx?$' | wc -l | tr -d ' '

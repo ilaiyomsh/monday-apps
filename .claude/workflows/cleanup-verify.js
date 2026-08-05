@@ -112,7 +112,9 @@ const gate = await agent(
   `  6. build     — both workspaces\n` +
   `  7. tests     — both workspaces, FULL suites\n` +
   `  8. drift     — pnpm --filter @mapps/error-kit test\n\n` +
-  `After the build, measure the SPA bundle the same way the baseline did: du -sk ${APP}/dist (report as bundleKb).\n\n` +
+  `After the build, measure the SPA bundle the same way the baseline did — run exactly:\n` +
+  `  bash -c '. scripts/cleanup/cleanup-env.sh && cleanup_bundle_kb'\n` +
+  `(report as bundleKb). Do NOT substitute a plain \`du -sk dist\`: that counts the hidden sourcemaps the deploy strips, which is ~3.7x the served bytes and would drown any real delta.\n\n` +
   `Any failure means the report's verdict is ISSUES_FOUND regardless of anything else. Include the first 20 lines of the first failure.\n\n${READ_ONLY}`,
   { label: 'full-gate', phase: 'Gate', schema: GATE_SCHEMA }
 )
