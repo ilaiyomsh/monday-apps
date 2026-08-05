@@ -10,12 +10,6 @@
  * { activated: null, enrolled: null } so the caller shows a neutral state, not
  * a false "not connected".
  *
- * @param {{ boardId: string|number, columnId: string }} target
- * @param {{
- *   guardUrl?: string|null,               // default: '' (same-origin); null skips
- *   sessionTokenProvider?: () => Promise<string>,
- *   fetchImpl?: typeof fetch,
- * }} [deps]
  * round327: also returns `primaryAuthorized` — whether the COLUMN's primary
  * owner (the revert identity) holds a token. `activated` alone is account-level
  * and can be true because a DIFFERENT owner authorized, while every revert on
@@ -26,8 +20,6 @@
  * user holds a token. The settings line renders only when the DRAFT primary
  * owner is the current user, and a draft crowning is not saved yet, so the
  * stored-primary signal can be stale for it; "am I authorized" cannot be.
- *
- * @returns {Promise<{ activated: boolean|null, enrolled: boolean|null, primaryAuthorized: boolean|null, meAuthorized: boolean|null }>}
  */
 
 import logger from '../utils/logger.js';
@@ -38,6 +30,15 @@ const UNKNOWN = { activated: null, enrolled: null, primaryAuthorized: null, meAu
 /** strict tri-state: anything that is not a boolean collapses to null */
 const triState = (value) => (value === true ? true : value === false ? false : null);
 
+/**
+ * @param {{ boardId: string|number, columnId: string }} target
+ * @param {{
+ *   guardUrl?: string|null,               // default: '' (same-origin); null skips
+ *   sessionTokenProvider?: () => Promise<string>,
+ *   fetchImpl?: typeof fetch,
+ * }} [deps]
+ * @returns {Promise<{ activated: boolean|null, enrolled: boolean|null, primaryAuthorized: boolean|null, meAuthorized: boolean|null }>}
+ */
 export async function getGuardStatus({ boardId, columnId }, deps = {}) {
   const base = resolveGuardBase(deps.guardUrl);
   if (base === null) return UNKNOWN; // dev-harness mock: no backend

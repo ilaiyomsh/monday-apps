@@ -30,7 +30,15 @@
  *                     one. Its own status (round330) because the manual register
  *                     button must say so — retrying cannot fix a permission.
  *   'failed'        — network error, timeout, or any other non-200 answer. Logged.
- *
+ */
+
+import logger from '../utils/logger.js';
+import { resolveGuardBase } from './guardBase.js';
+
+/** Long enough for a cold monday-code container, short enough to close a modal on. */
+const DEFAULT_TIMEOUT_MS = 8000;
+
+/**
  * @param {{ boardId: string|number, columnId: string }} target
  * @param {{
  *   guardUrl?: string|null,               // default: '' (same-origin); null skips
@@ -40,13 +48,6 @@
  * }} [deps]
  * @returns {Promise<'disabled'|'enrolled'|'not_activated'|'not_board_owner'|'failed'>}
  */
-
-import logger from '../utils/logger.js';
-import { resolveGuardBase } from './guardBase.js';
-
-/** Long enough for a cold monday-code container, short enough to close a modal on. */
-const DEFAULT_TIMEOUT_MS = 8000;
-
 export async function enrollColumnGuard({ boardId, columnId }, deps = {}) {
   const base = resolveGuardBase(deps.guardUrl);
   if (base === null) return 'disabled';

@@ -22,7 +22,12 @@
  * origin (the guard) — the one origin that can serve it. That is why the opener
  * is window.open and NOT monday's openLinkInNewTab: the latter runs in the
  * monday parent and would resolve a relative path against monday.com.
- *
+ */
+
+import logger from '../utils/logger.js';
+import { resolveGuardBase } from './guardBase.js';
+
+/**
  * @param {{
  *   guardUrl?: string|null,               // default: '' (same-origin); null skips
  *   sessionTokenProvider?: () => Promise<string>,  // default: monday.get('sessionToken')
@@ -30,10 +35,6 @@
  * }} [deps]
  * @returns {Promise<'disabled'|'opened'|'blocked'|'failed'>}
  */
-
-import logger from '../utils/logger.js';
-import { resolveGuardBase } from './guardBase.js';
-
 export async function startGuardAuthorization(deps = {}) {
   const base = resolveGuardBase(deps.guardUrl);
   if (base === null) return 'disabled';

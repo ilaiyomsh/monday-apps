@@ -54,7 +54,6 @@ export function useMondayContext() {
 
     initContext();
 
-    // Listen for context changes (theme switches, language changes).
     const unsubscribe = mondayService.listenToContext((newContext) => {
       setContext(newContext);
       applyLocale(newContext);

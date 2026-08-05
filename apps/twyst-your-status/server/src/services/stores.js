@@ -189,7 +189,7 @@ export function createRulesStore({ storageFactory, logger }) {
  * Appends for the SAME column are serialized in-process (a promise lane per
  * key) so two concurrent webhook deliveries never lose each other's write via
  * read-modify-write; different columns append concurrently.
- * @param {{ secureStorage: { get(k): Promise<any>, set(k,v): Promise<any> }, maxEvents?: number }} deps
+ * @param {{ secureStorage: { get(k): Promise<any>, set(k,v): Promise<any> }, maxEvents?: number, logger?: object }} deps
  */
 export function createBypassLog({ secureStorage, maxEvents = 1000, logger }) {
   const keyOf = (accountId, boardId, columnId) => `${accountId}:bypass:${boardId}:${columnId}`;
@@ -222,7 +222,6 @@ export function createBypassLog({ secureStorage, maxEvents = 1000, logger }) {
       const run = prior.then(async () => {
         const list = await readList(key);
         list.push(record);
-        // Keep the newest maxEvents; drop the oldest overflow.
         const trimmed = list.length > maxEvents ? list.slice(list.length - maxEvents) : list;
         await secureStorage.set(key, trimmed);
       });

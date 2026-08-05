@@ -120,7 +120,6 @@ export function PersonPicker({
   }, [roster]);
   const getEntry = (entry) => byKey.get(entryKey(entry));
 
-  // Close on click-outside / Escape.
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (e) => {

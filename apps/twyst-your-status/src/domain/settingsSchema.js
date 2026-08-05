@@ -11,8 +11,15 @@
  *       allowedTeamIds: string[],
  *       requiredColumnIds: string[],
  *       requiredPeopleColumnIds: string[], // people columns the actor must appear in
+ *       nextLabelIds?: string[],  // per-label, INSIDE labels[labelIndex]: present ONLY
+ *                                 // as an array; key-absence is the unrestricted
+ *                                 // default (round321, see normalizeLabelRule)
  *     }
- *   }
+ *   },
+ *   // top-level, NOT per label:
+ *   owners?: { ownerIds: string[], primaryOwnerId: string }, // carried only when a valid
+ *                                                            // record is present (round322)
+ *   autoRevert?: true,  // carried only when strictly true (round323)
  * }
  *
  * A label absent from `labels` (or with empty allowlists) means everyone may

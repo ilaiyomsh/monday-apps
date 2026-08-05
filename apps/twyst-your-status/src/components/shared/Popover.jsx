@@ -80,7 +80,6 @@ export function Popover({
     };
   }, [open, reposition]);
 
-  // Close on click-outside / Escape.
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (e) => {
