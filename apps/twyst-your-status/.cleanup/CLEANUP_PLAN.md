@@ -25,7 +25,58 @@ stated ordering dependencies inside `ColumnSettings.jsx` and `PersonPicker.jsx`)
 | 6 | pattern alignment | 4 | L | pending |
 | 7 | structure | 13 | L | pending |
 
-45 actionable findings. 31 non-actionable entries in the appendix (20 verified knip false
+## Pre-approval refutation pass — READ BEFORE APPROVING ANYTHING
+
+Six independent agents were given the opposite mandate to the ones that wrote this plan: **try
+to REFUTE every finding**, default to WRONG when a claim cannot be reproduced. Result over the
+findings examined: **52 SOUND · 17 RISKY · 3 WRONG**. Two guard defects and one gate weakness
+came out of it. What it changed is marked inline below — `⛔ STRUCK` and `⚠ AMENDED` — so a
+batch executor reading only its own section cannot miss it.
+
+**Plan-wide rule this pass forced (overrides the "batches are independent" claim above):**
+**relocate every finding by SYMBOL, never by the line numbers quoted here.** Batches shift each
+other's anchors — batch 1 adds/removes comment lines in files batches 3, 5, 6 and 7 cite by
+line; K-016 shifts `A-structure-12`'s range by 4; `A-dependencies-01` shifts `A-patterns-04`'s
+onto a different function; batch 4 shifts `A-dependencies-05`'s two targets by one. Every line
+number in this plan was correct at base `4380d77` and at no point after.
+
+**Struck — not executable as written (do not approve):**
+- `A-structure-02` — leaves `handleGuardToggle` in the parent while moving the state it reads
+  and the handler it calls → **ReferenceError on the switch that arms the guard**, and the gate
+  cannot see it (see the gate weakness below). Also silently relocates the guard-status probe
+  and the window `focus` refresh below the parent's early returns, changing when they fire.
+- `A-structure-08` — its stated extraction ranges contradict each other (the loop-guard block
+  it says to keep inline sits inside the range it says to extract) and three early returns
+  cannot be expressed by a value-returning helper.
+- `A-structure-10` — amended, not struck: as sequenced after batch 5's `A-patterns-04` the moved
+  `rulesStore.js` sits one directory deeper, where `../../../src/domain/…` resolves to a
+  directory that does not exist, and the **build gate fails**.
+
+**Gate weakness the human should know before approving any L-risk batch:** the SPA's ESLint
+config lives in `apps/twyst-your-status/package.json → eslintConfig` and does **not** extend
+`eslint:recommended`. Its only rules are `no-console`, `no-empty`, the error-guard catch rule
+and `promise/catch-or-return` — so **`no-undef` is off**. A free identifier left by a botched
+extraction passes lint, passes the esbuild/vite build (which does not resolve free
+identifiers), and passes tests wherever no test exercises that control. For batches 5-7 the
+gate proves "nothing I can see broke", not "nothing broke".
+
+**Also corrected below:** `A-comments-01` (its own retained conclusion contradicted the
+corrected number), `A-comments-03` (two wrong line refs + a missing key), `A-comments-06`
+(nesting and shape unspecified — could have written a NEW false contract), batch 3's header
+sentence (a literal reading would have deleted two live components), `A-dependencies-03`'s
+false "React is genuinely used" claim, and `A-patterns-14`'s snippet (double-send).
+
+Verified sound and approvable as written: **all of batch 2** (an independent static-import walk
+over 2,005 files across the monorepo found exactly one inbound edge, the intra-pair CSS import
+this plan already accounts for), **all of batch 6**, and the technical premise of **batch 4**
+(the automatic JSX runtime was confirmed by actually running an esbuild transform of all 19
+files with the import line rewritten — compiles clean, emits `react/jsx-runtime`, zero
+remaining `React` references).
+
+---
+
+45 actionable findings, of which **2 are struck** by the refutation pass (43 remain).
+32 non-actionable entries in the appendix (20 verified knip false
 positives + 11 auditor/scanner entries that are guard-blocked, superseded or owner decisions).
 
 ---
@@ -40,8 +91,8 @@ supports.
 
 ### A-comments-01
 - files: src/components/OnClickDialog/OptionFieldControls.jsx:19-20
-- action: replace `184px for one` with `276px for one` and `548px at the 8-field cap` with `588px at the 8-field cap`. Change nothing else in the block — the "220 leaves room … from two fields up" conclusion still holds against 276px and stays.
-- evidence: the auditor executed `src/utils/requiredFormModalSize.js` (`node --input-type=module`): 1 field → `{"width":"658px","height":"276px"}`, 8 fields → `{"width":"658px","height":"588px"}`. The 184/548 pair predates `FORM_HEADER_TOP_PX` (16) + `MODAL_CHROME_PX` (24) and the row-height change.
+- action: ⚠ **AMENDED BY THE REFUTATION PASS — the original action would have left a NEW self-contradicting claim.** Replace `184px for one` with `276px for one` and `548px at the 8-field cap` with `588px at the 8-field cap`, **and** rewrite the retained conclusion: `FORM_MIN_ROWS = 2` floors the height, so a one-field modal is 276px — byte-identical to a two-field modal. The original instruction kept "220 leaves room … **from two fields up**" verbatim while asserting it "still holds against 276px", but 276px *is* the one-field height, so the block would have stated 276px for one field next to a conclusion that excludes one field: the same class of internally-stale claim this batch exists to remove. Say "from one field up (one field is floored to two rows)" or drop the qualifier. Nothing else in the block changes.
+- evidence: independently reproduced twice — the auditor and the refuter each executed `src/utils/requiredFormModalSize.js` read-only: 0→276, 1→276, 2→276, 3→328, 8→588, 9→588. ⚠ The original causal story was also wrong and is corrected here: 548 + `FORM_HEADER_TOP_PX`(16) + `MODAL_CHROME_PX`(24) = 588 exactly, so the 8-field number needs no row-height change at all; and 184 + 40 = 224, not 276 — the remaining 52px is `FORM_MIN_ROWS = 2` (one extra 40px row + a 12px gap), which the original never named. A `FIELD_ROW_HEIGHT_PX` 48→40 change would have *lowered* the number.
 - source: auditor:comments
 
 ### A-comments-02
@@ -52,8 +103,8 @@ supports.
 
 ### A-comments-03
 - files: server/src/app.js:26-31
-- action: in the `@param` type literal add `rulesStore: object, bypassLog: object, oauthClient: object,` and delete `fetchImpl?: typeof fetch,`. Comment text only — do not change the signature or the `deps` pass-through.
-- evidence: `server/src/routes/guard-routes.js:32` destructures `{ handleEvent, tokenStore, enrollmentStore, rulesStore, bypassLog, api, env, logger }`, `server/src/routes/oauth.js:41` destructures `{ tokenStore, api, oauthClient, env, logger, now }`, and `server/src/index.js:95` passes `rulesStore, bypassLog, oauthClient`; `fetchImpl` exists only on `createMondayApi` (monday-api.js:82) and `createMondayOauthClient` (monday-oauth-client.js:72), never in `app.js` or either router.
+- action: ⚠ **AMENDED BY THE REFUTATION PASS — the original correction was itself incomplete.** In the `@param` type literal add `rulesStore: object, bypassLog: object, oauthClient: object,` **and `now?: () => number`** — `createOauthRouter` destructures `now` from that same deps object (`routes/oauth.js:40`), and omitting it would leave this batch internally inconsistent with `A-comments-04`, which adds exactly that key for the analogous case. Delete `fetchImpl?: typeof fetch,`. Comment text only — do not change the signature or the `deps` pass-through. Note for the human, not an action: `server/tests/httpSurface.test.js:58` (locked) still injects `fetchImpl` into `createApp`, so after this edit the app's own fixture passes a key the docblock no longer lists — harmless at runtime, but it is why the key was documented in the first place.
+- evidence: ⚠ **two line refs corrected:** the guard-routes destructure is at `server/src/routes/guard-routes.js:33` (the plan originally said :32) and the oauth destructure at `server/src/routes/oauth.js:40` (originally :41); `server/src/index.js:95` is correct. `guard-routes.js:33` destructures `{ handleEvent, tokenStore, enrollmentStore, rulesStore, bypassLog, api, env, logger }`, `oauth.js:40` destructures `{ tokenStore, api, oauthClient, env, logger, now }`, and `index.js:95` passes `rulesStore, bypassLog, oauthClient`; `fetchImpl` exists only on `createMondayApi` (monday-api.js:82) and `createMondayOauthClient` (monday-oauth-client.js:72), never in `app.js` or either router.
 - source: auditor:comments
 
 ### A-comments-04
@@ -70,7 +121,7 @@ supports.
 
 ### A-comments-06
 - files: src/domain/settingsSchema.js:4-16
-- action: extend the header's shape block with the three optional keys, each carrying its existing conditional rule: `nextLabelIds?: string[]` — "present ONLY as an array; key-absence is the unrestricted default (round321, see normalizeLabelRule)"; `owners?: {...}` — "carried only when a valid record is present (round322)"; `autoRevert?: true` — "carried only when strictly true (round323)". Do not edit the inline comments at 79-86, 142-144 or 152-153.
+- action: ⚠ **AMENDED BY THE REFUTATION PASS — as originally written this could have documented a NEW false contract in the app's single written settings contract.** The three keys are NOT at the same nesting level: `nextLabelIds` is produced by `normalizeLabelRule` (:87-89), i.e. it lives **inside `labels[labelIndex]`**, while `owners` (:151) and `autoRevert` (:154) are **top-level** keys of the blob. Calling them "the three optional keys" of one shape block invites a flat insertion that puts `nextLabelIds` at the wrong level. Document the nesting explicitly, and use the real owners shape — `owners?: { ownerIds: string[], primaryOwnerId: string }` (`src/domain/columnOwners.js:37`, invariants at :17-22), not the `{...}` placeholder. Keep each key's existing conditional rule: `nextLabelIds?: string[]` — "present ONLY as an array; key-absence is the unrestricted default (round321, see normalizeLabelRule)"; `owners` — "carried only when a valid record is present (round322)"; `autoRevert?: true` — "carried only when strictly true (round323)". Do not edit the inline comments at 79-86, 142-144 or 152-153.
 - evidence: the header is the app's single written settings contract and documents only `version`, `hiddenLabelIds`, `labels[id]{…}`, while the same file emits `nextLabelIds` (:87-89), `owners` (:151) and `autoRevert` (:154).
 - source: auditor:comments
 
@@ -126,9 +177,13 @@ dynamic/lazy import, no barrel, no string/route reference in `vite.config.js:23`
 ## Batch 3 — unused exports: dead public surface
 risk: M | status: pending
 
-Only exports whose *binding* is dead are here. Every knip hit where merely the `export` keyword
-was unused (the value is live inside its own module) is in the appendix — deleting those
-bindings breaks the app, which is exactly what the verification pass was for.
+⚠ **Header corrected by the refutation pass.** The original wording ("only exports whose
+*binding* is dead are here") is false for `K-020` and `K-022`, and a literal reading of it would
+have deleted two live components. Accurate statement: this batch removes either a dead binding
+(`K-014`, `K-016`, `A-dependencies-01`) **or** a redundant `export default` line whose named
+sibling is the live one (`K-020` `PersonPicker`, `K-022` `Popover` — delete ONLY the
+`export default …;` line, never the component). Every knip hit where merely the `export` keyword
+was unused while the value is live inside its own module is in the appendix.
 
 ### K-014
 - files: src/services/graphqlQueries.js:141-159
@@ -173,7 +228,8 @@ are pre-declared in the appendix so no batch reopens them.
 ### A-dependencies-03
 - files: src/App.jsx:1, src/components/ColumnSettings/BypassMonitor.jsx:1, src/components/ColumnSettings/ColumnSettings.jsx:1, src/components/ColumnSettings/SettingsLauncher.jsx:1, src/components/ColumnSettings/StatusColorPicker.jsx:1, src/components/OnClickDialog/BoardRelationFieldControl.jsx:16, src/components/OnClickDialog/DateFieldControl.jsx:11, src/components/OnClickDialog/FieldControl.jsx:10, src/components/OnClickDialog/FieldIcon.jsx:10, src/components/OnClickDialog/OnClickDialog.jsx:1, src/components/OnClickDialog/OptionFieldControls.jsx:9, src/components/OnClickDialog/RequiredFieldsForm.jsx:11, src/components/OnClickDialog/RequiredFieldsModal.jsx:13, src/components/shared/ErrorState.jsx:1, src/components/shared/LoadingState.jsx:1, src/components/shared/PersonPicker.jsx:8, src/components/shared/Popover.jsx:8 (+ src/components/shared/DateRangeDisplay.jsx:9, src/components/shared/StatusChip.jsx:6 **only if batch 2 has not run**)
 - action: in each file drop only the default binding: `import React, { … } from 'react';` → `import { … } from 'react';`; delete the whole line where the import is `import React from 'react';` alone (FieldControl.jsx, FieldIcon.jsx, ErrorState.jsx, LoadingState.jsx — plus DateRangeDisplay.jsx and StatusChip.jsx if they still exist). Do **not** touch `src/index.jsx` or `src/components/ErrorBoundary/AppErrorBoundary.jsx`: React is genuinely used there, and the boundary is guard-blocked anyway (guard rule 5+6).
-- evidence: all 21 non-test `.jsx` files were parsed — 21 import `React` by default and in exactly 19 of them `React` appears nowhere else after comment-stripping; the two real users are `src/index.jsx:24` and `AppErrorBoundary.jsx:25`. Automatic runtime confirmed against the built artifact, not assumed: `dist/assets/index-C9JHKuqe.js` contains `jsx-runtime` and `.jsx(` call sites, and no file in `src/` carries a `@jsx`/`jsxImportSource` pragma or a `vi.mock('react')`. No lint rule catches these because the SPA `eslintConfig` declares no `no-unused-vars`. Batch 2 deletes two of the listed files, shrinking this finding from 19 files to 17.
+- evidence: all 21 non-test `.jsx` files were parsed — 21 import `React` by default and in exactly 19 of them `React` appears nowhere else after comment-stripping. ⚠ **Evidence corrected by the refutation pass:** the original text claimed "the two real users are `src/index.jsx:24` and `AppErrorBoundary.jsx:25`", and both halves were wrong. Those two lines are the `import` statements themselves; `src/index.jsx`'s real uses are :88 and :92 (`<React.StrictMode>`), and **`AppErrorBoundary.jsx` does not genuinely use React at all** — its only other occurrences are JSDoc type references (`@param {React.ReactNode}` :112, `{React.ComponentType…}`). The sole valid reason to exclude that file is guard rule 5+6 (it is the root boundary and the guard refuses it), not a live usage; leaving the false claim in place would invite a later batch to trust it. Automatic runtime confirmed twice over — against the built artifact (`dist/assets/index-C9JHKuqe.js` contains `jsx-runtime` and `.jsx(` call sites, no `@jsx`/`jsxImportSource` pragma, no `vi.mock('react')` anywhere) and independently by running an esbuild transform of all 19 files with the import line rewritten exactly as this action specifies: compiles clean, emits `react/jsx-runtime`, zero remaining `React` references. `@vitejs/plugin-react` 4.7.0 defaults to `jsx: 'automatic'` and vitest shares the same config file, so build, dev and test agree. No lint rule catches these because the SPA `eslintConfig` declares no `no-unused-vars`. Batch 2 deletes two of the listed files, shrinking this finding from 19 files to 17.
+- ⚠ **ordering (added by the refutation pass):** run this batch AFTER batch 6's `A-dependencies-05`, or relocate that finding's targets by symbol — deleting line 1 of `ErrorState.jsx` and `LoadingState.jsx` shifts its quoted `:47` and `:18` to `:46` and `:17`.
 - source: auditor:dependencies
 
 ---
@@ -243,7 +299,7 @@ batch has already shifted the file.
 
 ### A-patterns-14 (= jscpd clone 1)
 - files: server/src/routes/guard-routes.js:119-123, :161-165
-- action: add a local helper next to `requireSession` (:94) — `const requireReader = async (accountId, res) => { const reader = await tokenStore.getReaderToken(accountId); if (!reader) res.status(409).json({ error: 'not_activated' }); return reader; }` — and use it in `/api/guard/enroll` and `/api/guard/bypasses` **only**. Leave `/api/guard/status` alone: it deliberately answers 200 with an all-false body instead of 409 (comment at :191). The parameter-validation step must stay BEFORE the reader lookup in both edited routes, to keep the documented 400-before-409 verdict order.
+- action: add a local helper next to `requireSession` (:94) — `const requireReader = async (accountId, res) => { const reader = await tokenStore.getReaderToken(accountId); if (!reader) res.status(409).json({ error: 'not_activated' }); return reader; }` — and use it in `/api/guard/enroll` and `/api/guard/bypasses` **only**. ⚠ **Refutation-pass correction:** the helper returns a falsy `reader` after already sending 409, so each call site MUST be `const reader = await requireReader(...); if (!reader) return;` — a literal transcription without that `return` double-sends and throws `ERR_HTTP_HEADERS_SENT`. (`httpSurface.test.js:229-240`/`:518-526` would catch it, so this one is gate-covered — but write it correctly.) Leave `/api/guard/status` alone: it deliberately answers 200 with an all-false body instead of 409 (comment at :191). The parameter-validation step must stay BEFORE the reader lookup in both edited routes, to keep the documented 400-before-409 verdict order.
 - evidence: jscpd clone 1 (11 lines/91 tokens) pairs `guard-routes.js 114-124 ↔ 156-166`; both routes run `const reader = await tokenStore.getReaderToken(session.accountId); if (!reader) { res.status(409).json({ error: 'not_activated' }); return; }` verbatim.
 - source: jscpd + auditor:patterns
 
@@ -315,7 +371,9 @@ the human prefers a smaller blast radius, strike findings rather than reordering
 - evidence: `<section className="twyst-owners">` spans :1167-1286 inside the 804-line component; the owners-specific part is the heading/note/picker (1168-1192) and the owner list `<ul>` (1193-1225), ~70 lines of JSX plus three inline `setDraft` mutators.
 - source: auditor:structure
 
-### A-structure-02
+### A-structure-02 — ⛔ STRUCK BY THE REFUTATION PASS, DO NOT EXECUTE
+- **struck because:** `handleGuardToggle` (:1072-1078) is explicitly left in `ColumnSettings` by `A-structure-04`, but it reads `guardConnected` (:1075, derived at :992 from the `guardConn` state at :989-991) and calls `handleAuthorizeGuard` (:1076) — both of which this finding moves into `GuardConnectionPanel`. The proposed props `{ boardId, columnId, saving, autoRevert, isPrimaryOwner }` give the parent no channel back, so the round326 contract (primary owner flipping auto-revert ON without authorization must auto-open the OAuth tab) becomes a **ReferenceError on the one switch that arms the guard**. Nothing in the gate catches it: `no-undef` is off for this workspace, esbuild does not resolve free identifiers, and no test toggles that switch (zero hits for `twyst-autorevert` / the Hebrew label across `src/**/*.test.*`). Second, independent break: the `refreshGuardStatus` probe + window `focus` listener (:1006-1012) currently register ABOVE the early returns at :1082-1091, so the probe fires on mount and the focus refresh is live on the loading and error screens — the documented "owner returns from the OAuth consent tab" path. A child that mounts only after those returns delays the first probe by a full settings+metadata round trip and drops the focus refresh on those screens.
+- **to revive it:** respecify with the connection state lifted or the toggle moved WITH it, keep the probe effect in the parent, and state the Fragment requirement (`.twyst-owners` is a flex column; a wrapper `<div>` collapses N flex items into one and silently changes the layout).
 - files: src/components/ColumnSettings/ColumnSettings.jsx:989-1058, :1240-1285 → new GuardConnectionPanel.jsx + new src/domain/guardEnrollmentMessage.js
 - action: create `src/components/ColumnSettings/GuardConnectionPanel.jsx` holding the two rendered blocks (1240-1258, 1260-1285) plus `guardConn`/`enrolling` state (989-993), `refreshGuardStatus` + focus effect (995-1012), `handleAuthorizeGuard` (1017-1024), `handleEnrollNow` (1047-1058) and `enrolledState` (1122-1124), receiving `{ boardId, columnId, saving, autoRevert, isPrimaryOwner }` as props. `enrollmentProblem` (1032-1037) is called from BOTH the panel and `handleSave` (:955) — move that pure status→Hebrew mapping to `src/domain/guardEnrollmentMessage.js` and import it in both files; do not duplicate it. Keep the `window.addEventListener('focus', …)` registration verbatim, including the `void` calls. Importers to update: `ColumnSettings.jsx` only. Cross-check batch 5's `A-patterns-09`/`A-patterns-13` before editing — they touch the same file. Auditor confidence: medium.
 - evidence: `ColumnSettings` measures 804 lines (:557-1360) — the longest function in the app by 461 lines — and ~120 of them are one self-contained concern with its own state, probe effect, two handlers and two rendered blocks.
@@ -363,13 +421,16 @@ the human prefers a smaller blast radius, strike findings rather than reordering
 - evidence: one 192-line router factory (:33-224 in a 224-line file) carries four HTTP surfaces with two different auth models — unsigned-handshake/JWT webhook (36-92) plus three sessionToken-authed JSON endpoints (108-144, 148-180, 182-221).
 - source: auditor:structure
 
-### A-structure-10
+### A-structure-10 — ⚠ AMENDED BY THE REFUTATION PASS
+- **amendment (mandatory, or the build gate fails):** batch 5's `A-patterns-04` adds the FIRST relative import to `stores.js` — `../../../src/domain/columnConfigKey.js`. This finding then moves `createRulesStore` one directory deeper, where that specifier resolves to `apps/twyst-your-status/server/src/domain/`, which does not exist; `server/build.mjs` bundles the `../src/domain` imports with esbuild, so a *verbatim* move (this batch's stated premise) fails `CLEANUP_BUILD_CMD`. Either rewrite the moved specifier to `../../../../src/domain/columnConfigKey.js`, or execute this finding BEFORE `A-patterns-04`. Second amendment: `REFRESH_CUSHION_MS` is filed into `unwrapStoredValue.js` only because it sits at :41 — its sole use is :72 inside `createTokenStore`, so it belongs in `tokenStore.js`.
 - files: server/src/services/stores.js:1-266 → new server/src/services/stores/{unwrapStoredValue,tokenStore,rulesStore,bypassLog,enrollmentStore}.js
 - action: create `server/src/services/stores/` with `unwrapStoredValue.js` (:26-38 + `REFRESH_CUSHION_MS`), `tokenStore.js`, `rulesStore.js`, `bypassLog.js`, `enrollmentStore.js`, and keep `server/src/services/stores.js` as a re-export barrel. The barrel is **mandatory**: `server/tests/services.test.js:2-7` imports `unwrapStoredValue, createTokenStore, createRulesStore, createEnrollmentStore` and `server/tests/bypassLog.test.js:10` imports `createBypassLog`, both from `'../src/services/stores.js'`, and tests are locked; `server/src/index.js:44` keeps working through the barrel too. Move the module docblock (:1-23) to the barrel and each per-factory docblock with its factory — the round322 identity model and the apps-sdk 0.1.4 wrapping incident note (:20-22) are load-bearing. Coordinate with batch 1 `A-comments-05` and batch 5 `A-patterns-04`, which also edit this file.
 - evidence: `wc -l` = 266 with four unrelated factories plus two shared helpers — `createTokenStore` 61-159 (the OAuth refresh state machine), `createRulesStore` 164-182, `createBypassLog` 194-250, `createEnrollmentStore` 256-266 over `unwrapStoredValue` 26-32 / `validToken` 34-38 — so any consumer of one store loads all four.
 - source: auditor:structure
 
-### A-structure-08
+### A-structure-08 — ⛔ STRUCK BY THE REFUTATION PASS, DO NOT EXECUTE
+- **struck because:** the stated boundaries contradict each other and cannot preserve control flow. `resolveGuardIdentity(event)` is specified over :101-138 as a value-returning helper, but that range contains THREE early returns a return-shape cannot express — `if (!reader) { logger.info('event skipped: account not activated', …); return; }` (:102-105), `if (!rules) return;` (:109), and the loop-guard return (:122-126) — while the action ALSO says "keep the loop-guard block (117-126) inline in `process`", and 117-126 is inside 101-138. `previousLabelId`/`newLabelId` (:114-115) are computed in that range yet absent from the return shape, though the inline loop guard (:124), the verdict (:170-171), the revert (:209, :212) and the bypass record (:245-248) all need them. The natural resolution — resolving `primaryToken` (:135-138) before the loop guard — adds a `tokenStore.getOwnerToken` call on every revert echo, exactly the work the loop guard exists to skip; the echo test (`server/tests/handleStatusChangeEvent.test.js:182-207`) does not pin that call count, so it would **ship green**, while :142, :163, :421 and :525 DO pin `getOwnerToken` `not.toHaveBeenCalled()` for neighbouring paths. Same range is also wrong for `gatherVerdictInput`: `requiredColumnIds` (:144-146) is computed inside it and consumed at :235 by `collectEmptyFieldIds` in the bypass slice.
+- **to revive it:** respecify with explicit sentinel returns, the full value set per helper, and non-overlapping ranges — or leave this function alone.
 - files: server/src/guard/handleStatusChangeEvent.js:94-253
 - action: split `process` into four named async helpers declared **inside the same factory closure** (so `pendingReverts`, `now`, `TAG` and the injected deps stay in scope and the module's export surface is untouched): `resolveGuardIdentity(event)` → `{ readToken, rules, owners, primaryToken, boardReadToken }` (101-138), `gatherVerdictInput(...)` → `{ labels, teamIds, peopleByColumnId, requiredFieldValues }` (140-164), `maybeRevert(...)` → boolean (190-228), `recordBypass(...)` (230-252). Keep the loop-guard block (117-126) and the verdict + trace log (166-188) inline in `process`. Every `logger.*` call must survive as-is, including the nested notification catch at :218-225 (error-guard). Do not change the exported names `createStatusChangeHandler`, `REVERT_NOTIFICATION_TEXT`, `REVERTABLE_REASONS` — `server/tests/handleStatusChangeEvent.test.js` imports exactly those three. Importers to update: none. Auditor confidence: medium.
 - evidence: `createStatusChangeHandler` measures 209 lines (:62-270) and the inner `process` 160 (:94-253) — the largest server function — running six sequential phases already labelled by the module docblock's numbered list (:8-27) and the two `// ---- …` banners at :190 and :230.
