@@ -392,6 +392,16 @@ query ($ws: [ID]) { folders(workspace_ids: $ws, limit: 100) { id name children {
   This cost three rounds of chasing app code that was already correct: if folders fail only in
   the app but work from a personal-token probe, suspect the scope FIRST — a probe script runs
   with a full-permission personal token and cannot reproduce it.
+- **Adding a scope in the Developer Center does NOT take effect by itself** (official app-versioning
+  docs, confirmed 2026-08-05 — a FOURTH "folder still missing" report happened WITH the scope
+  already added). Scope edits apply to the **draft version** only; they reach customers when that
+  draft is **promoted to live**, and then every installed account must **re-approve** the
+  permissions (in-app banner; a fresh install after the promote gets them at install). Until the
+  promote, new installs keep getting the OLD live scopes. And a code deploy is NOT a promote:
+  `mapps code:push` (this monorepo's whole pipeline) rebuilds the existing live version's bundle
+  and never moves the manifest — scope changes ride ONLY on a version promotion. Promotion
+  consumes the draft, so re-create one right after (manifest export→import) or the next draft
+  deploy fails.
 - There is no "create folder if absent" upsert: read `folders` and match by name yourself, or a
   re-run creates a duplicate folder with the same name (monday allows duplicates).
 - `delete_folder(folder_id:)` exists and deleting the folder does NOT delete boards implicitly in

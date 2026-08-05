@@ -181,13 +181,32 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ru
 
       const reader = await tokenStore.getReaderToken(session.accountId);
       if (!reader) {
-        res.status(200).json({ activated: false, enrolled: false });
+        // No reader ⇒ no owner anywhere has authorized, the requester included.
+        res.status(200).json({ activated: false, enrolled: false, primaryAuthorized: false, meAuthorized: false });
         return;
       }
-      const enrolled = boardId !== '' && columnId !== ''
-        ? (await enrollmentStore.get(session.accountId, boardId, columnId)) != null
-        : false;
-      res.status(200).json({ activated: true, enrolled });
+      let enrolled = false;
+      // round327 — `activated` is ACCOUNT-level (any owner authorized), but reverts
+      // are written with the COLUMN's primary owner's token. Report that owner's
+      // authorization specifically, so the settings line cannot say "connected"
+      // while the guard would skip every revert. null = unknowable (no rules /
+      // no owners yet — a fresh column bootstraps the current user as primary).
+      let primaryAuthorized = null;
+      if (boardId !== '' && columnId !== '') {
+        enrolled = (await enrollmentStore.get(session.accountId, boardId, columnId)) != null;
+        const rules = await rulesStore.getRules(reader.token, boardId, columnId);
+        const owners = normalizeOwners(rules?.owners);
+        if (owners?.primaryOwnerId != null) {
+          primaryAuthorized = (await tokenStore.getOwnerToken(session.accountId, String(owners.primaryOwnerId))) != null;
+        }
+      }
+      // round327 review (Codex P2) — the settings line renders only when the
+      // DRAFT primary owner is the requesting user, and a draft crowning is not
+      // saved yet, so `primaryAuthorized` (the STORED primary) can be stale for
+      // it. "Is the REQUESTER authorized" is the exact question that line asks,
+      // and it is column-independent.
+      const meAuthorized = (await tokenStore.getOwnerToken(session.accountId, String(session.userId))) != null;
+      res.status(200).json({ activated: true, enrolled, primaryAuthorized, meAuthorized });
     } catch (err) {
       logger.error('status probe failed', TAG, { error: String(err?.message ?? err) });
       res.status(502).json({ error: 'status_failed' });

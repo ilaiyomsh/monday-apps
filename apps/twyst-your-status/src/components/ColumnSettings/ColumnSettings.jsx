@@ -956,14 +956,21 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     }
   };
 
-  // round326 — the guard's connection state (account-level OAuth), so the one
-  // switch can show "מחובר ✓" vs "דרוש אישור". null = unknown/loading.
-  const [guardActivated, setGuardActivated] = useState(null);
+  // round326 — the guard's connection state, so the one switch can show
+  // "מחובר ✓" vs "דרוש אישור". round327 (+Codex P2): the line renders only when
+  // the DRAFT primary owner is the CURRENT USER, so the exact question it asks
+  // is "am I authorized" (meAuthorized) — the stored-primary signal
+  // (primaryAuthorized) goes stale the moment the user crowns themselves in the
+  // draft, and account-level `activated` can be true thanks to a DIFFERENT
+  // owner while this column's reverts are all skipped. Those two are fallbacks,
+  // in that order, only when the server cannot answer. null = unknown/loading.
+  const [guardConn, setGuardConn] = useState({ activated: null, primaryAuthorized: null, meAuthorized: null });
+  const guardConnected = guardConn.meAuthorized ?? guardConn.primaryAuthorized ?? guardConn.activated;
 
   const refreshGuardStatus = useCallback(async () => {
     if (!boardId || !columnId) return;
-    const { activated } = await getGuardStatus({ boardId, columnId });
-    setGuardActivated(activated);
+    const { activated, primaryAuthorized, meAuthorized } = await getGuardStatus({ boardId, columnId });
+    setGuardConn({ activated, primaryAuthorized, meAuthorized });
   }, [boardId, columnId]);
 
   // Read on open, and again when the tab regains focus — that is when the owner
@@ -987,14 +994,22 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     }
   };
 
+  // round327 — reverts are written AS the primary owner, so the consent flow is
+  // THEIRS alone: only the primary owner sees the connection line, and only their
+  // switch-flip auto-opens the OAuth tab (another owner authorizing would not
+  // enable this column's reverts — it would only mislead).
+  const isPrimaryOwner = draftOwners?.primaryOwnerId != null
+    && currentUserId != null
+    && String(draftOwners.primaryOwnerId) === String(currentUserId);
+
   // round326 — one switch protects the column: it flips autoRevert (persisted on
-  // Save, which also enrolls the webhook) AND, when turning ON with no OAuth yet,
-  // opens the one-time owner consent immediately. Turning OFF only stops reverts;
-  // it does not revoke the account authorization (harmless to keep).
+  // Save, which also enrolls the webhook) AND, when the PRIMARY owner turns it on
+  // with no authorization yet, opens the one-time owner consent immediately.
+  // Turning OFF only stops reverts; it does not revoke the authorization.
   const handleGuardToggle = (event) => {
     const on = event.target.checked;
     setDraft((current) => ({ ...current, autoRevert: on }));
-    if (on && guardActivated !== true) {
+    if (on && isPrimaryOwner && guardConnected !== true) {
       void handleAuthorizeGuard();
     }
   };
@@ -1153,20 +1168,20 @@ function ColumnSettings({ context, variant = 'overlay' }) {
             </span>
           </label>
 
-          {draft?.autoRevert === true && (
-            <div className={`twyst-guard-conn twyst-guard-conn--${guardActivated === true ? 'ok' : 'need'}`}>
-              {guardActivated === true ? (
+          {draft?.autoRevert === true && isPrimaryOwner && (
+            <div className={`twyst-guard-conn twyst-guard-conn--${guardConnected === true ? 'ok' : 'need'}`}>
+              {guardConnected === true ? (
                 <span>
-                  ✓ הגרד מחובר — ההחזרות ייכתבו על שם הבעלים הראשי.{' '}
+                  ✓ הגרד מחובר — ההחזרות ייכתבו על שמך.{' '}
                   <button type="button" className="twyst-linkish" disabled={saving} onClick={handleAuthorizeGuard}>
                     חיבור מחדש
                   </button>
                 </span>
               ) : (
                 <span>
-                  דרוש אישור חד-פעמי כדי שההחזרות ייכתבו על שמכם.{' '}
+                  דרוש אישור חד-פעמי כדי שההחזרות ייכתבו על שמך.{' '}
                   <button type="button" className="twyst-linkish" disabled={saving} onClick={handleAuthorizeGuard}>
-                    {guardActivated === false ? 'אישור עכשיו' : 'חיבור'}
+                    {guardConnected === false ? 'אישור עכשיו' : 'חיבור'}
                   </button>
                 </span>
               )}
