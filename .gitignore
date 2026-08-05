@@ -16,6 +16,8 @@ coverage/
 # mapps CLI artifacts (manifest export dirs, upload leftovers)
 .dev/
 temp.zip
+# `mapps init -l` writes the access token to ./.mappsrc — never commit it
+.mappsrc
 
 # monday-ops CI run outputs (state.json/settings are uploaded as Actions artifacts)
 sandbox-out/

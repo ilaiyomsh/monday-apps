@@ -30,8 +30,14 @@ and adds the Codex-specific wiring. See "Codex sessions" below.
    plan): the agent IS the enforcement layer.
 2. **Deploys happen ONLY on GitHub Actions runners** — never from a laptop or
    sandbox. No exceptions, including emergencies (see Deploys).
-3. **`MONDAY_TOKEN` is user-only.** Agents never read, print, set, or commit it.
-   All agent-side monday API calls go through `.claude/skills/mapps/mapps-api.sh`.
+3. **`MONDAY_TOKEN` is user-only.** Agents never read, print, or commit it, and
+   never type/paste it into a command themselves. A checked-in `SessionStart`
+   hook (`.claude/settings.json`) MAY pipe an environment-provided token
+   straight into `mapps init` at session start — pure shell pass-through, the
+   value never enters agent context either way — see Secrets & env and Cloud
+   sessions for where this actually fires. All agent-side GraphQL calls still
+   go through `.claude/skills/mapps/mapps-api.sh`; the CLI itself is fine to
+   use directly once initialized (see `mapps` skill).
 4. **API probes and destructive tests run ONLY in the sandbox workspace**
    `TEST_WORKSPACE_ID=16291824`, scratch objects prefixed `WZ-`, minimal
    complexity (the budget is shared with production apps).
@@ -221,9 +227,22 @@ packages/shared                     EMPTY STUB — see below
 
 ## Secrets & env
 
-- `MONDAY_TOKEN`: GitHub secret (owner sets via
+- `MONDAY_TOKEN`: GitHub Actions secret (owner sets via
   `gh secret set MONDAY_TOKEN --repo ilaiyomsh/monday-apps`) + each developer's
-  own `mapps init -t` into `~/.config/mapps/.mappsrc`. Agents touch neither.
+  own `mapps init -t` into `~/.config/mapps/.mappsrc`. Agents never set this
+  themselves.
+- **Some environments (confirmed: at least one cloud session, live-verified
+  2026-08-05) additionally provision `MONDAY_TOKEN` as a shell env var.** Where
+  present, the checked-in `SessionStart` hook in `.claude/settings.json` runs
+  `mapps init -t "$MONDAY_TOKEN"` automatically — the CLI is authenticated
+  before the first turn, with no agent action and no token in agent context.
+  Where the var is absent (most local machines, some sandboxes) the hook is a
+  guarded no-op — it checks `-n "$MONDAY_TOKEN"` first, never calls `mapps init`
+  with an empty token. **That guard is load-bearing, not decorative:**
+  `mapps init -t ""` drops into an interactive "Please enter your access
+  token" prompt that reads stdin, and with no TTY (any hook context) it hangs
+  until killed — reproduced live 2026-08-05, see `mapps/references/cli.md`.
+  Do not simplify the hook command to drop the `-n` check.
 - Never commit `.env` / `.env.*` — start from the root `.env.example`.
 - Server apps (sync-calender): runtime env lives on the platform via
   `mapps code:env -i 11666315`, not in files.
@@ -261,8 +280,35 @@ packages/shared                     EMPTY STUB — see below
 - Everything committed under `.claude/` (skills, hooks, settings) and this file
   **does load** in cloud sessions; personal machine config does not.
 - Cloud sessions base on `develop` (the default branch) and PR into `develop`.
-  They have no `MONDAY_TOKEN` and must not attempt deploys or `mapps` auth —
-  merging their PR is what triggers the draft deploy.
+  **Deploys are categorically forbidden regardless of what follows** — golden
+  rule 2 (GitHub Actions runners only) applies to every sandbox, cloud
+  included, with no emergency exception; merging the PR is what triggers the
+  draft deploy, not anything the agent runs here.
+- **Some cloud environments provision `MONDAY_TOKEN` as a shell env var**
+  (confirmed live 2026-08-05 — this is a per-environment setting, not a
+  guarantee, so check rather than assume either way: `mapps app:list` erroring
+  with "'.mappsrc' not found" means this one has no token). Where present, the
+  `SessionStart` hook (see Secrets & env) auto-runs `mapps init`, so the CLI
+  and `mapps-api.sh` are ready with no manual step and no token ever entering
+  agent context. **What that authenticated CLI may then be used for
+  autonomously, in a cloud session specifically:**
+  - **Freely, no gate:** read-only calls — `app:list`, `app-version:list`,
+    `app-features:list`, `manifest:export`, `scheduler:list`, `storage:search`,
+    `code:status`/`code:logs`, `ask_developer_docs`, and any `mapps-api.sh`
+    query. Use these to answer questions, verify a manifest, or check pipeline
+    state directly instead of asking the user to run them.
+  - **Still forbidden, no exception:** `code:push`, `ship.sh`, `app:promote`
+    — deploy-shaped, blocked by golden rule 2 above regardless of token
+    presence.
+  - **Still gated, exactly one question, per the existing autonomy gate
+    map:** `manifest:import`, `app-features:create`/`build`,
+    `scheduler:create`/`update`/`delete`, `storage:remove-data`, `code:env`/
+    `code:secret` writes. A token being auto-provisioned changes *authentication*,
+    not *authorization* — the mapps skill's GATE MAP still applies verbatim.
+  - Mutating calls should also stay inside the sandbox workspace
+    (`TEST_WORKSPACE_ID=16291824`) per golden rule 4 unless the task is
+    explicitly about a named production app (e.g. exporting or auditing its
+    manifest, as above).
 - **Error triage from a cloud session:** a cloud session MAY carry a **read-only**
   Axiom token (scoped to `app-errors`) to query telemetry — set `AXIOM_URL`/
   `AXIOM_TOKEN`/`AXIOM_ORG_ID` in the cloud environment; the `axiom-sre` skill reads

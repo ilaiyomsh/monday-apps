@@ -2,6 +2,15 @@
 
 ## תיקון רישום ה-webhook — `change_status_column_value` דורש `columnValue` (3.15.2)
 
+**גם:** סנכרון `MANIFEST.md` מול המניפסט החי — אין שינוי מוצרי/קוד. `MANIFEST.md`
+תיעד 4 סקופים נדרשים; לאפליקציה החיה (`mapps manifest:export -a 11775054`) יש
+בפועל 8 — חסרו ארבעת הסקופים של ה-guard server מ-round322 (`me:read`,
+`account:read`, `notifications:write`, `webhooks:write`). גם תיאור התכונות עודכן
+מהתוכן האמיתי של המניפסט: עמודת הסטטוס אינה נושאת build משלה — היא מארחת את שני
+הדיאלוגים (`/picker`, `/settings`) דרך מערך `relations`. ללא באמפ גרסה נוסף —
+3.15.2 היה כבר מועמד לא-משוחרר מול main (bump-once rule), אז ההערה מצטרפת לאותו
+מספר במקום להעלות אותו שוב.
+
 רישום עמודה אצל השומר (`POST /api/guard/enroll`) החזיר **502 לכל בעלים**, וכך גם
 `/status` ו-`/bypasses`. הקונטיינר היה תקין (`/health` = 200); ה-502 היה בלוק ה-catch
 של ה-handlers עצמם. האבחון החי הראה: SecureStorage תקין (הטוקן נשמר ונקרא), טוקן ה-OAuth

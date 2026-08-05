@@ -63,6 +63,11 @@ those scripts expect. Setup and caveats: [`.codex/README.md`](./.codex/README.md
   `bash .claude/skills/error-guard/scripts/check.sh <file>`
 - **If the hooks are not enabled at all, you are the entire enforcement layer.**
   Verify with `/hooks` in Codex. Either way the rules below bind.
+- **The `mapps` auto-init `SessionStart` hook is Claude-Code-only.**
+  `.claude/settings.json` runs `mapps init` from `$MONDAY_TOKEN` when present;
+  `.codex/hooks.json`'s own `SessionStart` entry only runs `session-brief.sh`
+  and does not carry this over. See golden rule 3 above for the manual
+  equivalent.
 
 ## Golden rules (non-negotiable)
 
@@ -73,8 +78,23 @@ those scripts expect. Setup and caveats: [`.codex/README.md`](./.codex/README.md
 2. **Deploys happen ONLY on GitHub Actions runners** — never from a laptop or
    sandbox. No exceptions, including emergencies. Never run `mapps code:push`,
    `ship.sh`, or `pnpm run deploy` from a machine.
-3. **`MONDAY_TOKEN` is user-only.** Never read, print, set, or commit it. All
-   agent-side monday API calls go through `.claude/skills/mapps/mapps-api.sh`.
+3. **`MONDAY_TOKEN` is user-only.** Never read, print, or commit it, and never
+   type it into a command yourself. Some environments (sandboxes/cloud) provide
+   it as a shell env var; **Claude Code sessions** auto-init the CLI from it via
+   a checked-in `SessionStart` hook (`.claude/settings.json`) — pure shell
+   pass-through, the value never enters agent context. **That hook is not yet
+   mirrored into `.codex/hooks.json`** (see Enforcement below), so under Codex,
+   if `$MONDAY_TOKEN` is set and `mapps app:list` errors with ".mappsrc not
+   found", you may init yourself the same guarded way the Claude-side hook
+   does: `[ -n "$MONDAY_TOKEN" ] && mapps init -t "$MONDAY_TOKEN"` — never call
+   `mapps init -t` with the var unset or unquoted-empty, it drops into an
+   interactive prompt that hangs with no TTY. Once authenticated, what the CLI
+   may then be used for autonomously vs. under a gate is unchanged from the
+   normal rules below (deploy commands stay forbidden regardless; mutations
+   still take the one-question gate) — full detail in `CLAUDE.md` → "Secrets &
+   env" / "Cloud sessions". All agent-side GraphQL calls go through
+   `.claude/skills/mapps/mapps-api.sh`; the CLI itself is fine to use directly
+   once initialized.
 4. **API probes and destructive tests run ONLY in the sandbox workspace**
    `TEST_WORKSPACE_ID=16291824`, scratch objects prefixed `WZ-`, minimal
    complexity (the budget is shared with production apps).
