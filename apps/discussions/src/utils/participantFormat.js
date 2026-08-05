@@ -16,9 +16,26 @@ import {
   PARTICIPANT_CF_PREFIX,
   DEFAULT_PARTICIPANT_SEPARATOR,
   DEFAULT_PARTICIPANT_PARTS,
+  RETIRED_LONG_DASH_SEPARATOR,
+  RECORD_MARKER_NONE,
+  RECORD_MARKER_NUMBER,
+  RECORD_MARKER_BULLET,
+  RECORD_BULLET_GLYPH,
 } from './mondayApi/boards.config.js';
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '');
+
+/*
+ * round357 — 'מקף' used to be the LONG em dash and is now the short one. A stored
+ * template still carries the retired value: left as-is it would show an empty picker
+ * (the value matches no offered option) and keep exporting the glyph the owner asked
+ * to replace. Mapping a RETIRED option forward is not rewriting a choice — the choice
+ * it recorded no longer exists. Any other separator is the owner's and is untouched.
+ */
+function migrateSeparator(sep) {
+  if (typeof sep !== 'string') return DEFAULT_PARTICIPANT_SEPARATOR;
+  return sep === RETIRED_LONG_DASH_SEPARATOR ? ' – ' : sep;
+}
 
 /**
  * The parts of ONE meta field, always a usable list.
@@ -35,7 +52,7 @@ export function resolveParticipantParts(field) {
     .filter((p) => p && typeof p.key === 'string' && isKnownPartKey(p.key))
     .map((p) => ({
       key: p.key,
-      sep: typeof p.sep === 'string' ? p.sep : DEFAULT_PARTICIPANT_SEPARATOR,
+      sep: migrateSeparator(p.sep),
       // A custom field's stored display label is CARRIED THROUGH: it is the only
       // way the editor can still name a field whose account definition was
       // removed (otherwise the owner faces a bare numeric id).
@@ -92,15 +109,42 @@ function partValue(person, key) {
  * resolves (e.g. only Title was chosen and this person has none) the NAME is used
  * as the fallback: an export may never silently drop a participant.
  */
-export function formatParticipantLabel(person, parts) {
+export function formatParticipantSegments(person, parts) {
   const list = Array.isArray(parts) && parts.length ? parts : DEFAULT_PARTICIPANT_PARTS;
-  let out = '';
+  const segs = [];
   list.forEach(({ key, sep }) => {
     const value = partValue(person, key);
-    if (!value) return;
-    out = out ? `${out}${typeof sep === 'string' ? sep : DEFAULT_PARTICIPANT_SEPARATOR}${value}` : value;
+    if (!value) return; // the part contributes nothing — and its separator goes with it
+    if (segs.length) segs.push({ text: migrateSeparator(sep), sep: true });
+    segs.push({ text: value, sep: false });
   });
-  return out || text(person?.name);
+  if (segs.length) return segs;
+  const fallback = text(person?.name);
+  return fallback ? [{ text: fallback, sep: false }] : [];
+}
+
+/**
+ * The same participant as ONE string — the single-row form and any plain-text
+ * consumer. Derived from the segments so the two compositions cannot drift.
+ */
+export function formatParticipantLabel(person, parts) {
+  return formatParticipantSegments(person, parts).map((s) => s.text).join('');
+}
+
+/**
+ * round357 — the marker for the record at `index` of a people component.
+ * Unrecognized kinds render nothing rather than printing themselves.
+ */
+export function recordMarker(kind, index) {
+  if (kind === RECORD_MARKER_NUMBER) return `${index + 1}.`;
+  if (kind === RECORD_MARKER_BULLET) return RECORD_BULLET_GLYPH;
+  return '';
+}
+
+/** The marker a people FIELD carries; 'none' unless it says otherwise. */
+export function resolveRecordMarker(field) {
+  const m = field && typeof field === 'object' ? field.marker : null;
+  return m === RECORD_MARKER_NUMBER || m === RECORD_MARKER_BULLET ? m : RECORD_MARKER_NONE;
 }
 
 /**

@@ -126,13 +126,19 @@ describe('ExportDialog — the discussion TYPE\'s export template is the default
     expect(store.saveDiscussionExportAssets).not.toHaveBeenCalled();
   });
 
-  it('persists an override once the template really was edited here', async () => {
+  /*
+   * round356 (owner spec) — an edit made HERE applies to THIS document and is NOT kept:
+   * "שההתאמות האלה לא ישמרו להמשך ושיחולו רק על פעולת הייצוא הספציפי הזאת".
+   * It must still reach the produced file, or the edit would be decorative.
+   */
+  it('an edit made here reaches the document but is NEVER persisted', async () => {
     await open();
     fireEvent.click(screen.getByText('edit-font'));
     await waitFor(() => expect(screen.getByTestId('font').textContent).toBe('david'));
-    await produce();
-    expect(store.saveDiscussionExportTemplate).toHaveBeenCalledTimes(1);
-    expect(store.saveDiscussionExportTemplate.mock.calls[0][1].font).toBe('david');
+    const opts = await produce();
+    expect(opts.template.font).toBe('david');            // it shaped this export…
+    expect(store.saveDiscussionExportTemplate).not.toHaveBeenCalled(); // …and nothing was kept
+    expect(store.saveDiscussionExportAssets).not.toHaveBeenCalled();
   });
 
   it('IGNORES a stored own copy that merely echoes the system default (the frozen-by-export case)', async () => {
@@ -144,11 +150,19 @@ describe('ExportDialog — the discussion TYPE\'s export template is the default
     expect(opts.assets.templateDocx).toBe('UEsDBBQ=');
   });
 
-  it('still honours a REAL per-discussion customization', async () => {
+  /*
+   * round356 — a per-discussion override stored by an older version is NOT read. Reading
+   * it would contradict the spec's default ("if a type has a template, that template is
+   * what the discussion opens with"), and it is exactly how a discussion used to get
+   * frozen onto whatever was in force at its first export.
+   */
+  it('IGNORES a per-discussion override stored by an older version — the TYPE wins', async () => {
     await open({ ownTemplate: { ...INSTANCE_TPL, font: 'david' } });
-    expect(screen.getByTestId('font').textContent).toBe('david');
+    expect(screen.getByTestId('font').textContent).toBe(TYPE_TPL.font);
     const opts = await produce();
-    expect(opts.template.font).toBe('david');
+    expect(opts.template.font).toBe(TYPE_TPL.font);
+    expect(store.loadDiscussionExportTemplate).not.toHaveBeenCalled();
+    expect(store.loadDiscussionExportAssets).not.toHaveBeenCalled();
   });
 
   it('uses the type\'s assets even when the type carries no template CONFIG', async () => {
@@ -179,24 +193,13 @@ describe('ExportDialog — the discussion TYPE\'s export template is the default
     expect(opts.assets.headerLogo).toBe('data:global');
   });
 
-  it('offers "חזרה לברירת המחדל" only for a real override, and clearing it re-seeds from the type', async () => {
-    await open(); // no override
-    expect(screen.queryByText('חזרה לברירת המחדל')).toBeNull();
-
-    // With a genuine own template the escape hatch appears and wipes both stores.
+  /*
+   * round356 — the "חזרה לברירת המחדל" escape hatch is GONE with the override it existed
+   * to undo: every open already starts from the type, so there is nothing to reset.
+   */
+  it('offers no reset action — there is no stored override to undo', async () => {
     await open({ ownTemplate: { ...INSTANCE_TPL, font: 'david' } });
-    const reset = screen.getByText('חזרה לברירת המחדל').closest('button');
-    fireEvent.click(reset);
-    await waitFor(() => expect(store.clearDiscussionExportOverrides).toHaveBeenCalledWith('55'));
-  });
-
-  it('a FAILED reset is not announced as done and keeps the override (PR review)', async () => {
-    store.clearDiscussionExportOverrides.mockRejectedValue(new Error('storage unavailable'));
-    const { onNotify } = await open({ ownTemplate: { ...INSTANCE_TPL, font: 'david' } });
-    fireEvent.click(screen.getByText('חזרה לברירת המחדל').closest('button'));
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(expect.stringMatching(/נכשל/), 'warning'));
-    // no success notice, and the escape hatch is still offered
-    expect(onNotify).not.toHaveBeenCalledWith(expect.stringMatching(/אופסה/));
-    expect(screen.getByText('חזרה לברירת המחדל')).toBeInTheDocument();
+    expect(screen.queryByText('חזרה לברירת המחדל')).toBeNull();
+    expect(store.clearDiscussionExportOverrides).not.toHaveBeenCalled();
   });
 });

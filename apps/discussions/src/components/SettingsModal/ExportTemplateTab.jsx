@@ -14,9 +14,11 @@ import {
   PARTICIPANT_PART_TITLE,
   PARTICIPANT_CF_PREFIX,
   PARTICIPANT_SEPARATORS,
+  RECORD_MARKERS,
+  isPeopleMetaField,
   DEFAULT_PARTICIPANT_SEPARATOR,
 } from '../../utils/mondayApi/boards.config.js';
-import { resolveParticipantParts, resolvePeopleFormat, partCustomFieldId } from '../../utils/participantFormat.js';
+import { resolveParticipantParts, resolvePeopleFormat, partCustomFieldId, resolveRecordMarker } from '../../utils/participantFormat.js';
 import logger from '../../utils/logger.js';
 import { fetchUserCustomFieldMetas } from '../../utils/mondayApi/userProfiles.js';
 import { computeFloatingPosition } from '../../utils/overlayPlacement.js';
@@ -245,7 +247,7 @@ export function reorderMetaFields(template, fromKey, toKey) {
 }
 
 /** One row of פרטי הדיון: grip, enabled checkbox, editable label. */
-function SortableMetaFieldRow({ field, onToggle, onLabel }) {
+function SortableMetaFieldRow({ field, onToggle, onLabel, onMarker }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `${META_FIELD_DRAG_PREFIX}${field.key}`,
   });
@@ -264,6 +266,21 @@ function SortableMetaFieldRow({ field, onToggle, onLabel }) {
       </button>
       <input type="checkbox" checked={field.enabled !== false} onChange={(e) => onToggle(e.target.checked)} />
       <TextField value={field.label || ''} onChange={onLabel} size="small" />
+      {/* round357 (owner spec) — the marker written to the RIGHT of each record, per
+          people component: מוביל דיון can be bulleted while משתתפים is numbered. Only
+          people rows have records, and only line-per-person mode shows them. */}
+      {isPeopleMetaField(field.key) && (
+        <select
+          className={styles.partSep}
+          value={resolveRecordMarker(field)}
+          onChange={(e) => onMarker(e.target.value)}
+          aria-label={`סימן לכל רשומה ב-${field.label || field.key}`}
+        >
+          {RECORD_MARKERS.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }
@@ -627,6 +644,7 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
                         field={f}
                         onToggle={(enabled) => patchMetaField(f.key, { enabled })}
                         onLabel={(val) => patchMetaField(f.key, { label: val })}
+                        onMarker={(val) => patchMetaField(f.key, { marker: val })}
                       />
                     ))}
                   </SortableContext>

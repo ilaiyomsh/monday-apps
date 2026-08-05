@@ -304,6 +304,10 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
   // it is persisted as the type's OWN only if the user edits it here (dirty).
   const [typeExportTemplate, setTypeExportTemplate] = useState(null); // seeded object
   const [typeExportAssets, setTypeExportAssets] = useState(null);
+  // round356 — see startEditType: which asset read is current, and whether the owner
+  // has already touched the assets (a late read must not land on top of an edit).
+  const typeAssetsLoadRef = useRef(0);
+  const typeExportTouchedRef = useRef(false);
   const [typeExportAssetError, setTypeExportAssetError] = useState(null);
   const [typeExportDirty, setTypeExportDirty] = useState(false);
   const [isNew, setIsNew] = useState(false);
@@ -406,8 +410,22 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
     setTypeExportTemplate(seedExportTemplate(existing?.exportTemplate || settings?.exportTemplate || null));
     setTypeExportAssetError(null);
     setTypeExportAssets(null);
+    /*
+     * round356 — this read is async, and the owner can reach the export sub-tab and
+     * upload a .docx before it lands. Unguarded, the resolved STORED assets overwrote
+     * the file that was just picked and the save then persisted the old bundle — a
+     * silent loss of the upload, with the dirty flag still set so it looked saved.
+     * The token drops a stale read, and `typeExportTouchedRef` drops a read that
+     * would land on top of an edit the owner already made.
+     */
+    const token = (typeAssetsLoadRef.current += 1);
+    typeExportTouchedRef.current = false;
     Promise.resolve(loadTypeExportAssets?.(typeName))
-      .then((a) => { if (a) setTypeExportAssets(a); })
+      .then((a) => {
+        if (!a) return;
+        if (token !== typeAssetsLoadRef.current || typeExportTouchedRef.current) return;
+        setTypeExportAssets(a);
+      })
       .catch((err) => logger.warn('TemplateManagerModal', 'טעינת נכסי הייצוא של הסוג נכשלה', err));
     setIsNew(!existing);
     setView('edit');
@@ -448,7 +466,11 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
   // persists the type's OWN template/assets (otherwise it stays on the system
   // default). These wrap the plain setters passed to ExportTemplateTab.
   const setTypeExportTemplateDirty = (updater) => { setTypeExportDirty(true); setTypeExportTemplate(updater); };
-  const setTypeExportAssetsDirty = (updater) => { setTypeExportDirty(true); setTypeExportAssets(updater); };
+  const setTypeExportAssetsDirty = (updater) => {
+    typeExportTouchedRef.current = true; // guards against a late load clobbering this
+    setTypeExportDirty(true);
+    setTypeExportAssets(updater);
+  };
   // Ask the host (SettingsModal) to widen the modal while the export sub-tab is
   // open, so it gets the same room as the system export-template screen.
   useEffect(() => {
