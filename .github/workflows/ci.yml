@@ -37,6 +37,27 @@ jobs:
         if: github.base_ref == 'main'
         run: bash scripts/release-guard.sh
 
+  # test-guard's own enforcement layer, verified against fixtures (the skill's
+  # hooks-contract.md §5). The stop gate is what physically holds a session open until
+  # every touched module is DONE or waived, so a regression in it removes enforcement
+  # SILENTLY — the failure mode is a green pipeline with no gate behind it, which is
+  # exactly the class of thing this repo cannot detect by reading diffs.
+  #
+  # Its own job on purpose: the verifier needs no pnpm install and no node_modules
+  # (bash + coreutils, plus jq when present for the fallback-JSON assertions), runs in
+  # about a second, and so cannot be delayed or broken by dependency resolution.
+  test-guard-hooks:
+    name: test-guard hook fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Throwaway REDGREEN_STATE_ROOT per case — it never touches real session state.
+      # Exit 1 = a fixture failed, and the log names the failing assertion.
+      - name: Verify stop-gate fixtures
+        run: bash .claude/skills/test-guard/hooks/tests/verify-stop-gate.sh
+
   ci:
     name: type-check, lint, build
     runs-on: ubuntu-latest

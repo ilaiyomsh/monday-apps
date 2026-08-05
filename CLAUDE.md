@@ -202,7 +202,10 @@ packages/shared                     EMPTY STUB — see below
 - **CI (every PR into develop/main):** type-check → lint → build across the
   whole workspace (`pnpm -r --if-present`) — blocking. Tests run as a separate
   **non-blocking visibility job**; read its summary on the PR and treat any new
-  red as yours until proven otherwise.
+  red as yours until proven otherwise. One more blocking job, `test-guard hook
+  fixtures`, runs the enforcement layer's own fixture verifier
+  (`.claude/skills/test-guard/hooks/tests/verify-stop-gate.sh`, checkout-only) —
+  a broken stop gate would otherwise remove enforcement silently.
 - **Known-red baseline:** tracker carries 2 deferred failing tests
   (FOLLOW-UPS F1). Not your breakage — do not "fix" them without the owner.
 - **test-guard:** red gate for new code; retrofits prove themselves with ≥2

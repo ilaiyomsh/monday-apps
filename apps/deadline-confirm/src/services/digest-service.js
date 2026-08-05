@@ -15,6 +15,28 @@
 // Label id 0 is valid — never truthy-check. An unset status (null) matches
 // nothing, so it is excluded unless the board uses a real "not started" label.
 
+import { normalizeDigestBlocks, sectionsFromBlocks } from './digest-blocks.js';
+
+/**
+ * The digest's clusters, as sections.
+ *
+ * SINGLE SOURCE OF TRUTH (0.15.0): when the digest carries `blocks`, the
+ * clusters — and their ORDER, which is their priority — come from there. The
+ * stored `sections` array is a projection the server writes alongside them
+ * (older server versions and this module's callers read it), so trusting it
+ * over the blocks would let the two disagree: a config imported or hand-edited
+ * with a stale `sections` copy would classify tasks in one order and render
+ * them in another. A digest with no `blocks` key is pre-0.15.0 — then
+ * `sections` IS the truth.
+ *
+ * @param {object|null|undefined} digest
+ * @returns {Array<object>}
+ */
+export function digestSections(digest) {
+  if (Array.isArray(digest?.blocks)) return sectionsFromBlocks(normalizeDigestBlocks(digest));
+  return digest?.sections ?? [];
+}
+
 /**
  * Column ids the tasks-board read needs (people + every section date +
  * every referenced button's status column), deduped.
@@ -24,7 +46,7 @@
 export function digestTaskColumnIds(config) {
   const buttonsById = new Map((config.buttons ?? []).map((b) => [b.id, b]));
   const ids = new Set([config.peopleColumnId]);
-  for (const section of config.digest?.sections ?? []) {
+  for (const section of digestSections(config.digest)) {
     ids.add(section.dateColumnId);
     const btnIds =
       Array.isArray(section.buttonIds) && section.buttonIds.length > 0
@@ -88,7 +110,7 @@ function collectDigestDateColumns(digest) {
   /** @type {Array<{ id: string, title: string }>} */
   const cols = [];
   const seen = new Set();
-  for (const section of digest?.sections ?? []) {
+  for (const section of digestSections(digest)) {
     const id = section.dateColumnId;
     if (typeof id !== 'string' || id.length === 0 || seen.has(id)) continue;
     seen.add(id);
@@ -128,6 +150,11 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
   const { digest } = config;
   const buttonsById = new Map((config.buttons ?? []).map((b) => [b.id, b]));
   const dateColumns = collectDigestDateColumns(digest);
+  // Blocks first, `sections` only for a pre-0.15.0 digest — see digestSections.
+  // NAMED configSections deliberately: the per-recipient loop below builds its
+  // own local `sections` (the output), and shadowing this one there silently
+  // classifies against an empty list.
+  const configSections = digestSections(digest);
 
   // --- users board -> recipients (D16: one row = one message) --------------
   /** @type {Array<{ email: string, name: string, personId: string }>} */
@@ -154,7 +181,7 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
   // --- classify every task once per section ---------------------------------
   // pendingBySection: sectionId -> [{ task, personIds }]
   const pendingBySection = new Map();
-  for (const section of digest.sections) {
+  for (const section of configSections) {
     const button = buttonsById.get(section.buttonId);
     if (!button) continue; // config validation prevents this; defensive skip
     const includeSet = new Set(section.includeStatusLabelIds ?? []);
@@ -186,6 +213,12 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
   // R2 invariant (v6 §6): a recipient's digest contains ONLY tasks assigned
   // to that recipient — R1/R2 and the attribution wording depend on it.
   const recipients = [];
+  // Employees the users board DID resolve (email + exactly one person) who have
+  // nothing pending. They are not recipients — there is no mail to send them —
+  // but the per-employee summary file (§5.2) must still carry a row for each,
+  // because "nobody is missing" is the only claim that file makes. Reported
+  // separately so no consumer can mistake them for someone who got mail.
+  const emptyRecipients = [];
   for (const r of userRecipients) {
     const sections = [];
     let taskCount = 0;
@@ -195,7 +228,7 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
     // message cannot produce a conflict_item. Per-recipient (not in the Phase-A
     // classification) so the rule survives any future recipient-dependent filter.
     const claimed = new Set();
-    for (const section of digest.sections) {
+    for (const section of configSections) {
       const mine = (pendingBySection.get(section.id) ?? []).filter(
         (t) => t.personIds.includes(r.personId) && !claimed.has(t.itemId)
       );
@@ -222,7 +255,10 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
         })),
       });
     }
-    if (taskCount === 0) continue;
+    if (taskCount === 0) {
+      emptyRecipients.push({ email: r.email, name: r.name, personId: r.personId });
+      continue;
+    }
     recipients.push({
       email: r.email,
       name: r.name,
@@ -237,5 +273,5 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
     });
   }
 
-  return { recipients, skippedUsers };
+  return { recipients, skippedUsers, emptyRecipients };
 }

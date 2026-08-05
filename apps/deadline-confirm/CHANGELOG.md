@@ -2,6 +2,138 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.15.0 — 2026-08-05 — the summary email's content is the operator's, not the code's
+
+**The problem was scope of control.** The digest settings screen could choose the
+מקבצים and nothing else: the greeting, the "לחצו על תגית הסטטוס…" paragraph, the
+note hint and the footer were literal strings inside `digest-amp.js`, and the
+text/plain part had three different literals of its own. Changing a sentence meant
+a PR.
+
+**The body is now an ordered BLOCK LIST.** `digest.blocks` holds two kinds of
+block: free TEXT with block-level formatting (direction, font, size 10–32,
+alignment, color, bold — the controls the single email's editor already had, plus
+color and bold) and a CLUSTER, which carries exactly the settings `sections[]` used
+to. The admin edits one list with ↑/↓/✕; the "מקבצי משימות" panel is gone.
+The renderers ship **no content text at all** any more — what they still emit is
+operational chrome: the column headers, `סטטוס`, the note placeholder, and
+amp-form's per-row `מעדכן…` / ✓ / error strips.
+
+**Block order is cluster priority, and now there is only one order.** Section
+order has decided priority since 2026-08-04 (first matching cluster claims the
+task). It used to live in a separate panel from the mail's layout; now the arrows
+that move a block in the mail are the same arrows that set its priority, so the two
+cannot be configured to disagree. `sections` survives in storage as a projection
+the server derives from the blocks on every save — and `digestSections()` prefers
+the blocks whenever they exist, so a stale copy (hand-edited record, old settings
+import) can no longer classify tasks in an order the mail does not render in.
+
+**One dynamic field: `{{שם}}`.** The recipient's users-board row name, insertable
+anywhere in any text block AND in the subject, which is itself a pinned block. The
+admin inserts it at the caret (a bidi-rendered `{{שם}}` is unpleasant to type). The
+subject is the one place a token value reaches a mail header, so substitution
+strips CR/LF before use — `assertHeaderSafe` in the sender is now the second line
+of defence, not the first. A row name of `דנה\r\nBcc: …` is pinned by a test.
+
+**Nothing changes for a tenant until they edit.** A config stored before today has
+no `blocks` key, and the scheduler may keep sending it for months. Reading one
+reconstructs the blocks that reproduce the 0.13.x mail verbatim — greeting, lead,
+the note hint **only when some cluster maps a note column** (exactly the old
+condition), the clusters, footer — from one function used by the send path, the
+preview and `GET /api/state` alike. An empty `blocks` ARRAY, by contrast, is
+authored: it means an empty mail and must not regrow the old text.
+
+**Two security details worth naming.** A text block's `font` reaches
+`<style amp-custom>`, so it is a server-side ALLOWLIST, not a string (a mutation
+that downgraded it to a `typeof` check is in the test log); colors are `#rrggbb`,
+sizes clamped integers, direction/alignment enumerations. Authored text and the
+substituted name are both escaped, so a block cannot inject markup — and because
+the html fallback is still derived from the plain part, a URL an operator types
+stays inert text there rather than becoming an anchor (D1/D2 intact).
+
+**Found while testing:** `hasNameToken` shared the module's `/g` regex, so
+`RegExp.test` advanced `lastIndex` and every second call on the same text answered
+false. Its own non-global pattern now, with a test that calls it twice.
+
+Caps: 20 blocks, 1–4 clusters (unchanged), 2000 chars per text block, subject 120
+(unchanged). The client's copy of the model is kept honest by
+`tests/digest-blocks-client-drift.test.js` — the error-kit drift pattern —
+because the SPA is typed and the server module is JS.
+
+**Not verified in this session:** `npm run validate:amp` could not run (the
+official validator is fetched from cdn.ampproject.org, which the cloud
+environment's network policy blocks — exit 3, "nothing was checked"). Every CSS
+property the new `.tb*` rules use already appears in the validated document, and
+two text-block samples were added to the script so the next run covers them.
+## 0.14.0 — 2026-08-05 — a per-employee summary file after every cron run, and a tick that says how long it took
+
+**A row per employee, including everyone who got nothing.** After every cron
+tick, each tenant that actually ran now mails itself a CSV —
+`digest-summary-<slot>.csv` — listing every person on the users board:
+who received the digest, who failed and with which SMTP message, who had already
+been mailed in this slot (§4), who had zero pending tasks, and which users-board
+rows never resolved into an employee at all. That last group is the reason the
+file exists: a missing row is information that vanished, and "nobody was missed"
+is precisely the claim nobody could previously check.
+
+**It goes to the tenant's OWN sending mailbox, not to `OPERATOR_EMAIL`** (owner
+decision 2026-08-05). The report follows whatever mailbox the admin screen
+connected — rebinding a sender moves the report with it, and there is no second
+setting that can quietly fall out of date. `OPERATOR_EMAIL` keeps receiving the
+cross-tenant text summary and never receives the file.
+
+**Only the cron produces a file.** `runDigestForAccount` returns the rows to
+every caller, but `/api/digest/send` and `resend-today` ignore them: those show
+their result on the screen. Same shape as the per-slot marker — the shared
+pipeline computes, and only the scheduler acts on it.
+
+**Three details in the file are load-bearing:**
+- **A UTF-8 BOM.** Without it Excel reads the file in the local ANSI codepage and
+  every Hebrew name opens as mojibake. It is written as an escape, never as an
+  invisible character in source — eslint's `no-irregular-whitespace` blocks the
+  literal, and a future reader would delete it as a typo.
+- **The cluster columns are derived from `config.digest.sections`, in order** —
+  which is also priority order (0.13.0). Add a cluster, rename one, press the ↑
+  arrow: the file follows. A hard-coded header would keep counting under the
+  wrong heading, which is worse than not counting.
+- **`סה"כ` is quoted as `"סה""כ"`.** It is the one header carrying the exact
+  character RFC4180 quoting exists for; emitted raw, Excel parses every row one
+  column short.
+
+Values that would be evaluated as formulas (`=`, `+`, `-`, `@`) are neutralized
+with a leading apostrophe. Task and employee names come from a customer's board
+and the file is opened on somebody's machine.
+
+**Attaching anything at all needed a new MIME layer.** `helpers/rfc822.js` +
+`mime-alternative.js` could only build `multipart/alternative` — several
+renderings of ONE body, which is not what a file is. The new
+`helpers/mime-mixed.js` wraps a body plus attachments, and its nested case
+carries a `multipart/alternative` through **byte-for-byte with no
+Content-Transfer-Encoding of its own**: re-wrapping an alternative body is
+exactly how the Gmail API strips the AMP part (findings §2), so the one thing
+this builder must never do is touch the bytes it is handed. An attachment
+filename with a quote or CRLF is refused, not sanitized — same rule
+`rfc822.js` applies to `To`/`Subject`.
+
+**A failed report never costs a digest.** The digests are already out when the
+file goes; a send failure is logged and the tick still answers 200. A non-2xx
+here would hand the platform a retry and re-run the whole tenant over a file
+nobody is waiting on.
+
+**And the tick now says how long it took.** `durationMs` per tenant, in the
+`tenant run finished` log line and in the tick response — so
+`mapps scheduler:run` answers the open question from `docs/scheduling.md` §7.3
+("are 300 seconds enough for a serial loop that opens one SMTP connection per
+recipient?") with a number instead of a shrug. Nothing about the timeout or the
+send concurrency was changed: the decision rule and its thresholds are written
+down in §7.3, to be applied once real runs have been measured. The measurement
+reads the clock twice around the run; the run itself still receives the FROZEN
+tick clock, so a long batch cannot straddle a slot boundary and sign two slots.
+
+Docs: `docs/scheduling.md` §5.2 (the whole report), §7.1 (the exact command
+sequence for deciding whether the cron hits draft or live — owner-only, it needs
+a token), §7.3 (how to measure and what to do with each result).
+
 ## 0.13.1 — 2026-08-05 — the scheduler exists now, and cannot mail anyone twice
 
 **The digest had never been sent automatically.** `mapps scheduler:list -a

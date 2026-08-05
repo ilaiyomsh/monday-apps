@@ -56,8 +56,11 @@ describe('resolveParticipantParts', () => {
   });
 
   it('keeps the stored order and separators', () => {
-    const parts = resolveParticipantParts({ parts: [{ key: 'title', sep: ' — ' }, { key: 'name', sep: ', ' }] });
-    expect(parts).toEqual([{ key: 'title', sep: ' — ' }, { key: 'name', sep: ', ' }]);
+    // round357 — ' — ' was the offered 'מקף' until that round and is mapped forward to
+    // the short dash that replaced it (see participantLines.round357.test.js); every
+    // other stored separator is kept verbatim, which is what this case pins.
+    const parts = resolveParticipantParts({ parts: [{ key: 'title', sep: ' · ' }, { key: 'name', sep: ', ' }] });
+    expect(parts).toEqual([{ key: 'title', sep: ' · ' }, { key: 'name', sep: ', ' }]);
   });
 
   it('defaults a missing separator instead of writing "undefined" into the document', () => {
@@ -94,8 +97,8 @@ describe('formatParticipantLabel — one participant', () => {
   });
 
   it('uses the separator of the part it PRECEDES, and never one before the first', () => {
-    const parts = [{ key: 'name', sep: ' — ' }, { key: 'title', sep: ' — ' }];
-    expect(formatParticipantLabel(IDO, parts)).toBe('עידו פיוטרקובסקי — מנהל מחלקת מכירות');
+    const parts = [{ key: 'name', sep: ' – ' }, { key: 'title', sep: ' – ' }];
+    expect(formatParticipantLabel(IDO, parts)).toBe('עידו פיוטרקובסקי – מנהל מחלקת מכירות');
   });
 
   it('supports an EMPTY separator (two parts glued together)', () => {

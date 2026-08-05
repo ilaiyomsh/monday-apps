@@ -80,6 +80,35 @@ export function effectiveOwnTemplate(own, typeTpl, instance) {
  * whether the type also carries a template CONFIG — gating the file on the config
  * is what left a type's uploaded background unused.
  */
+/*
+ * round356 (owner spec) — the three asset FIELDS resolve INDEPENDENTLY, in the same
+ * precedence the config uses (per-export edits -> the type -> the system default).
+ *
+ * They used to be picked as one bundle (own || type || global), so the first tier
+ * holding anything discarded the rest: a header/footer .docx uploaded at the system
+ * level was thrown away because the discussion's type happened to carry a logo, and
+ * the export then rendered with NO headers at all (deliverDiscussionDocx needs both
+ * headerMode==='upload' AND assets.templateDocx). Merging per field is what lets a
+ * template file live at one tier and a logo at another.
+ *
+ * An empty/absent value is "nothing to contribute", never "override with nothing" —
+ * clearing a logo on the type must not hide the system's template file.
+ *
+ * @param {...(object|null)} tiers highest precedence first
+ * @returns {object|null} the merged assets, or null when no tier contributes
+ */
+export const EXPORT_ASSET_FIELDS = ['headerLogo', 'footerLogo', 'templateDocx'];
+
+export function resolveExportAssets(...tiers) {
+  const usable = tiers.filter((t) => t && typeof t === 'object');
+  const out = {};
+  EXPORT_ASSET_FIELDS.forEach((field) => {
+    const tier = usable.find((t) => t[field]);
+    if (tier) out[field] = tier[field];
+  });
+  return Object.keys(out).length ? out : null;
+}
+
 export function hasAssetContent(assets) {
   if (!assets || typeof assets !== 'object') return false;
   return Boolean(assets.headerLogo || assets.footerLogo || assets.templateDocx);

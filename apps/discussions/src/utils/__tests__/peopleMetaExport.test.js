@@ -168,14 +168,14 @@ describe('the lead and coordinator rows in the rendered document', () => {
 
   it('parts reach EVERY row from the one setting (round319 replaced per-row parts)', async () => {
     const tpl = tplField('coordinatorText', {
-      parts: [{ key: 'name', sep: ', ' }, { key: 'title', sep: ' — ' }],
+      parts: [{ key: 'name', sep: ', ' }, { key: 'title', sep: ' – ' }],
     });
     const lines = await linesOf(modelOf(), tpl);
-    expect(lines).toContain('מרכז דיון: נועה אביב — רכזת ישיבות');
+    expect(lines).toContain('מרכז דיון: נועה אביב – רכזת ישיבות');
     // The same composition, applied to the other two rows. אורי דגן has no Title,
     // so he stays a bare name — the part is skipped, not written empty.
-    expect(lines).toContain('משתתפים: עידו פיוטרקובסקי — מנהל מחלקת מכירות');
-    expect(lines).toContain('מוביל דיון: שירה לוי — מנכ"לית, אורי דגן');
+    expect(lines).toContain('משתתפים: עידו פיוטרקובסקי – מנהל מחלקת מכירות');
+    expect(lines).toContain('מוביל דיון: שירה לוי – מנכ"לית, אורי דגן');
   });
 
   it('honours a renamed label — the owner who says "מנהל דיון" writes that', async () => {

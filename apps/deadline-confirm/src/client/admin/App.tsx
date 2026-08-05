@@ -120,16 +120,23 @@ export function App() {
           targetIndex: -1,
           targetLabel: '',
         }));
-        // Digest section date columns + status conditions live on the tasks
-        // board too — a board switch invalidates them.
+        // Cluster date columns + status conditions live on the tasks board too —
+        // a board switch invalidates them. Text blocks are board-independent and
+        // are carried over untouched.
         next.digest = {
           ...next.digest,
-          sections: next.digest.sections.map((s) => ({
-            ...s,
-            dateColumnId: null,
-            dateColumnTitle: '',
-            includeStatusLabelIds: [],
-          })),
+          blocks: next.digest.blocks.map((b) =>
+            b.type === 'cluster'
+              ? {
+                  ...b,
+                  dateColumnId: null,
+                  dateColumnTitle: '',
+                  noteColumnId: null,
+                  noteColumnTitle: '',
+                  includeStatusLabelIds: [],
+                }
+              : b
+          ),
         };
       }
       return next;

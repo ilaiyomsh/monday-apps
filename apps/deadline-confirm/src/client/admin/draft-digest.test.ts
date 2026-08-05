@@ -1,18 +1,38 @@
 // v4 digest draft model — enabled-flag semantics: a DISABLED digest never
 // blocks saving (payload digest: null); an ENABLED digest must be complete
 // before draftToConfig resolves.
+//
+// 0.15.0: the draft's clusters live in `blocks` (one ordered list of text and
+// cluster blocks), so the assertions below read them through digestClusters().
+// The completeness rules themselves are unchanged — plus two new ones for text
+// blocks, which the server also enforces.
 
 import { describe, it, expect } from 'vitest';
 import {
   defaultDigestDraft,
+  digestClusters,
   digestFromConfig,
   digestIsComplete,
   draftFromConfig,
   draftToConfig,
+  newDigestCluster,
   newDigestSection,
+  newDigestTextBlock,
   type ConfigDraft,
+  type DigestClusterDraft,
 } from './draft';
 import type { ActionButton, DigestConfig } from './types';
+
+/** A cluster block draft from the plain section fields the cases below use. */
+const cluster = (over: Partial<DigestClusterDraft> = {}): DigestClusterDraft => ({
+  ...newDigestCluster('א'),
+  dateColumnId: 'd',
+  dateColumnTitle: 'ת',
+  buttonId: 'b_done0001',
+  buttonIds: ['b_done0001'],
+  includeStatusLabelIds: [0],
+  ...over,
+});
 
 const BUTTON: ActionButton = {
   id: 'b_done0001',
@@ -55,20 +75,29 @@ function completeDraft(digest?: Partial<ConfigDraft['digest']>): ConfigDraft {
 }
 
 describe('defaultDigestDraft', () => {
-  it('starts disabled, with a default subject and the two mock sections (empty picks)', () => {
+  it('starts disabled, with a default subject and the two mock clusters (empty picks)', () => {
     const d = defaultDigestDraft();
     expect(d.enabled).toBe(false);
     expect(d.subject.length).toBeGreaterThan(0);
     expect(d.sendHour).toBe(8);
-    expect(d.sections).toHaveLength(2);
-    expect(d.sections[0].id).toMatch(/^s_/);
-    expect(d.sections[0].dateColumnId).toBeNull();
-    expect(d.sections[0].dateColumnTitle).toBe('');
-    expect(d.sections[0].buttonId).toBeNull();
-    expect(d.sections[0].buttonIds).toEqual([]);
-    expect(d.sections[0].includeStatusLabelIds).toEqual([]);
+    const clusters = digestClusters(d);
+    expect(clusters).toHaveLength(2);
+    expect(clusters[0].id).toMatch(/^s_/);
+    expect(clusters[0].dateColumnId).toBeNull();
+    expect(clusters[0].dateColumnTitle).toBe('');
+    expect(clusters[0].buttonId).toBeNull();
+    expect(clusters[0].buttonIds).toEqual([]);
+    expect(clusters[0].includeStatusLabelIds).toEqual([]);
     // two distinct generated ids
-    expect(d.sections[0].id).not.toBe(d.sections[1].id);
+    expect(clusters[0].id).not.toBe(clusters[1].id);
+  });
+
+  // The default body is not empty: with no pre-written text left in the
+  // renderers, an operator who never opens the block list would otherwise send a
+  // mail with nothing but tables.
+  it('seeds the body with greeting + clusters + closing, in that order', () => {
+    const types = defaultDigestDraft().blocks.map((b) => b.type);
+    expect(types).toEqual(['text', 'text', 'cluster', 'cluster', 'text']);
   });
 });
 
@@ -91,8 +120,9 @@ describe('digestFromConfig / draftFromConfig', () => {
     expect(d.enabled).toBe(true);
     expect(d.usersBoardId).toBe('222');
     expect(d.sendHour).toBe(8);
-    expect(d.sections).toEqual([
+    expect(digestClusters(d)).toEqual([
       {
+        type: 'cluster',
         id: 's_done0001',
         title: 'לסיים:',
         dateColumnId: 'date_due',
@@ -121,8 +151,8 @@ describe('digestFromConfig / draftFromConfig', () => {
       ],
     };
     const d = digestFromConfig(legacy);
-    expect(d.sections[0].buttonIds).toEqual(['b_done0001']);
-    expect(d.sections[0].buttonId).toBe('b_done0001');
+    expect(digestClusters(d)[0].buttonIds).toEqual(['b_done0001']);
+    expect(digestClusters(d)[0].buttonId).toBe('b_done0001');
     expect(digestIsComplete(d)).toBe(true);
   });
 
@@ -147,8 +177,9 @@ describe('digestIsComplete', () => {
 
   it('false when buttonIds is empty even if legacy buttonId is set', () => {
     const d = digestFromConfig(DIGEST_CONFIG);
-    d.sections[0].buttonIds = [];
-    d.sections[0].buttonId = 'b_done0001';
+    const target = digestClusters(d)[0];
+    target.buttonIds = [];
+    target.buttonId = 'b_done0001';
     expect(digestIsComplete(d)).toBe(false);
   });
 
@@ -157,11 +188,15 @@ describe('digestIsComplete', () => {
     ['no people column', { usersPeopleColumnId: null }],
     ['no email column', { usersEmailColumnId: null }],
     ['empty subject', { subject: '  ' }],
-    ['no sections', { sections: [] }],
-    ['section without date column', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: null, dateColumnTitle: '', noteColumnId: null, noteColumnTitle: '', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [0] }] }],
-    ['section without button', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', noteColumnId: null, noteColumnTitle: '', buttonId: null, buttonIds: [], includeStatusLabelIds: [0] }] }],
-    ['section with empty title', { sections: [{ id: 's_a1234', title: ' ', dateColumnId: 'd', dateColumnTitle: 'ת', noteColumnId: null, noteColumnTitle: '', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [0] }] }],
-    ['section with no include statuses', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', noteColumnId: null, noteColumnTitle: '', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [] }] }],
+    ['no blocks at all', { blocks: [] }],
+    ['text blocks only — no cluster', { blocks: [newDigestTextBlock('שלום')] }],
+    ['cluster without date column', { blocks: [cluster({ dateColumnId: null, dateColumnTitle: '' })] }],
+    ['cluster without button', { blocks: [cluster({ buttonId: null, buttonIds: [] })] }],
+    ['cluster with empty title', { blocks: [cluster({ title: ' ' })] }],
+    ['cluster with no include statuses', { blocks: [cluster({ includeStatusLabelIds: [] })] }],
+    ['an empty text block beside a valid cluster', { blocks: [newDigestTextBlock('   '), cluster()] }],
+    ['a text block over the length cap', { blocks: [newDigestTextBlock('א'.repeat(2001)), cluster()] }],
+    ['a fifth cluster', { blocks: [cluster({ id: 's_c00001' }), cluster({ id: 's_c00002' }), cluster({ id: 's_c00003' }), cluster({ id: 's_c00004' }), cluster({ id: 's_c00005' })] }],
   ])('false when %s', (_name, patch) => {
     expect(digestIsComplete({ ...digestFromConfig(DIGEST_CONFIG), ...patch })).toBe(false);
   });
@@ -174,9 +209,26 @@ describe('draftToConfig digest resolution', () => {
     expect(payload?.digest).toBeNull();
   });
 
-  it('ENABLED + complete → payload carries the digest config verbatim', () => {
+  // 0.15.0: the payload carries BOTH — `blocks` (what the server validates and
+  // stores) and the `sections` projection derived from them, sent so a rolled-back
+  // server still finds the clusters. The server re-derives sections from the
+  // blocks either way, so storage cannot end up with the two disagreeing.
+  it('ENABLED + complete → payload carries the clusters as sections AND as blocks', () => {
     const payload = draftToConfig(completeDraft());
-    expect(payload?.digest).toEqual(DIGEST_CONFIG);
+    expect(payload?.digest?.sections).toEqual(DIGEST_CONFIG.sections);
+    expect(payload?.digest?.subject).toBe(DIGEST_CONFIG.subject);
+    expect(payload?.digest?.sendHour).toBe(DIGEST_CONFIG.sendHour);
+    // digestFromConfig reconstructed the legacy text around the single cluster,
+    // so the body is: greeting, lead, the cluster, footer.
+    expect(payload?.digest?.blocks?.map((b) => b.type)).toEqual([
+      'text',
+      'text',
+      'cluster',
+      'text',
+    ]);
+    expect(payload?.digest?.blocks?.filter((b) => b.type === 'cluster')).toEqual([
+      { type: 'cluster', ...DIGEST_CONFIG.sections[0] },
+    ]);
   });
 
   it('ENABLED + incomplete → the whole payload is null (save disabled)', () => {

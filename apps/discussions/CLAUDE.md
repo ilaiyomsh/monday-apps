@@ -157,6 +157,22 @@ both views; the discussions-only modals (Settings/Templates/Create) stay inside 
   `useStatusOptions('tasks', alias)` is parameterized to read either status column's labels/order.
   `priorityID`'s provisioned label IDs are chosen for their COLOURS — `create_column` ignores
   `labels_colors` and binds colour to the label id (see `PRIORITY_DEFAULTS`).
+  **Export template — the CASCADE and what is EPHEMERAL (round356, owner spec):** the
+  system template is the default; a discussion TYPE's template overrides it for its
+  discussions; the edits made inside the per-discussion export dialog override both **for
+  that one export only** and are never persisted (no per-discussion store is read, written
+  or reset — pre-round356 stored overrides are deliberately ignored, not deleted). The
+  CONFIG merges per field via `resolveExportTemplate`; the ASSETS merge per field via
+  `resolveExportAssets` — picking one asset tier whole is the bug that silently dropped an
+  uploaded header/footer `.docx` whenever a higher tier happened to carry a logo.
+  **People lines (round357):** the separator between a person's parts is written as its OWN
+  BOLD run (`formatParticipantSegments`) — bold is a run property, so a single composed
+  string could never carry it; `formatParticipantLabel` is derived from the same segments.
+  The 'מקף' option is the SHORT dash, and the retired long dash is mapped forward. Each
+  people meta FIELD carries its own `marker` (`none` | `number` | `bullet`), written first
+  in the RTL paragraph so it lands to the right of the record; it only shows in
+  line-per-person mode, which stays a single global setting.
+
   **The GRAY DEFAULT label (stable id 5) is the empty state (round353 §3):** provisioning writes
   "טרם החל"/"טרם נבחרה" onto label 5 itself (no extra labels), and `useStatusOptions` exposes its
   text as `emptyLabel` — ONLY when label 5 is FIRST in display order (round354: old-scheme
@@ -304,6 +320,28 @@ start empty when storage is unavailable (local dev):
   `{topics:string[], points:{[topicId]:string[]}}`) is saved on drop and re-applied via
   `applyOrder()` on every read. Defensive: saved ids first, unknown ids keep API order at the end,
   deleted ids drop out.
+
+### Edit a type's template from the create card, and come back (round355)
+The type field in `CreateDiscussionModal` carries a per-type pencil (owner **or** super member —
+`canManageSettings || useIsSuperMember(...)`, the same pair that gets the settings gear; **not**
+`can('manageTemplates')`, which defaults to `'all'`). It hands the user to that type's template
+editor and brings them back to the card **unchanged**. The pipe, end to end:
+- `onEditTypeTemplate(typeName)` → `App` mints `pendingTypeEdit = {type, nonce}`, sets
+  `createSuspended`, opens Settings. **Parking, not closing:** `editDiscussion`/`duplicateFrom`/
+  `createPrefill` are left alone, and the card's own `useState` survives because
+  `CreateDiscussionModal` never unmounts (`open` only gates the render, `if (!open) return null`).
+- `SettingsModal` selects the templates tab and forwards the request; `TemplateManagerModal`
+  applies it through **`shouldApplyTypeEdit`** (`typeEditRequest.js`), which encodes the two rules:
+  wait for `TemplatesContext.loading` — `startEditType` classifies new-vs-existing off
+  `typeTemplates`, so entering early opens blank and the save **wipes** the stored template — and
+  apply each nonce once, or a re-render resets the draft under the user.
+- Coming back: a successful **types** save calls `onTypeSaved`, and `App` un-parks. The card's two
+  open-effects (seed, title focus/select) skip on that pass via `resumingFromTypeEditorRef` — that
+  skip IS "the same point I left"; without it the seed effect clears every filled field.
+- `onTypeTemplateSaved` is passed **only while parked**, so saving a template from the gear (the
+  pre-round355 path) still just returns to the type list. Every close route — X, Esc, overlay, and
+  the sidebar gear toggle (still clickable: `contained` dims only the card pane) — goes through
+  `handleCloseSettings`, or a parked card would be stranded and unreachable.
 
 ### Cross-board permission roles (round341)
 A decision's entitled managers (יוצר / מוביל / מרכז דיון) hold people columns on the
