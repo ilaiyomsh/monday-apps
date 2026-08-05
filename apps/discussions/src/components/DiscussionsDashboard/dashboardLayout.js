@@ -37,22 +37,26 @@ export const WIDGET_IDS = WIDGETS.map((w) => w.id);
 // Default placement — approximates the round158/159 three-zone layout: filter
 // rail + logo on the left, effectiveness + four cubes in the middle, bar +
 // donut on the right, participants under the cubes.
-// round163 — the owner's chosen arrangement, adopted as the default for every
-// instance (unless edited): filter rail on the left; a 2×2 block of number
-// cubes in the middle with the big effectiveness card to its right; the daily
-// bar chart across the bottom-middle and the type donut bottom-right. A small
-// logo sits top-left above the filter (visible for instances that upload one;
-// hideable). All zones end on the same bottom row (34).
+// round353 §1 — the owner's COMPACT arrangement (screenshot, 2026-08-05), adopted as the
+// default for every instance (unless edited). The round163 default sprawled the charts
+// deep down the page (34 rows); this one ends at 28 and swaps the top band: the number
+// cubes sit at the visual RIGHT edge (remember: x is LTR, so visual-right = high x in
+// this RTL app) with the effectiveness banner in the middle, next to the filter rail.
+// Layout, in the owner's reading order (right to left): cubes 2×2 (דיונים/משתתפים over
+// החלטות/משימות), the effectiveness card, the filter rail; below — the type donut on the
+// right, the daily bar chart to its left. A small logo sits top-left above the filter
+// (hidden by default — round340; visible for instances that upload one). All zones end
+// on the same bottom row (28).
 export const DEFAULT_LAYOUT = {
   logo:             { x: 0,  y: 0,  w: 12, h: 5 },
-  filter:           { x: 0,  y: 5,  w: 12, h: 29 },
-  cubeParticipants: { x: 13, y: 0,  w: 7,  h: 6 },
-  cubeDiscussions:  { x: 20, y: 0,  w: 7,  h: 6 },
-  cubeTasks:        { x: 13, y: 6,  w: 7,  h: 7 },
-  cubeDecisions:    { x: 20, y: 6,  w: 7,  h: 7 },
-  effectiveness:    { x: 27, y: 0,  w: 21, h: 13 },
-  bar:              { x: 13, y: 13, w: 22, h: 21 },
-  donut:            { x: 35, y: 13, w: 13, h: 21 },
+  filter:           { x: 0,  y: 5,  w: 12, h: 23 },
+  cubeParticipants: { x: 34, y: 0,  w: 7,  h: 6 },
+  cubeDiscussions:  { x: 41, y: 0,  w: 7,  h: 6 },
+  cubeTasks:        { x: 34, y: 6,  w: 7,  h: 7 },
+  cubeDecisions:    { x: 41, y: 6,  w: 7,  h: 7 },
+  effectiveness:    { x: 13, y: 0,  w: 21, h: 13 },
+  bar:              { x: 13, y: 13, w: 22, h: 15 },
+  donut:            { x: 35, y: 13, w: 13, h: 15 },
 };
 
 const clampInt = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(n)));
