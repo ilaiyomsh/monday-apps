@@ -1,0 +1,26 @@
+# code:push archive control — this file takes precedence over .gitignore
+# (mapps cli.md, log-verified 2026-07-15). The shipped artifact is the
+# CI-built dist/index.js bundle + package.json; the buildpack's remote
+# `npm install` + `npm run build` installs the runtime deps (express, apps-sdk,
+# jwt, @axiomhq/js) and build.mjs detects the missing client sources and keeps
+# the bundle. src/ and tests/ reference ../src/domain outside this directory
+# and must not confuse the remote workspace.
+#
+# NO package-lock.json is shipped — the repo is pnpm (no maintained npm
+# lockfile), so a committed lockfile drifts out of sync with package.json and
+# the buildpack's `npm ci` fails ("no existing package-lock.json"). Excluding it
+# forces the buildpack down the `npm install` path, exactly like the other
+# monday-code servers here (deadline-confirm, telemetry-dashboard) which ship
+# no lockfile either. (Incident: draft deploy run 30882322872, 2026-08-04.)
+#
+# public/ IS shipped (round324 same-origin unification): CI stages the built
+# SPA there and this server serves it statically (app.js). It is deliberately
+# NOT excluded below — the deploy would serve a 404 shell without it. CI strips
+# every .map from public/ before push so no sourcemap reaches the browser.
+node_modules/
+tests/
+src/
+coverage/
+eslint.config.js
+package-lock.json
+.mappsignore

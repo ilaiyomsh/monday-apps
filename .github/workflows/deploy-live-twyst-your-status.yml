@@ -1,5 +1,7 @@
 name: Deploy LIVE - twyst-your-status
 
+# round324 same-origin unification: ONE app, a SINGLE monday-code push. The
+# server serves the built SPA from public/ (no CDN -c push, no guard URL).
 # Spec section 7.2: merges into main auto-deploy to the app's LATEST LIVE
 # version via --force. This rebuilds from main and pushes straight to
 # production — there is no promote-the-tested-draft step.
@@ -38,7 +40,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build twyst-your-status
+      - name: Build the SPA (client bundle)
         env:
           VITE_BUILD_SHA: ${{ github.sha }}
           VITE_IS_RELEASE: "true"
@@ -47,22 +49,32 @@ jobs:
           VITE_AXIOM_APP: twyst-your-status
         run: pnpm --filter "./apps/twyst-your-status" build
 
-      - name: Archive sourcemaps as build artifact (for stack symbolication)
+      - name: Bundle the guard server (inlines the client domain modules)
+        run: pnpm --filter "./apps/twyst-your-status/server" build
+
+      - name: Stage the SPA into the server's public/ (same-origin serving)
+        run: |
+          set -euo pipefail
+          rm -rf apps/twyst-your-status/server/public
+          mkdir -p apps/twyst-your-status/server/public
+          cp -R apps/twyst-your-status/dist/. apps/twyst-your-status/server/public/
+
+      - name: Archive SPA sourcemaps as build artifact (for stack symbolication)
         uses: actions/upload-artifact@v4
         with:
           name: sourcemaps-twyst-your-status-live-${{ github.sha }}
-          path: apps/twyst-your-status/dist/**/*.map
+          path: apps/twyst-your-status/server/public/**/*.map
           retention-days: 90
           if-no-files-found: warn
 
-      - name: Strip sourcemaps before deploy (never ship .map to the CDN)
+      - name: Strip SPA sourcemaps before deploy (never serve .map to browsers)
         run: |
           set -euo pipefail
-          find apps/twyst-your-status/dist -name '*.map' -type f -delete
-          remaining="$(find apps/twyst-your-status/dist -name '*.map' -type f | wc -l | tr -d ' ')"
-          echo "remaining .map files in deploy dir: $remaining"
+          find apps/twyst-your-status/server/public -name '*.map' -type f -delete
+          remaining="$(find apps/twyst-your-status/server/public -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining .map files in server/public: $remaining"
           if [ "$remaining" != "0" ]; then
-            echo "::error::sourcemaps still present in deploy dir — refusing to push (would leak source to the CDN)"
+            echo "::error::sourcemaps still present in server/public — refusing to push (would serve source to browsers)"
             exit 1
           fi
 
@@ -74,6 +86,9 @@ jobs:
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
 
+      # PIN the live version. `code:push -a` (with or without --force) resolves
+      # the LATEST version — normally the DRAFT — so `--force -a` would silently
+      # refresh the draft and leave production untouched (pipeline-model.md §4).
       - name: Resolve LIVE version id (pin the target)
         id: live
         run: |
@@ -90,13 +105,21 @@ jobs:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
           APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}
 
+      # Server-side push: no -c flag; --force refreshes the PINNED live version.
+      # --verbose is LOAD-BEARING (mapps cli.md): a failed server push is
+      # otherwise silent. The archive carries dist/index.js AND public/ (SPA).
+      # Retry once on the transient "communicating with the remote server"
+      # error (incident-verified; pipeline-model.md) — without the loop a
+      # single transient CLI failure marks a production deploy failed.
       - name: "🚨 FORCE push to LIVE version (pinned id) 🚨"
         run: |
           set -uo pipefail
           for attempt in 1 2; do
-            if mapps code:push --force -c \
-                 -d apps/twyst-your-status/dist \
-                 -i "${{ steps.live.outputs.live_id }}"; then
+            if mapps code:push \
+                 -d apps/twyst-your-status/server \
+                 -i "${{ steps.live.outputs.live_id }}" \
+                 --force \
+                 --verbose; then
               exit 0
             fi
             echo "push attempt $attempt failed; retrying once in 15s (transient remote error)…"
@@ -106,3 +129,4 @@ jobs:
           exit 1
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
+          APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}

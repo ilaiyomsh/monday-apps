@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AttentionBox, Button } from '@vibe/core';
 import { loadIsBoardOwner } from '../../services/boardOwnerGate';
 import mondayService from '../../services/mondayService';
+import { loadSettingsAccess } from '../../services/settingsAccess';
 import logger from '../../utils/logger';
 import { settingsModalSize } from '../../utils/settingsModalSize';
 import { VERSION_LABEL } from '../../utils/versionLabel';
@@ -11,11 +12,12 @@ import './SettingsLauncher.css';
 const FULL_SETTINGS_PATH = '/settings-full';
 
 /**
- * What a non-owner sees instead of the button. English on purpose — it is a statement
- * about the app's permission model rather than product copy, and it says who CAN
- * configure, not just that this actor cannot.
+ * What a non-owner sees instead of the button. Hebrew, RTL — an end user reads it,
+ * and it names who CAN configure (the column's owners), not just that this actor
+ * cannot. Owner decision (round322): everyone outside the owner list is not exposed
+ * to the settings at all.
  */
-export const NON_OWNER_MESSAGE = 'Only board owners can configure';
+export const NON_OWNER_MESSAGE = 'רק בעלי העמודה יכולים לנהל את ההגדרות';
 
 /**
  * A gate that could not run is NOT a denial. It says so in the user's language and
@@ -27,13 +29,16 @@ export const GATE_ERROR_MESSAGE = 'לא הצלחנו לאמת את ההרשאו�
  * Slim Column Settings shell — opens a nested overlay sized from the physical
  * screen (never this iframe's tiny window). monday only accepts px strings.
  *
- * The button is for board owners only (users and owning TEAMS alike — see
- * services/boardOwnerGate). While the check is in flight the shell keeps the SAME
+ * The button is for the column's OWNERS (round322). An adopted column admits only
+ * its listed owners; an unadopted one falls back to the board-owner gate so the
+ * board's owners can perform (and, by saving, claim) the first setup — see
+ * services/settingsAccess. While the check is in flight the shell keeps the SAME
  * loading state the Suspense fallback is already showing, so the two are one
  * continuous wait rather than a spinner replaced by another spinner.
  */
 function SettingsLauncher({ context }) {
   const boardId = context?.boardId;
+  const columnId = context?.columnId;
   const userId = context?.user?.id;
 
   // null while the ownership check is in flight — not "false until proven".
@@ -47,12 +52,15 @@ function SettingsLauncher({ context }) {
     setIsOwner(null);
     setGateError(null);
 
-    loadIsBoardOwner({ boardId, userId })
-      .then((owner) => {
-        if (!cancelled) setIsOwner(owner);
+    loadSettingsAccess(
+      { boardId, columnId, userId },
+      { getColumnConfig: mondayService.getColumnConfig, loadIsBoardOwner },
+    )
+      .then((access) => {
+        if (!cancelled) setIsOwner(access.canConfigure);
       })
       .catch((err) => {
-        logger.error('SettingsLauncher', 'Failed to resolve board ownership', err);
+        logger.error('SettingsLauncher', 'Failed to resolve settings access', err);
         if (cancelled) return;
         // Fails closed, and says why rather than posing as a permission denial.
         setIsOwner(false);
@@ -62,7 +70,7 @@ function SettingsLauncher({ context }) {
     return () => {
       cancelled = true;
     };
-  }, [boardId, userId]);
+  }, [boardId, columnId, userId]);
 
   const openFullSettings = async () => {
     try {
