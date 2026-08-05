@@ -25,6 +25,7 @@ const envManager = new EnvironmentVariablesManager({ updateProcessEnv: true });
 import { createApp } from './app.js';
 import logger from './helpers/logger.js';
 import { installSdkLogFilter } from './helpers/sdk-log-filter.js';
+import { createResilientSecureStorage } from './helpers/secure-storage-resilient.js';
 import { attachAxiomServerSink, flushAxiom } from './helpers/axiomServerSink.js';
 
 // Silence apps-sdk 0.1.4's per-read console chatter (SecureStorage/Storage "Got
@@ -76,12 +77,16 @@ attachAxiomServerSink(logger, {
 
 // SecureStorage construction can throw on misconfigured platform secrets; guard it
 // so the failure SHIPS, races the flush, exits 1, and re-throws (no half-built server).
-const secureStorage = safeBootInit(
+const rawSecureStorage = safeBootInit(
   () => new SecureStorage(),
   'secure storage init',
   logger,
   { flush: flushAxiom },
 );
+// Wrap it so the platform's transient Vault hiccups (cold-start `…/vault-server…
+// /auth/gcp/login` HTML bodies, "accessing secure storage") retry instead of
+// bubbling up as 502s, and so a burst of same-key reads shares one round-trip.
+const secureStorage = createResilientSecureStorage(rawSecureStorage, { logger });
 
 const api = createMondayApi({ logger });
 const oauthClient = createMondayOauthClient({ clientId: env.clientId, clientSecret: env.clientSecret, logger });
