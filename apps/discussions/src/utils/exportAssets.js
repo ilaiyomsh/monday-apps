@@ -75,7 +75,14 @@ function normalize(raw) {
  */
 function assertWriteAccepted(res, what) {
   if (res?.data?.success === false) {
-    const reason = res?.data?.reason || res?.data?.error || 'הכתיבה נדחתה על ידי monday';
+    // round359 — monday puts an OBJECT in `error` (seen in production on the first
+    // guarded save); naive interpolation printed "[object Object]" and hid the very
+    // reason this guard exists to show. Stringify anything that is not a string.
+    const raw = res?.data?.reason ?? res?.data?.error ?? 'הכתיבה נדחתה על ידי monday';
+    let reason = raw;
+    if (typeof raw !== 'string') {
+      try { reason = JSON.stringify(raw); } catch { reason = String(raw); }
+    }
     const err = new Error(`${what}: ${reason}`);
     err.code = 'storage-rejected';
     throw err;
