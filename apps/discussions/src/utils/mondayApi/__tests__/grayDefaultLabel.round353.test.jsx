@@ -134,6 +134,29 @@ describe('round353 §3 — useStatusOptions exposes the gray label as emptyLabel
     expect(ctx.emptyLabel).toBe('טרם נבחרה');
   });
 
+  /*
+   * round354 (Codex P1 on the release PR) — an UPGRADED board provisioned with the OLD
+   * priority scheme carries "נמוכה" on id 5 (the old defaults used gray-5 for Low, LAST in
+   * display order). Exposing id 5's text unconditionally would render every empty priority
+   * cell as "נמוכה" there — unset becomes indistinguishable from Low. The gate: id 5 counts
+   * as the empty state only when it is FIRST in display order, which is where an
+   * empty-state label lives by definition (and where provisioning + the owner's manual
+   * fixes put it) — old-scheme "נמוכה" sits last and stays a plain option.
+   */
+  it('old-scheme priority (נמוכה on id 5, LAST) does NOT become the empty label', async () => {
+    await mountFor('9004', 'st4', {
+      id: 'st4',
+      settings: null,
+      settings_str: JSON.stringify({
+        labels: { 2: 'דחופה', 0: 'גבוהה', 9: 'בינונית', 5: 'נמוכה' },
+        labels_positions_v2: { 2: 0, 0: 1, 9: 2, 5: 3 },
+      }),
+    });
+    expect(ctx.emptyLabel).toBeNull();
+    // it is still a perfectly normal option — only its empty-state role is denied
+    expect(ctx.labelById[5]).toBe('נמוכה');
+  });
+
   it('a BLANK gray label yields emptyLabel null — callers keep their fallback text', async () => {
     await mountFor('9003', 'st3', {
       id: 'st3',
