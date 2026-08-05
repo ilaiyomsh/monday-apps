@@ -220,13 +220,17 @@ package: **`scripts/cleanup/README.md`**.
   `.claude/agents/cleanup-*.md` subagents; **Codex has neither, so under Codex the stage
   contracts in `scripts/cleanup/prompts/*.md` are self-enforced** — read them before doing
   cleanup work here, and the guard below is your only physical backstop.
-- **Scope is enforced, not advised.** `scripts/cleanup/guard-protected-paths.sh` blocks
-  every edit outside `apps/twyst-your-status/{src,server/src}` + the two `package.json`
-  files, and inside it blocks tests, config, build output, docs, and the
-  error/observability boot layer named in `.error-guard`. It is wired as a PreToolUse hook
-  on the executor agent — Codex's `apply_patch` coverage is version-dependent
-  (`.codex/README.md`), so treat it as self-enforced there too. Fixtures:
-  `bash scripts/cleanup/guard-protected-paths.test.sh`.
+- **Scope is enforced, not advised, on BOTH write surfaces.**
+  `guard-protected-paths.sh` (`Edit|Write|MultiEdit`) and `guard-bash-ops.py` (`Bash` —
+  deletions, redirects, in-place edits, `git` writes, package-manager scope) share one
+  decision function (`lib-path-verdict.sh`). They block everything outside
+  `apps/twyst-your-status/{src,server/src}` + the two `package.json` files, and inside it
+  block tests, config, build output, docs, and the error/observability boot layer named in
+  `.error-guard`. 82 fixtures: `bash scripts/cleanup/guard-protected-paths.test.sh`.
+  **Under Codex the Bash guard is the half that actually fires** — shell-command hooks work,
+  while `apply_patch` coverage is version-dependent (`.codex/README.md`), so treat the
+  Edit-surface rules as self-enforced and never delete a file any way but
+  `rm <one explicit path>`.
 - **Gate per batch = the blocking CI set narrowed to the app:** error-wiring audit,
   eager-import audit, type-check, lint, build, full tests (both workspaces), error-kit
   drift. Zero behaviour change; one batch = one revertable commit

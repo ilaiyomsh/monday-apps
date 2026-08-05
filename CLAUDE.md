@@ -234,11 +234,16 @@ upstream package: **`scripts/cleanup/README.md`**.
 - Stages: `bash scripts/cleanup/baseline.sh` → `/cleanup-audit` → 🚪 **human** sets batches
   to `approved` → `/cleanup-execute` → 🚪 human reads the commits → `/cleanup-verify`.
   `approved` is a human-only word; no agent ever writes it.
-- **Scope is enforced, not advised.** `scripts/cleanup/guard-protected-paths.sh` runs as a
-  PreToolUse hook on the `cleanup-executor` agent and blocks every edit outside
-  `apps/twyst-your-status/{src,server/src}` + the two `package.json` files — and inside it
-  blocks tests, config, build output, docs, and the error/observability boot layer named in
-  `.error-guard`. Fixtures: `bash scripts/cleanup/guard-protected-paths.test.sh`.
+- **Scope is enforced, not advised, on BOTH write surfaces.** PreToolUse hooks on the
+  `cleanup-executor` agent: `guard-protected-paths.sh` (`Edit|Write|MultiEdit`) and
+  `guard-bash-ops.py` (`Bash` — deletions, redirects, in-place edits, `git` writes,
+  package-manager scope), both delegating to one decision function
+  (`lib-path-verdict.sh`). They block everything outside
+  `apps/twyst-your-status/{src,server/src}` + the two `package.json` files, and inside it
+  block tests, config, build output, docs, and the error/observability boot layer named in
+  `.error-guard`. 82 fixtures: `bash scripts/cleanup/guard-protected-paths.test.sh` —
+  extend them BEFORE extending the guard; the Bash surface was missed once and an
+  unenforced guard is indistinguishable from one that passed.
 - **Gate per batch = this repo's blocking CI set narrowed to the app:** error-wiring audit,
   eager-import audit, type-check, lint, build, full tests (both workspaces), error-kit
   drift. Zero behaviour change; one batch = one revertable commit

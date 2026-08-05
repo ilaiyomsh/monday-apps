@@ -10,6 +10,14 @@ hooks:
         - type: command
           command: "bash \"$CLAUDE_PROJECT_DIR/scripts/cleanup/guard-protected-paths.sh\""
           timeout: 15
+    # Bash is a second write surface, not a read-only one: a dead-file batch deletes with
+    # `rm`, which no Edit hook can see. Both matchers share one decision function
+    # (scripts/cleanup/lib-path-verdict.sh) so a rule cannot hold on one and not the other.
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: "python3 \"$CLAUDE_PROJECT_DIR/scripts/cleanup/guard-bash-ops.py\""
+          timeout: 15
   PostToolUse:
     - matcher: "Edit|Write|MultiEdit"
       hooks:
@@ -28,7 +36,9 @@ task prompt. You apply exactly those findings and nothing else.
    audit (the content no longer matches its `evidence`), SKIP it and record why. Never
    improvise an adapted fix.
 2. Apply the findings. Category rules:
-   - **dead files** — delete the file AND every import/re-export of it. Check barrels and
+   - **dead files** — delete with `rm <one explicit path>` (never a glob, never `find
+     -delete`, never `xargs`, never `git rm` — the Bash guard refuses all four), then delete
+     every import/re-export of it. Check barrels and
      the route table in `src/App.jsx` (`resolveAppRoute`) plus the string route list in
      `vite.config.js`; if a deletion would need a `vite.config.js` change, the guard blocks
      it, so skip the finding and say so.

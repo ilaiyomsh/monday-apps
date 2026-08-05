@@ -6,10 +6,18 @@ eslint) find candidates; LLM subagents only **verify** findings, **judge** gray 
 commit. A human approves the plan between stages. Zero behaviour change, ever.
 
 **Scope: `apps/twyst-your-status`, and nothing else.** That is not a convention here, it is
-enforced: `scripts/cleanup/guard-protected-paths.sh` runs as a `PreToolUse` hook on the
-`cleanup-executor` agent and blocks any edit outside the app (38 fixtures cover it —
-`bash scripts/cleanup/guard-protected-paths.test.sh`). Onboarding a second app means a
-second copy of `cleanup-env.sh` with its own `APP_DIR`, never widening these globs.
+enforced on **both** write surfaces of the `cleanup-executor` agent — `Edit|Write|MultiEdit`
+through `guard-protected-paths.sh`, and `Bash` through `guard-bash-ops.py` — both delegating
+to the one decision function in `lib-path-verdict.sh`. 82 fixtures cover them:
+`bash scripts/cleanup/guard-protected-paths.test.sh`. Onboarding a second app means a second
+copy of `cleanup-env.sh` with its own `APP_DIR`, never widening these globs.
+
+> The Bash half was **missing** from the first version of this package, and a pre-approval
+> refutation pass is what found it: a dead-file batch deletes with `rm`, which no Edit hook
+> can see, so the most destructive operation in the whole workflow was the one operation the
+> scope guard never inspected. Nothing failed while the hole was open — an unenforced guard
+> looks exactly like a guard that passed. If you extend this package, extend the fixtures
+> first.
 
 ## The three commands
 
@@ -34,8 +42,10 @@ never widen it past what a human approved.
 |---|---|
 | `scripts/cleanup/cleanup-env.sh` | single source of truth: the app, the commands, the gate, pinned scanner versions |
 | `scripts/cleanup/baseline.sh` | Stage 0. Branch rules, green gate, metrics → `.cleanup/baseline.json` |
-| `scripts/cleanup/guard-protected-paths.sh` | `PreToolUse` scope guard (the executor's frontmatter attaches it) |
-| `scripts/cleanup/guard-protected-paths.test.sh` | 38 fixtures for the guard — a guard that stops blocking looks exactly like one that passed |
+| `scripts/cleanup/lib-path-verdict.sh` | the ONE path decision both guards call — no rule can hold on one surface and not the other |
+| `scripts/cleanup/guard-protected-paths.sh` | `PreToolUse` scope guard on `Edit\|Write\|MultiEdit` |
+| `scripts/cleanup/guard-bash-ops.py` | `PreToolUse` scope guard on `Bash` — file deletions, redirects, in-place edits, `git` writes, package-manager scope |
+| `scripts/cleanup/guard-protected-paths.test.sh` | 82 fixtures across both surfaces — a guard that stops blocking looks exactly like one that passed |
 | `scripts/cleanup/post-edit-format.sh` | `PostToolUse` per-workspace `eslint --fix`. **No prettier** — see below |
 | `scripts/cleanup/prompts/*.md` | the three stage contracts (documentation + hand-run fallback) |
 | `.claude/agents/cleanup-*.md` | scanner, verifier, auditor, executor, reviewer |
