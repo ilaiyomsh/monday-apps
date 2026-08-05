@@ -120,6 +120,20 @@ src/
   email on two rows → two messages); rows with ≠1 person skipped as
   `multi_person`. Pending = date ≤ today (Asia/Jerusalem) AND status in
   section's `includeStatusLabelIds`.
+- **Recipient label gate (round348 §E, both optional).** `digest.recipientGateColumnId`
+  (a status column on the USERS board) + `digest.recipientGateLabelId` let an
+  operator opt individual people OUT of the digest without touching anything
+  else. **EITHER field absent → the gate is off and every row qualifies**,
+  exactly like every digest before this feature — a reversed default would
+  silently mute mail for every existing tenant the moment they upgrade, with
+  nobody having touched the setting (owner decision). Label id 0 is valid;
+  compared with `!==`, never a truthy check (`digest-service.js`'s `buildDigest`).
+  A row the gate blocks is skipped with reason `not_labeled` — the SAME
+  `skippedUsers` pipeline `no_email`/`no_person`/`multi_person` already use, so
+  it needed no new wiring to reach the CSV report below. The users-board read
+  must include the gate column (`digestUsersColumnIds()` in `digest-service.js`,
+  used by both `digest-run.js` and `admin-api.js`'s preview) — omitting it makes
+  every row read as unlabeled and silently excludes everyone.
 - **THE DIGEST BODY IS AN OPERATOR-AUTHORED BLOCK LIST (0.15.0, owner decisions
   2026-08-05).** `digest.blocks` is an ordered array of `{type:'text'}` (free text
   + block-level formatting) and `{type:'cluster'}` (a מקבץ, carrying the settings
@@ -257,12 +271,13 @@ src/
   only — full secret never leaves the server).
 - **V6 scheduler — full account in `docs/scheduling.md`** (registered 2026-08-05;
   before that date NOTHING was sent automatically): `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`)
-  walks `ALLOWED_ACCOUNT_IDS`, runs tenants whose `digest.sendHour` matches the
-  current Asia/Jerusalem hour; then optional operator summary to
-  `OPERATOR_EMAIL`. The platform cron must be **hourly** (`0 * * * *` UTC) — the
-  hour filter lives in the app, so a non-hourly expression means tenants on other
-  hours never send at all. Job as stored: `retryConfig { maxRetries: 3,
-  minBackoffDuration: 60 }`, `timeout: 300`, `targetUrl /digest-send`.
+  walks `ALLOWED_ACCOUNT_IDS`, runs tenants whose `digest.sendHour` has
+  arrived-or-passed the current Asia/Jerusalem hour (§7.4 catch-up below); then
+  optional operator summary to `OPERATOR_EMAIL`. The platform cron must be
+  **hourly** (`0 * * * *` UTC) — the hour filter lives in the app, so a
+  non-hourly expression means tenants on other hours never send at all. Job as
+  stored: `retryConfig { maxRetries: 3, minBackoffDuration: 60 }`, `timeout: 300`,
+  `targetUrl /digest-send`.
   - **`-r 0` is NOT reachable from the CLI** — it treats 0 as "not supplied",
     prompts, and stores the default 3. So retries are a fact of life, and the
     handler carries the guard: the cron passes **`skipAlreadySent: true`**, which
@@ -278,6 +293,20 @@ src/
     old filter tested a `wrong_hour` skip reason no code produces, so an account
     that had merely never configured a digest counted as due on every tick — an
     hourly summary mail, measured.
+  - **§7.4 catch-up (round348).** An hour that has already passed today is a
+    catch-up candidate, not a skip — a tick that never fired for a tenant's exact
+    hour (or died mid-run) used to cost that tenant the whole day; now every
+    later tick re-attempts them, and the per-slot marker above is what makes that
+    safe (nobody already sent gets mailed twice). `due` for this purpose is NOT
+    "passed the hour gate": at the tenant's own scheduled hour it is always true
+    (even zero recipients is the expected reporting moment); on a later catch-up
+    hour it is true only when the tick actually sent or failed something —
+    otherwise every remaining hour of the day would re-report "nothing new" to
+    the operator summary AND the §5.2 CSV file, reintroducing the hourly-noise
+    bug above for a different reason. Cost: a tenant already fully sent today is
+    still re-checked against the boards every remaining hour (same board-read
+    overhead §7.3 measures for a tick that sends nobody anything) — accepted,
+    since there is no cheaper way to know "nothing left to do" without asking.
   - **Per-employee summary CSV (0.14.0, owner decision 2026-08-05 —
     `docs/scheduling.md` §5.2).** After a tick, each tenant that RAN gets a
     `multipart/mixed` mail — plain body + `digest-summary-<slot>.csv` — sent to
@@ -299,6 +328,13 @@ src/
     as "fine". Attachments need `helpers/mime-mixed.js`, which nests a
     `multipart/alternative` body **byte-for-byte** with no CTE of its own — a
     re-wrap is exactly what strips the AMP part (findings §2).
+    **A dedicated `סטטוס` (outcome) column (round348)** sits before `שגיאה`:
+    `sent`→`נשלח`, `failed`→`נכשל`, everything else (`already_sent`/`no_tasks`/
+    `skipped`)→`דולג`. `שגיאה` is unchanged (still free text, still last) — the
+    fix is filterability (a real SMTP failure vs. a benign skip used to need the
+    same free-text column), not a new reason. Both columns come from the ONE
+    lookup (`KIND_META` in `digest-summary-report.js`) so a new `kind` cannot
+    update one column and leave the other stale.
   - **`durationMs` per tenant (0.14.0)** — `tenant run finished` in the log AND
     in the tick response, so `scheduler:run` answers "does 300s suffice?" (§7.3)
     without log spelunking. It is measured with two `now()` reads around the run;
