@@ -1,5 +1,58 @@
 # Changelog
 
+## תיקון רישום ה-webhook — `change_status_column_value` דורש `columnValue` (3.15.2)
+
+**גם:** סנכרון `MANIFEST.md` מול המניפסט החי — אין שינוי מוצרי/קוד. `MANIFEST.md`
+תיעד 4 סקופים נדרשים; לאפליקציה החיה (`mapps manifest:export -a 11775054`) יש
+בפועל 8 — חסרו ארבעת הסקופים של ה-guard server מ-round322 (`me:read`,
+`account:read`, `notifications:write`, `webhooks:write`). גם תיאור התכונות עודכן
+מהתוכן האמיתי של המניפסט: עמודת הסטטוס אינה נושאת build משלה — היא מארחת את שני
+הדיאלוגים (`/picker`, `/settings`) דרך מערך `relations`. ללא באמפ גרסה נוסף —
+3.15.2 היה כבר מועמד לא-משוחרר מול main (bump-once rule), אז ההערה מצטרפת לאותו
+מספר במקום להעלות אותו שוב.
+
+רישום עמודה אצל השומר (`POST /api/guard/enroll`) החזיר **502 לכל בעלים**, וכך גם
+`/status` ו-`/bypasses`. הקונטיינר היה תקין (`/health` = 200); ה-502 היה בלוק ה-catch
+של ה-handlers עצמם. האבחון החי הראה: SecureStorage תקין (הטוקן נשמר ונקרא), טוקן ה-OAuth
+תקף (ה-`api.me()` בתוך ה-callback הצליח) — הכשל היה `monday API soft error thrown at the
+funnel`, שגיאת GraphQL רכה בתוך תשובת 200.
+
+השורש: `create_webhook` נקרא עם `event: change_status_column_value` ו-`config: {columnId}`
+בלבד. האירוע הזה **דורש גם `columnValue`**; config עם `columnId` בלבד נדחה עם
+`"This config for this event is invalid"` (`InvalidWebhookConfigException`). ה-funnel זורק
+את השגיאה הרכה וה-handler מחזיר 502 — כלומר הרישום **מעולם לא עבד** (ללא קשר ל-OAuth,
+להרשאות או לניתוב, שכולם תקינים). אומת אמפירית: `{columnId}` נדחה; `{columnId,
+columnValue: {"$any$": true}}` מתקבל.
+
+- **התיקון** (`monday-api.js` `createColumnWebhook`): `config` הפך ל-
+  `{columnId, columnValue: {"$any$": true}}` — יורה על **כל** ערך חדש בעמודה, בדיוק מה
+  שהשומר צריך (ואז מחליט לפי הכללים שלו). נשמר אותו אירוע `change_status_column_value`,
+  כך שמבנה ה-payload שה-handler מפענח (`value.label.index`) לא משתנה.
+- **הטסט חוזק**: הטסט הקודם בדק רק שה-config מכיל `"columnId"` ולכן פספס את החוסר;
+  עכשיו הוא מאמת `config.columnValue === {"$any$": true}` (נכשל על הקוד הישן).
+
+**תצפית (אותה גרסה):** הדיבוג של הבאג לעיל נחסם כי `mapps code:logs` מרנדר רק את שדה
+`message` ומשמיט את `context` — כך שכל `catch` שהתעד `logger.error('X failed', TAG,
+{error})` הראה רק `X failed` בלי הסיבה. תוקן בשלושה מישורים:
+
+- **שרבוב הסיבה ל-`message`**: כשלים ב-enroll/status/bypasses/webhook-dispatch, ב-handler
+  שינוי-הסטטוס, וב-oauth callback מצרפים עכשיו את מחרוזת השגיאה ל-message עצמו (ה-context
+  נשמר לשילוח Axiom).
+- **עקבות לתהליך שינוי-הסטטוס**: שורת `webhook received …` בכניסה ל-guard, ושורת
+  `status change ALLOWED/BLOCKED (reason) …` אחרי ההערכה — כך שינוי-סטטוס עוקב שורה-אחר-שורה.
+- **סינון רעש ה-SDK**: `installSdkLogFilter()` (helpers/sdk-log-filter.js) משתיק את שורות
+  `[SecureStorage]/[Storage.get] Got data for key` של apps-sdk 0.1.4 (5-8 לכל בקשה, ללא
+  כיבוי דרך env, וגם דלף מפתחות storage); error/warn לא מושפעים.
+
+**עמידות SecureStorage (אותה גרסה):** הלוגים הנקיים חשפו שהכשל שנותר אינו קוד אלא תשתית —
+ה-Vault של monday-code (`…/vault-server…/auth/gcp/login`) החזיר HTML לסירוגין ב-cold start
+של קונטיינר draft, מה שהפך ל-502. `createResilientSecureStorage()`
+(helpers/secure-storage-resilient.js) עוטף את ה-SecureStorage: (א) **retry** עם backoff על
+שגיאות Vault זמניות (שגיאה לא-זמנית או המיצוי הסופי עדיין נזרקים — error-guard), (ב) **איחוד
+קריאות get בו-זמניות** לאותו מפתח ל-round-trip אחד (מסך ההגדרות יורה status+bypasses+enroll
+יחד וקורא את אותם מפתחות טוקן). מקצר חשיפה לתקלות ה-Vault; ה-cold start עצמו נפתר סופית
+בקונטיינר live החם.
+
 ## 3.15.1 — מועמד הפיתוח הבא אחרי שחרור 3.15.0 ללייב
 
 אין שינוי מוצרי. 3.15.0 שוחררה ללייב (PR #623), ולכן develop מקדם את המספר למועמד

@@ -164,7 +164,7 @@ export function createOauthRouter({ tokenStore, api, oauthClient, env, logger, n
       });
       sendPage(res, 200, page('חובר בהצלחה', 'ביטולים אוטומטיים של שינויים לא-חוקיים יירשמו על שמך כשתהיה הבעלים הראשי. אפשר לסגור את הלשונית.'));
     } catch (err) {
-      logger.error('oauth callback failed', TAG, { error: String(err?.message ?? err) });
+      logger.error(`oauth callback failed: ${String(err?.message ?? err)}`, TAG, { error: String(err?.message ?? err) });
       sendPage(res, 502, page('החיבור נכשל', 'שגיאה בלתי צפויה — נסה שוב.'));
     }
   });
