@@ -171,6 +171,17 @@ Admin: multi-select "כפתורי פעולה"; primary (first) drives status fil
   privilege — a leaked form authorizes one item — and smaller than repeating the
   message-wide manifest N times. `/amp/confirm` needed no change: it verifies
   whatever manifest arrives and checks every pair against it.
+- **Responsive, card-first (owner decision 2026-08-04, same round):** the card
+  is the BASE layout and `@media (min-width:601px)` ADDS the wide one — aligned
+  columns plus a per-cluster header strip, with the in-card field captions
+  switched off. A media query is the only width signal available (no JS, no
+  viewport API, `media` attribute is amp-* only), so the fallback for a client
+  that strips queries has to be the layout that survives any width. The card
+  chrome follows the monday mobile app: rounded bordered card, a 4px stripe on
+  the inline-start edge in the CLUSTER's primary color (the pill already carries
+  the row's status, so the stripe groups instead of repeating), name on top, date
+  as a chip. The wide layout is a visual table only — same reason as always: a
+  form cannot span two cells.
 - **Rate limits re-tuned:** one POST per task instead of one per message, so
   bucket B (per `accountId:ip`) went 30 → 120/min to match bucket A. The monday
   workload is unchanged — same tasks, same writes, same complexity budget.

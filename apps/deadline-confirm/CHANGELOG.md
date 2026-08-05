@@ -2,9 +2,9 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
-## 0.13.0 — 2026-08-04 — the email updates the board as you go: no send button, a form per row
+## 0.13.0 — 2026-08-04 — the email updates the board as you go: no send button, a form per row, two layouts
 
-Two changes in one round, both to the body of the digest mail.
+Three changes in one round, all to the body of the digest mail.
 
 **1. A text field must be filled before its row's status can be picked.** In a
 cluster that maps a text column, the status tag now ships `disabled` and carries
@@ -42,6 +42,38 @@ phone, which the fixed-width table never did.
   write that had just succeeded. Accepted cost: re-tapping the same option fires
   no `change` and does not resubmit, so a failed row is retried by picking a
   different status.
+
+**3. Two layouts in one document: cards on a phone, columns on a desktop.**
+
+The card layout is the BASE and `@media (min-width: 601px)` ADDS the wide one.
+That direction is the whole decision. A media query is the only width signal an
+amp4email document has — no JS, no viewport API, and the `media` attribute
+applies to amp-* elements only — so the fallback for a client that strips queries
+must be the layout that works at any width. Card-first gives that; a table base
+with a `max-width` query would hand the same client a squashed table on a phone.
+
+On a wide screen each cluster gains a header strip and the in-card field captions
+switch off; on a narrow one the captions come back and every field stacks. Both
+column partitions (three columns, or four when a note column is mapped) use the
+SAME breakpoint, or the header strip and the rows would switch at different
+widths.
+
+The wide layout is a **visual** table, not a `<table>` — a `<form>` cannot span
+two `<td>`s, and per-row forms are the whole point. Columns align because every
+row is the same width and shares the same percentages, and those percentages stop
+short of 100% on purpose: inline-blocks carry a whitespace gap between them, and
+a full 100% wraps the status column onto its own line. The one visible difference
+from the old table is that there are no vertical grid lines.
+
+Card chrome follows the monday mobile app: rounded bordered card with a 4px
+stripe on the inline-start edge, the name on top, the date as a chip. The stripe
+takes the CLUSTER's primary color rather than the row's current status — the pill
+already shows the status, so the stripe groups the cards that belong together,
+and being per-cluster it needs no binding.
+
+A test asserts that **nothing interactive is styled inside the media query**. A
+layout bug must not be able to hide the trigger, the menu, the radio or the note
+field: at that point the email stops being able to do its job.
 
 **Signed per row.** Each form carries a manifest covering its own task only, so
 a leaked form authorizes one item, and the document is smaller than it would be

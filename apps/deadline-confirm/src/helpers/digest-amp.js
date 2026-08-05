@@ -141,6 +141,18 @@ function colorToClass(hex) {
 }
 
 /**
+ * The card's leading-edge stripe class. Taken from the CLUSTER's primary button,
+ * not from the row's current status: the pill already shows the status, so the
+ * stripe is free to do what it does in the monday mobile app — group the cards
+ * that belong together. Being per-cluster it is also static, needing no binding.
+ * @param {string} hex
+ * @returns {string} e.g. ac_fdab3d
+ */
+function accentToClass(hex) {
+  return `ac_${colorToClass(hex).slice(3)}`;
+}
+
+/**
  * @param {Iterable<string>} colors hex colors used in this message
  * @returns {string} CSS rules for .dd-trig.bg_*
  */
@@ -298,13 +310,21 @@ const STYLES_BASE = `
       .lead { font-size:14px; color:#676879; line-height:1.6; margin:0 0 18px; }
       .cluster { margin:0 0 22px; }
       .cluster-title { font-size:15px; font-weight:bold; color:#323338; margin:0 0 8px; line-height:1.4; }
-      /* One card per task — and each card IS its own form. */
-      form.row { display:block; margin:0 0 10px; padding:12px 14px; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; text-align:right; }
+      /* One card per task — and each card IS its own form. The card is the BASE
+         layout, not the fallback: a client that strips media queries shows it
+         everywhere, which is the layout that works at any width. The wide
+         layout is added in the min-width query at the end of this sheet. */
+      form.row { display:block; margin:0 0 10px; padding:12px 14px; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; text-align:right; border-right-width:4px; border-right-style:solid; border-right-color:#E6E9EF; }
+      /* Cells: stacked blocks on a phone, inline-block columns when wide. */
+      .c-name, .c-date, .c-note, .c-act { display:block; width:100%; box-sizing:border-box; }
+      .c-date { margin-top:6px; }
+      .c-note, .c-act { margin-top:10px; }
       .row-name { display:block; font-size:15px; font-weight:bold; color:#323338; line-height:1.4; }
-      .row-date { display:block; margin-top:2px; font-size:12px; color:#676879; }
-      .row-note { margin-top:10px; }
-      .row-act { margin-top:10px; }
+      .chip { display:inline-block; padding:4px 10px; border-radius:6px; background:#F5F6F8; color:#676879; font-size:12px; line-height:1.4; }
       .row-cap { display:block; margin-bottom:4px; font-size:12px; color:#676879; font-weight:500; }
+      /* Column headers — the wide layout's only extra markup. */
+      .thead { display:none; padding:0 18px 6px; }
+      .th { display:inline-block; box-sizing:border-box; font-size:12px; color:#676879; font-weight:500; text-align:right; }
       .dd-wrap { position:relative; display:inline-block; width:100%; max-width:260px; text-align:right; }
       .dd-trig {
         width:100%; height:38px; box-sizing:border-box;
@@ -356,6 +376,26 @@ const STYLES_BASE = `
       .state.err { background:#FDECEE; color:#B4222F; white-space:pre-wrap; word-break:break-word; }
       .err-detail { display:block; margin-top:6px; font-size:11px; opacity:0.9; font-family:ui-monospace,Menlo,Consolas,monospace; }
       .foot { font-size:12px; color:#9699A6; line-height:1.6; border-top:1px solid #E6E9EF; padding-top:12px; margin-top:10px; }
+      /* WIDE LAYOUT — additive on purpose (see the card comment above). A media
+         query is the only width signal an amp4email document has: no JS, no
+         viewport API, and the media attribute applies to amp-* elements only.
+         Columns line up because every row is the same width and shares these
+         percentages: there is no table element to align them, since a form
+         cannot span two cells and per-row forms are what give each row its own
+         loader. The percentages deliberately stop short of 100% — inline-blocks
+         are separated by a whitespace gap, and a full 100% wraps the last
+         column. (No literal tag names in this comment: it ships inside the
+         document, where the suite asserts that no table markup exists.) */
+      @media (min-width:601px) {
+        .thead { display:block; }
+        form.row { margin:0 0 6px; padding:10px 14px; }
+        .c-name, .c-date, .c-act { display:inline-block; vertical-align:middle; margin-top:0; }
+        .row-cap { display:none; }
+        .chip { background:transparent; padding:0; font-size:13px; }
+        .th-name, .c-name { width:43%; }
+        .th-date, .c-date { width:21%; }
+        .th-act, .c-act { width:33%; }
+      }
 `;
 
 /**
@@ -375,6 +415,16 @@ const STYLES_NOTES = `
          locked row must not look tappable. */
       .dd-trig[disabled] { opacity:0.45; box-shadow:none; }
       .dd-trig[disabled]:hover { box-shadow:none; }
+      /* A fourth column has to come out of the other three. Same breakpoint as
+         the base sheet — two different ones would let the header strip and the
+         rows switch at different widths. */
+      @media (min-width:601px) {
+        .c-note { display:inline-block; vertical-align:middle; margin-top:0; }
+        .th-name, .c-name { width:29%; }
+        .th-date, .c-date { width:15%; }
+        .th-note, .c-note { width:25%; }
+        .th-act, .c-act { width:27%; }
+      }
 `;
 
 /**
@@ -417,7 +467,7 @@ function signRow({ secret, accountId, personId, itemId, buttons, slot }) {
 function renderNoteField(task, caption) {
   const id = String(task.itemId);
   const mirror = `AMP.setState({dd:{n${id}:event.value}})`;
-  return `        <div class="row-note">
+  return `        <div class="c-note">
           <span class="row-cap">&#8207;${escapeHtml(caption)}</span>
           <input type="text" name="${escapeHtml(`note_${id}`)}" class="note-in" placeholder="${escapeHtml(NOTE_PLACEHOLDER)}"
                  on="change:${mirror};input-throttled:${mirror}">
@@ -486,7 +536,7 @@ function renderStatusControl({ formId, menuKey, task, buttons, palette, noteGate
     })
     .join('\n');
 
-  return `        <div class="row-act">
+  return `        <div class="c-act">
           <span class="row-cap">&#8207;${STATUS_CAPTION}</span>
           <div class="dd-wrap">
             <button type="button" class="dd-trig ${curCls}"${lock}
@@ -499,6 +549,32 @@ ${options}
             </div>
           </div>
         </div>`;
+}
+
+/**
+ * The cluster's column-header strip — the wide layout's only extra markup, and
+ * a plain div OUTSIDE the row forms (nothing may nest a form). It is
+ * `display:none` until the min-width query, where the per-field captions inside
+ * the cards switch off and these take over.
+ *
+ * @param {object} section
+ * @returns {string}
+ */
+function renderColumnHeader(section) {
+  const dateCaption =
+    section.dateColumnTitle && String(section.dateColumnTitle).length > 0
+      ? String(section.dateColumnTitle)
+      : 'תאריך';
+  const noteCell = sectionNoteColumn(section)
+    ? `<span class="th th-note">&#8207;${escapeHtml(
+        section.noteColumnTitle && String(section.noteColumnTitle).length > 0
+          ? String(section.noteColumnTitle)
+          : 'הערה'
+      )}</span>`
+    : '';
+  return `        <div class="thead"><span class="th th-name">&#8207;שם הפעולה</span><span class="th th-date">&#8207;${escapeHtml(
+    dateCaption
+  )}</span>${noteCell}<span class="th th-act">&#8207;${STATUS_CAPTION}</span></div>`;
 }
 
 /**
@@ -517,6 +593,7 @@ ${options}
  * @param {string} p.personId
  * @param {string} p.slot
  * @param {string} p.secret
+ * @param {string} p.accentClass the cluster's stripe class (`ac_<hex>`)
  */
 function renderRowForm({
   task,
@@ -529,6 +606,7 @@ function renderRowForm({
   personId,
   slot,
   secret,
+  accentClass,
 }) {
   const id = String(task.itemId);
   const formId = `f${clusterIndex}_${id}`;
@@ -553,7 +631,7 @@ function renderRowForm({
       : 'הערה';
   const noteField = noteColumn ? `\n${renderNoteField(task, noteCaption)}` : '';
 
-  return `      <form class="row" id="${formId}" method="post"
+  return `      <form class="row ${accentClass}" id="${formId}" method="post"
             action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
             enctype="application/x-www-form-urlencoded">
         <input type="hidden" name="a" value="${escapeHtml(String(accountId))}">
@@ -561,10 +639,8 @@ function renderRowForm({
         <input type="hidden" name="m" value="${escapeHtml(manifest)}">
         <input type="hidden" name="s" value="${escapeHtml(slot)}">
         <input type="hidden" name="sig" value="${escapeHtml(signature)}">
-        <div class="row-head">
-          <span class="row-name">&#8207;${escapeHtml(task.name)}</span>
-          <span class="row-date">&#8207;${escapeHtml(dateCaption)}: ${formatDate(task.date) || '—'}</span>
-        </div>${noteField}
+        <div class="c-name"><span class="row-name">&#8207;${escapeHtml(task.name)}</span></div>
+        <div class="c-date"><span class="chip">&#8207;${escapeHtml(dateCaption)}: ${formatDate(task.date) || '—'}</span></div>${noteField}
 ${renderStatusControl({ formId, menuKey, task, buttons, palette, noteGated: Boolean(noteColumn) })}
         <div submitting><div class="state wait">&#8207;${SUBMITTING_LABEL}</div></div>
         <div submit-success><template type="amp-mustache"><div class="state ok">${CHECK_GLYPH} {{message}}</div></template></div>
@@ -600,15 +676,22 @@ export function renderDigestAmp({
   const slot = currentSlot({ sendHour, now });
   const ddState = buildDropdownState(recipient);
   const palette = allRecipientButtons(recipient);
-  const colorCss = buildColorClassCss(collectColors(recipient));
   const notesInPlay = noteRequiredItemIds(recipient).length > 0;
-  const styles = `${STYLES_BASE}${notesInPlay ? STYLES_NOTES : ''}\n      ${colorCss}`;
+
+  /** Stripe rules, one per distinct cluster accent actually rendered. */
+  const accentRules = new Map();
 
   const clusters = (recipient.sections ?? [])
     .filter((section) => section.tasks && section.tasks.length > 0)
     .map((section, clusterIndex) => {
       const buttons = resolveSectionButtons(section, recipient.statusColumnColors);
       if (buttons.length === 0) return '';
+      const accent = buttons[0].color || NEUTRAL_STATUS;
+      const accentClass = accentToClass(accent);
+      accentRules.set(
+        accentClass,
+        `.row.${accentClass} { border-right-color:#${escapeHtml(accentClass.slice(3))}; }`
+      );
       const rows = section.tasks
         .map((task) =>
           renderRowForm({
@@ -622,16 +705,21 @@ export function renderDigestAmp({
             personId,
             slot,
             secret,
+            accentClass,
           })
         )
         .join('\n');
       return `      <div class="cluster">
         <p class="cluster-title">&#8207;${escapeHtml(section.title)}</p>
+${renderColumnHeader(section)}
 ${rows}
       </div>`;
     })
     .filter((html) => html.length > 0)
     .join('\n');
+
+  const colorCss = buildColorClassCss(collectColors(recipient));
+  const styles = `${STYLES_BASE}${notesInPlay ? STYLES_NOTES : ''}\n      ${colorCss}\n      ${[...accentRules.values()].join('\n      ')}`;
 
   const noteHint = notesInPlay
     ? '<p class="lead">&#8207;בשורות שיש בהן שדה טקסט — קודם ממלאים את השדה. לא ניתן לבחור סטטוס לפני שיש בו טקסט: התגית נעולה, ומשתחררת ברגע שהשדה מולא.</p>'

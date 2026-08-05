@@ -148,6 +148,22 @@ src/
   for that reason (`helpers/rate-limit.js` — the constants live there because
   `index.js` binds a port on import), and a one-selection reply says "עודכן" /
   "היה מעודכן כבר" instead of counting.
+- **TWO LAYOUTS, ONE DOCUMENT (0.13.0):** a card per task on a narrow screen,
+  aligned columns + a per-cluster header strip (`.thead`) on a wide one. The
+  DIRECTION is the decision: the card layout is the BASE and the wide layout is
+  added inside `@media (min-width:601px)`. A media query is the only width signal
+  an amp4email document has (no JS, no viewport API, and the `media` attribute
+  applies to amp-* elements only), so a client that strips queries must land on
+  the layout that works at any width — cards. Never invert this to a table base +
+  `max-width`. Both variants (3-column, and 4-column when a note column is
+  mapped) MUST use the same breakpoint, or the header strip and the rows switch at
+  different widths. The wide layout is a VISUAL table, not a `<table>`: a `<form>`
+  cannot span two `<td>`s. Columns line up because every row is the same width and
+  shares the same percentages — which is why those percentages deliberately stop
+  short of 100%: inline-blocks carry a whitespace gap between them and a full 100%
+  wraps the status column onto its own line, under the row. Nothing interactive
+  may ever be styled inside the query (`tests/digest-amp-responsive.test.js`
+  asserts it): a layout bug must not be able to hide a tap target.
 - **Per-task required note (0.12.0):** a digest section MAY map
   `noteColumnId` + `noteColumnTitle` (a TEXT column on the TASKS board). When it
   does, every row of that cluster gets a text field **inside that row's form**
