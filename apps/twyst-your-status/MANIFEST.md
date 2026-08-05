@@ -5,14 +5,17 @@
 - App ID: `11775054`
 - Column feature type: `AppFeatureStatusColumn`
 - Settings feature type: column settings placement
-- Client-only CDN app (no monday-code server)
+- Since round324 (same-origin unification) the SPA is served BY the app's
+  monday-code server (`server/public`), so every feature URL is on `<BASE_URL>`
+  (the monday-code URL from `mapps code:status`), not the CDN. One deploy, one
+  origin — see `docs/GUARD-ACTIVATION.md` and `CHANGELOG.md`.
 - Feature URLs (configure on the draft/live version):
-  - On-click dialog: `<CDN_ORIGIN>/picker`
-  - Column settings (tiny shell): `<CDN_ORIGIN>/settings`
+  - On-click dialog: `<BASE_URL>/picker`
+  - Column settings (tiny shell): `<BASE_URL>/settings`
   - Full settings overlay (opened from the shell via `openAppFeatureModal`):
-    `<CDN_ORIGIN>/settings-full`
+    `<BASE_URL>/settings-full`
   - Required-fields fill form (opened from the picker via `openAppFeatureModal`):
-    `<CDN_ORIGIN>/required-fields` — **no Developer Center entry**, opened at runtime
+    `<BASE_URL>/required-fields` — **no Developer Center entry**, opened at runtime
 
 Do **not** bind an On-Hover Dialog to `/picker` — hover dialogs close when the
 pointer leaves the cell, which feels like the picker vanishing while choosing.
@@ -191,11 +194,29 @@ in **parallel**.
   key to a stale value with no effect left to fire: a permanently blank dialog with
   the overlay already down. Pinned by `pickerRequestPhases.test.jsx`.
 
-## Who may configure — board owners only (3.7.0)
+## Who may configure — the column's OWNERS (round322; board-owner gate is the fallback)
 
-The settings shell (`/settings`) offers its button only to a **board owner**; everyone else
-gets `Only board owners can configure` in its place. The decision is one pure function,
-`src/domain/boardOwnerAccess.js`, fed by `src/services/boardOwnerGate.js`.
+Owner decision (round322): each column carries its OWN owner list. The settings shell
+(`/settings`) offers its button only to a listed **column owner**; everyone else sees
+`רק בעלי העמודה יכולים לנהל את ההגדרות` and is not exposed to the settings at all.
+
+- **The gate is `services/settingsAccess.loadSettingsAccess`.** It reads the column's
+  stored `owners` (`domain/columnOwners`): an ADOPTED column (owners present) admits only
+  its listed owners; an UNADOPTED column (legacy blob / never configured) falls back to
+  the legacy **board-owner** gate below, so the board's owners can do — and, by saving,
+  CLAIM — the first setup. The first configurer becomes owner #1 and the PRIMARY owner
+  (`bootstrapOwners`), seeded into the draft the moment the screen opens.
+- **The PRIMARY owner is the guard's revert identity.** `owners.primaryOwnerId` is the
+  user a guard revert is written AS (see Limits / docs/GUARD-ACTIVATION.md). Owner-list
+  edits go through the pure mutations `addOwner`/`removeOwner`/`setPrimaryOwner`, which hold
+  the invariants: always exactly one primary, never left owner-less, crown moves only by an
+  explicit act. `migrateSettings` carries `owners` only when present, so every pre-round322
+  blob keeps its exact 3-key shape (18 suites toEqual it).
+
+### Legacy board-owner gate (fallback for unadopted columns)
+
+The decision is one pure function, `src/domain/boardOwnerAccess.js`, fed by
+`src/services/boardOwnerGate.js`.
 
 - **An owner is a user owner OR a member of an owning TEAM.** `boards { owners { id } }`
   answers the first; monday also lets a board be owned by teams (`team_owners`), and a
@@ -363,10 +384,46 @@ owners only — an owner who holds the board through a team would not see the bu
 
 ## Limits
 
-Protection applies only inside this app's picker. Direct board edits, API writes,
-and automations are not blocked (no server webhook/rollback).
+Client-side protection applies only inside this app's picker — but since round322
+the app also carries a **guard server** (monday-code component of this same App ID,
+`server/`): a `change_status_column_value` webhook per enrolled column re-validates
+every change — whoever made it, from whatever surface, including the cold-load
+window before the app feature binds — against the SAME rules (the bundle inlines
+`src/domain/`), and REVERTS an illegal change to its previous value with a
+notification to the acting user (owner copy, pinned in code:
+"השינוי שבוצע בוטל - מכיוון שאינו עומד בהגדרות העמודה"). The revert is written AS the
+column's PRIMARY OWNER (monday attributes a write to the token's user, so the revert
+needs that owner's token — the primary owner authorizes once, no bot/service identity;
+if they have not authorized, the guard logs and does NOT revert, fail-open and
+loop-safe). **Auto-revert is OPT-IN (round323): `settings.autoRevert` gates it, default
+off = MONITORING ONLY.** Every detected bypass is RECORDED to a per-column audit log
+regardless; the revert only fires when the owner turned auto-revert on. The settings
+screen carries an owners-only **bypass monitor** (count by week/month/year/custom, with
+per-event drill-down: when, item, who, and the specific rule broken) so owners decide on
+the number. Source labelling is honest — the webhook's `app` field splits API from a
+native editor, and nothing finer (mobile vs the cold-load window are indistinguishable).
+Endpoint `GET /api/guard/bypasses` (owner-auth) feeds it; `src/domain/reportingPeriod.js`
++ `bypassReason.js` + `services/bypassMonitor.js` are the tested pieces. Correction, not
+prevention: the illegal value is visible until the revert lands, a guard outage
+means no enforcement (fail-open), and creation-time values (forms/duplicate/
+import) emit no change event — out of v1 scope by owner decision. Activation and
+enrollment: docs/GUARD-ACTIVATION.md; architecture record:
+docs/BYPASS-PROOF-DECISION.md. Note the guard ENFORCES hiddenLabelIds too —
+supersedes the older "automation/API may still set them" contract for enrolled
+columns.
 
-The owner gate is the same kind of protection: a client-side gate on a client-only app. It
-withholds the UI, it does not defend the storage key — anyone able to call monday's storage
-API with this app's context could still write the configuration. Making that impossible
-needs a server, which this app deliberately does not have.
+The owner's authorization uses monday's **OAuth 2.1 (New OAuth Flow)** — PKCE S256,
+expiring access tokens, single-use rotating refresh tokens with automatic single-flight
+refresh; a dead grant flags `reauth_required` (server/src/services/monday-oauth-client.js
++ the refresh-aware token store in stores.js). The account reader (`:token:default`) is a
+POINTER to an owner, not a token copy, so rotation is never burned by a stale duplicate.
+The guard server also ships WARN/ERROR to Axiom via the vendored error-kit stack
+(helpers/axiomServerSink.js + process-guards.js, drift-locked), gated on the `AXIOM_*`
+secrets (fail-soft: no secrets → nothing ships, logs stay on `mapps code:logs`).
+
+The owner gate is still a client-side gate: it withholds the UI, it does not defend
+the storage key — anyone able to call monday's storage API with this app's context
+could still write the configuration. The guard server narrows the blast radius (its
+ENROLL endpoint verifies board ownership server-side), but rules storage itself is
+still client-writable; moving rules to server-authoritative storage is the recorded
+next hardening step in docs/BYPASS-PROOF-DECISION.md.

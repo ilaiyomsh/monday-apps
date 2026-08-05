@@ -2,6 +2,7 @@ packages:
   - "apps/*"
   - "packages/*"
   - "apps/axis/*"
+  - "apps/twyst-your-status/server"
   - "apps/axis/services/*"
 
 allowBuilds:

@@ -1,0 +1,8 @@
+# The repo is pnpm; a committed npm lockfile drifts out of sync with package.json
+# and breaks the monday-code buildpack (see .mappsignore). Never commit one.
+package-lock.json
+
+# The SPA (round324 same-origin unification): CI builds the client bundle and
+# stages it here, then ships it in the code:push archive (see .mappsignore).
+# It is a build artifact — never committed, rebuilt fresh every deploy.
+public/
