@@ -21,13 +21,18 @@ vi.mock('../MondayContext.jsx', () => ({
 }));
 
 import { TemplatesProvider, useTemplates } from '../TemplatesContext.jsx';
+import { typeExportAssetsKey, legacyTypeExportAssetsKey } from '../../utils/exportAssets.js';
 
 const KEYS = {
   topics: 'discussions_templates_7',
   people: 'discussions_participant_templates_7',
   types: 'discussions_type_templates_7',
   colors: 'discussions_type_colors_7',
-  assets: (name) => `discussions_export_assets_type_7_${encodeURIComponent(name)}`,
+  // round360 — writes land on the digest key; the legacy %-encoded key is where a
+  // pre-round360 account's data may still sit, so the seed uses it (proving the
+  // rename migrates it forward too).
+  assets: (name) => typeExportAssetsKey({ instanceId: '7' }, name),
+  legacyAssets: (name) => legacyTypeExportAssetsKey({ instanceId: '7' }, name),
 };
 
 const stored = {};
@@ -56,7 +61,7 @@ beforeEach(async () => {
       { id: 'TT2', discussionType: 'תכנון', topics: [], participants: [] },
     ] },
     [KEYS.colors]: { colors: { 'סבב': 'done-green', 'תכנון': 'purple' } },
-    [KEYS.assets('סבב')]: { templateDocx: 'UEsDBBQ=' },
+    [KEYS.legacyAssets('סבב')]: { templateDocx: 'UEsDBBQ=' },
   });
   storage.getItem.mockImplementation(async (key) => (stored[key] ? value(stored[key]) : {}));
   // round358 — saves now VERIFY by reading the key back, so the mock has to echo
@@ -87,9 +92,11 @@ describe('TemplatesContext.renameDiscussionType', () => {
       .toEqual(['סבב שבועי', null]);
     expect(JSON.parse(writeFor(KEYS.people)[1]).templates[0].discussionType).toBe('סבב שבועי');
 
-    // 4. the export brand file moves to the new key and the old one is dropped
+    // 4. the export brand file moves to the new name's digest key, and BOTH of the
+    // old name's keys (digest + legacy) are dropped
     expect(JSON.parse(writeFor(KEYS.assets('סבב שבועי'))[1]).templateDocx).toBe('UEsDBBQ=');
     expect(storage.deleteItem).toHaveBeenCalledWith(KEYS.assets('סבב'));
+    expect(storage.deleteItem).toHaveBeenCalledWith(KEYS.legacyAssets('סבב'));
 
     // and the in-memory store the UI reads is updated too
     await waitFor(() => expect(ctx.typeTemplates.map((t) => t.discussionType)).toEqual(['סבב שבועי', 'תכנון']));

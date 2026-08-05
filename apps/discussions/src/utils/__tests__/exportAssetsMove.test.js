@@ -7,10 +7,13 @@ vi.mock('../mondayApi/monday-client.js', () => ({
 
 import { monday } from '../mondayApi/monday-client.js';
 import logger from '../logger.js';
-import { moveTypeExportAssets } from '../exportAssets.js';
+import { moveTypeExportAssets, typeExportAssetsKey, legacyTypeExportAssetsKey } from '../exportAssets.js';
 
 const context = { instanceId: '42' };
-const keyFor = (name) => `discussions_export_assets_type_42_${encodeURIComponent(name)}`;
+// round360 — writes land on the digest key; the legacy %-encoded key is still
+// CLEARED on rename (either generation may hold the old name's data).
+const keyFor = (name) => typeExportAssetsKey(context, name);
+const legacyKeyFor = (name) => legacyTypeExportAssetsKey(context, name);
 
 /*
  * round304 — a type's export assets (its logos / uploaded header-footer .docx) are
@@ -33,6 +36,7 @@ describe('moveTypeExportAssets', () => {
     expect(monday.storage.setItem.mock.calls[0][0]).toBe(keyFor('סבב שבועי'));
     expect(JSON.parse(monday.storage.setItem.mock.calls[0][1]).templateDocx).toBe('UEsDBBQ=');
     expect(monday.storage.deleteItem).toHaveBeenCalledWith(keyFor('סבב'));
+    expect(monday.storage.deleteItem).toHaveBeenCalledWith(legacyKeyFor('סבב'));
   });
 
   it('does nothing when the old type has no assets (never writes an empty blob)', async () => {

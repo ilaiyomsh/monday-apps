@@ -165,6 +165,12 @@ both views; the discussions-only modals (Settings/Templates/Create) stay inside 
   CONFIG merges per field via `resolveExportTemplate`; the ASSETS merge per field via
   `resolveExportAssets` — picking one asset tier whole is the bug that silently dropped an
   uploaded header/footer `.docx` whenever a higher tier happened to carry a logo.
+  **A type's asset storage key digests the type name (round360):** monday.storage REJECTS
+  writes under keys embedding percent-encoded Hebrew (undocumented; verified in production —
+  the same file saved fine under the short ASCII instance key), so `typeExportAssetsKey`
+  hashes the name (FNV-1a ×2 + byte length) and reads fall back to the legacy `%`-encoded
+  key, migrating a hit forward loss-proof (legacy deleted only after the digest write is
+  accepted). Never build a storage key from user-entered text — digest it.
   **People lines (round357):** the separator between a person's parts is written as its OWN
   BOLD run (`formatParticipantSegments`) — bold is a run property, so a single composed
   string could never carry it; `formatParticipantLabel` is derived from the same segments.

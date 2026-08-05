@@ -24,7 +24,12 @@ import { monday } from './mondayApi/monday-client.js';
 import logger from './logger.js';
 
 const STORAGE_KEY_BASE = 'discussions_export_assets';
-const TIMEOUT_MS = 5000;
+// round361 — 30s, NOT the 5s inherited from the tiny-settings storage pattern:
+// these values are multi-MB (base64 logos + .docx), and a read that trips a short
+// timeout is swallowed into EMPTY downstream — rendering exactly like "nothing was
+// ever saved", which is the owner-reported symptom this round chases.
+export const EXPORT_ASSETS_TIMEOUT_MS = 30000;
+const TIMEOUT_MS = EXPORT_ASSETS_TIMEOUT_MS;
 // Conservative ceiling under monday's ~6MB per-object storage limit.
 export const EXPORT_ASSETS_MAX_BYTES = 6 * 1024 * 1024;
 
@@ -35,11 +40,62 @@ function instanceKey(context) {
   return `${STORAGE_KEY_BASE}_${instanceId}`;
 }
 
-// round254 — per-discussion-TYPE export assets (logos + uploaded .docx) live under
-// their own key so a type's export template can carry its own brand binaries,
-// independent of the instance globals. Keyed by instance + the type label TEXT
-// (encoded, since type names are free Hebrew text with spaces).
-function typeKey(context, typeName) {
+/*
+ * round360 — the type key must be SHORT, PURE-ASCII and BOUNDED for any type name.
+ *
+ * The round254 key embedded the type's free Hebrew name percent-encoded
+ * (`..._type_<inst>_%D7%93%D7%99...`), and monday's storage backend REJECTS that
+ * write with `{ success:false, error:{…} }` — an undocumented constraint (the docs
+ * state only a 256-char cap; observed in production 2026-08-05: the very same
+ * .docx saved fine under the short ASCII instance key and was rejected under the
+ * type key, with the type value the SMALLER of the two). Before round358 nothing
+ * read the setItem response, so every per-type asset save with a Hebrew name had
+ * been failing silently since round254.
+ *
+ * So the name goes through a deterministic digest instead: FNV-1a over the UTF-8
+ * bytes, twice with different seeds (16 hex chars total), plus the byte length —
+ * collision odds are negligible for a per-instance handful of type names, and the
+ * key stays valid no matter how long or non-Latin the name is. Reads fall back to
+ * the legacy key (accounts whose ASCII-named types DID land there) and migrate
+ * forward — see loadTypeExportAssets.
+ */
+function fnv1a(bytes, seed) {
+  let h = seed >>> 0;
+  for (let i = 0; i < bytes.length; i += 1) {
+    h ^= bytes[i];
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function typeNameDigest(typeName) {
+  const bytes = new TextEncoder().encode(String(typeName || ''));
+  const a = fnv1a(bytes, 0x811c9dc5).toString(16).padStart(8, '0');
+  const b = fnv1a(bytes, 0x811c9dc5 ^ 0x5bd1e995).toString(16).padStart(8, '0');
+  return `${a}${b}-${bytes.length.toString(36)}`;
+}
+
+export function typeExportAssetsKey(context, typeName) {
+  const instanceId = context?.instanceId || context?.boardId || 'default';
+  return `${STORAGE_KEY_BASE}_type_${instanceId}_${typeNameDigest(typeName)}`;
+}
+
+/*
+ * round361 — the type's stored CONFIG carries a tiny `hasTemplateDocx` flag that
+ * persists through the small, reliable ASCII type-templates key. When the flag says
+ * a file was saved but the (separately stored, multi-MB) assets came back without
+ * one, the file existed and the ASSET side lost or failed to read it — a state the
+ * editor must present differently from "no file was ever uploaded". Callers must
+ * pass the type's OWN stored config (or null), never the seeded system fallback —
+ * the system template legitimately claims ITS file, not the type's.
+ */
+export function missingStoredTemplateDocx(ownExportTemplate, assets) {
+  return ownExportTemplate?.hasTemplateDocx === true && !assets?.templateDocx;
+}
+
+// The pre-round360 key. NEVER written any more; still read as a fallback so an
+// account where the legacy write landed (short ASCII type names) keeps its assets.
+export function legacyTypeExportAssetsKey(context, typeName) {
   const instanceId = context?.instanceId || context?.boardId || 'default';
   return `${STORAGE_KEY_BASE}_type_${instanceId}_${encodeURIComponent(typeName || '')}`;
 }
@@ -75,7 +131,22 @@ function normalize(raw) {
  */
 function assertWriteAccepted(res, what) {
   if (res?.data?.success === false) {
-    const reason = res?.data?.reason || res?.data?.error || 'הכתיבה נדחתה על ידי monday';
+    // round359 — monday puts an OBJECT in `error` (seen in production on the first
+    // guarded save); naive interpolation printed "[object Object]" and hid the very
+    // reason this guard exists to show. Stringify anything that is not a string.
+    const raw = res?.data?.reason ?? res?.data?.error ?? 'הכתיבה נדחתה על ידי monday';
+    let reason = raw;
+    if (typeof raw !== 'string') {
+      try {
+        reason = JSON.stringify(raw);
+      } catch {
+        // un-stringifiable reject payload (circular) — throw the storage error
+        // right here with the best text we can get.
+        const err = new Error(`${what}: ${String(raw)}`);
+        err.code = 'storage-rejected';
+        throw err;
+      }
+    }
     const err = new Error(`${what}: ${reason}`);
     err.code = 'storage-rejected';
     throw err;
@@ -168,12 +239,44 @@ export async function saveExportAssets(context, assets) {
  * round254 — load a discussion-TYPE's own export assets (its brand binaries), or
  * EMPTY when none. Best-effort; never throws.
  */
-export async function loadTypeExportAssets(context, typeName) {
+export async function loadTypeExportAssets(context, typeName, { strict = false } = {}) {
   if (!typeName) return { ...EMPTY };
+  const key = typeExportAssetsKey(context, typeName);
   try {
-    const res = await withTimeout(monday.storage.getItem(typeKey(context, typeName)));
+    const res = await withTimeout(monday.storage.getItem(key));
     if (res?.data?.value) return normalize(JSON.parse(res.data.value));
   } catch (err) {
+    /*
+     * round361 — the type EDITOR asks for strict:true: swallowing a read failure
+     * into EMPTY renders exactly like "no file was ever saved", which is how a
+     * failing read masqueraded as a lost save. The default stays fail-soft so the
+     * export dialog keeps degrading to the lower asset tiers.
+     */
+    if (strict) throw err;
+    logger.warn('exportAssets', 'קריאת נכסי הייצוא של סוג הדיון נכשלה — משתמשים בברירת המחדל', err);
+    return { ...EMPTY };
+  }
+  /*
+   * round360 — the digest key is empty: fall back to the legacy (%-encoded) key,
+   * and migrate a hit forward so the next read finds it under the digest key.
+   * Migration is best-effort and loss-proof: the legacy key is deleted only after
+   * the digest write was ACCEPTED (assertWriteAccepted), and any failure leaves
+   * the legacy data in place and still returns it.
+   */
+  try {
+    const legacyRes = await withTimeout(monday.storage.getItem(legacyTypeExportAssetsKey(context, typeName)));
+    if (!legacyRes?.data?.value) return { ...EMPTY };
+    const assets = normalize(JSON.parse(legacyRes.data.value));
+    try {
+      const res = await withTimeout(monday.storage.setItem(key, JSON.stringify(assets)));
+      assertWriteAccepted(res, 'העברת נכסי הייצוא של סוג הדיון למפתח החדש');
+      await withTimeout(monday.storage.deleteItem(legacyTypeExportAssetsKey(context, typeName)));
+    } catch (err) {
+      logger.warn('exportAssets', 'העברת נכסי הייצוא של הסוג למפתח החדש נכשלה — ממשיכים לקרוא מהמפתח הישן', err);
+    }
+    return assets;
+  } catch (err) {
+    if (strict) throw err;
     logger.warn('exportAssets', 'קריאת נכסי הייצוא של סוג הדיון נכשלה — משתמשים בברירת המחדל', err);
   }
   return { ...EMPTY };
@@ -194,7 +297,9 @@ export async function moveTypeExportAssets(context, oldName, newName) {
   if (estimateAssetsBytes(existing) === 0) return false;
   try {
     await saveTypeExportAssets(context, to, existing);
-    await withTimeout(monday.storage.deleteItem(typeKey(context, from)));
+    // round360 — the old name may hold data under either key generation.
+    await withTimeout(monday.storage.deleteItem(typeExportAssetsKey(context, from)));
+    await withTimeout(monday.storage.deleteItem(legacyTypeExportAssetsKey(context, from)));
     return true;
   } catch (err) {
     // The copy may have landed even if the delete didn't; either way the renamed
@@ -221,10 +326,10 @@ export async function saveTypeExportAssets(context, typeName, assets) {
     throw err;
   }
   try {
-    const res = await withTimeout(monday.storage.setItem(typeKey(context, typeName), JSON.stringify(clean)));
+    const res = await withTimeout(monday.storage.setItem(typeExportAssetsKey(context, typeName), JSON.stringify(clean)));
     if (context?.instanceId || context?.boardId) {
       assertWriteAccepted(res, 'שמירת נכסי הייצוא של סוג הדיון');
-      await verifyWriteLanded(typeKey(context, typeName), clean, 'שמירת נכסי הייצוא של סוג הדיון');
+      await verifyWriteLanded(typeExportAssetsKey(context, typeName), clean, 'שמירת נכסי הייצוא של סוג הדיון');
     }
   } catch (err) {
     if (context?.instanceId || context?.boardId) {
