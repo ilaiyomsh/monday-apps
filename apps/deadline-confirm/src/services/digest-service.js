@@ -186,6 +186,12 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
   // R2 invariant (v6 §6): a recipient's digest contains ONLY tasks assigned
   // to that recipient — R1/R2 and the attribution wording depend on it.
   const recipients = [];
+  // Employees the users board DID resolve (email + exactly one person) who have
+  // nothing pending. They are not recipients — there is no mail to send them —
+  // but the per-employee summary file (§5.2) must still carry a row for each,
+  // because "nobody is missing" is the only claim that file makes. Reported
+  // separately so no consumer can mistake them for someone who got mail.
+  const emptyRecipients = [];
   for (const r of userRecipients) {
     const sections = [];
     let taskCount = 0;
@@ -222,7 +228,10 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
         })),
       });
     }
-    if (taskCount === 0) continue;
+    if (taskCount === 0) {
+      emptyRecipients.push({ email: r.email, name: r.name, personId: r.personId });
+      continue;
+    }
     recipients.push({
       email: r.email,
       name: r.name,
@@ -237,5 +246,5 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
     });
   }
 
-  return { recipients, skippedUsers };
+  return { recipients, skippedUsers, emptyRecipients };
 }
