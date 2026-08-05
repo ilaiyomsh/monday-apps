@@ -18,7 +18,7 @@ stated ordering dependencies inside `ColumnSettings.jsx` and `PersonPicker.jsx`)
 | batch | category | findings | risk | status |
 |---|---|---|---|---|
 | 1 | comments | 9 | S | done |
-| 2 | dead files | 3 | M | approved |
+| 2 | dead files | 3 | M | done |
 | 3 | unused exports | 5 | M | approved |
 | 4 | unused deps | 1 | M | approved |
 | 5 | duplication consolidation | 10 | L | pending |
@@ -155,7 +155,7 @@ supports.
 ---
 
 ## Batch 2 — dead files: three unreferenced modules
-risk: M | status: approved
+risk: M | status: done
 
 All three verified dead by an independent adversarial pass (not just knip): no importer, no
 dynamic/lazy import, no barrel, no string/route reference in `vite.config.js:23`, no
