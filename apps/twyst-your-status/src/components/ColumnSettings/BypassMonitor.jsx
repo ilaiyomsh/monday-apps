@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { describeViolation } from '../../domain/bypassReason';
 import { periodRange, previousRange } from '../../domain/reportingPeriod';
 import { fetchBypasses } from '../../services/bypassMonitor';
 import logger from '../../utils/logger';
+import BypassEventRow from './BypassEventRow';
 
 /**
  * BypassMonitor — the owners-only panel that surfaces how many status changes
@@ -28,11 +28,6 @@ const PERIODS = [
   { key: 'year', label: 'השנה' },
   { key: 'custom', label: 'טווח תאריכים' },
 ];
-
-const SURFACE = {
-  native: { icon: '🖥️', short: 'עורך נייטיבי', text: 'השינוי בוצע דרך העורך הנייטיבי של monday — במובייל (שם פיצ׳רים של עמודות אינם נטענים) או בשניות הראשונות לטעינת הלוח, לפני שהאפליקציה נטענה. ה-webhook אינו מבחין בין שני המצבים.' },
-  api: { icon: '🔌', short: 'API / אינטגרציה', text: 'השינוי הגיע דרך ה-API של monday — טוקן אישי או אינטגרציה חיצונית — שאינם עוברים דרך הבורר של האפליקציה.' },
-};
 
 function BypassMonitor({ boardId, columnId, labelsById, columnsById, usersById }) {
   const [period, setPeriod] = useState('week');
@@ -153,68 +148,23 @@ function BypassMonitor({ boardId, columnId, labelsById, columnsById, usersById }
               {n === 0 ? (
                 <div className="tw-mon-empty">🎉 לא זוהו עקיפות בתקופה זו. כל שינויי הסטטוס עברו דרך הבורר.</div>
               ) : (
-                events.map((e, i) => renderEvent(e, i, {
-                  open: openIdx === i,
-                  onToggle: () => setOpenIdx((cur) => (cur === i ? null : i)),
-                  labelsById, columnsById, usersById,
-                }))
+                events.map((e, i) => (
+                  <BypassEventRow
+                    key={i}
+                    event={e}
+                    open={openIdx === i}
+                    onToggle={() => setOpenIdx((cur) => (cur === i ? null : i))}
+                    labelsById={labelsById}
+                    columnsById={columnsById}
+                    usersById={usersById}
+                  />
+                ))
               )}
             </div>
           )}
         </>
       )}
     </section>
-  );
-}
-
-function fmtWhen(ts) {
-  const d = new Date(ts);
-  const MON = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
-  const pad = (x) => (x < 10 ? '0' : '') + x;
-  return { day: `${d.getDate()} ${MON[d.getMonth()]}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, year: d.getFullYear() };
-}
-
-function renderEvent(e, i, { open, onToggle, labelsById, columnsById, usersById }) {
-  const who = usersById?.[String(e.userId)] ?? `משתמש ${e.userId}`;
-  const surface = SURFACE[e.surface === 'api' ? 'api' : 'native'];
-  const when = fmtWhen(e.ts);
-  const technical = describeViolation(e.classification ?? {}, labelsById ?? {}, columnsById ?? {}, who);
-  const fromName = e.fromLabelName || (e.fromLabelId === null ? '— ריק —' : `#${e.fromLabelId}`);
-  const toName = e.toLabelName || (e.toLabelId === null ? '— ריק —' : `#${e.toLabelId}`);
-  return (
-    <div className={`tw-mon-ev${open ? ' open' : ''}`} key={i}>
-      <button type="button" className="tw-mon-ev-row" aria-expanded={open} onClick={onToggle}>
-        <span className="tw-mon-ev-when"><b>{when.day}</b>{when.time}</span>
-        <span className="tw-mon-ev-mid">
-          <span className="tw-mon-ev-item">{e.itemName || `פריט ${e.itemId}`}</span>
-          <span className="tw-mon-ev-trans">{fromName} <span className="tw-mon-arrow">←</span> {toName}</span>
-          <span className="tw-mon-ev-who">שינה: <b>{who}</b></span>
-        </span>
-        <span className="tw-mon-ev-tags">
-          <span className="tw-mon-surface">{surface.icon} {surface.short}</span>
-          <span className={`tw-mon-status ${e.reverted ? 'reverted' : 'monitored'}`}>
-            {e.reverted ? '● הוחזרה אוטומטית' : '● זוהתה — לא הוחזרה'}
-          </span>
-        </span>
-      </button>
-      {open && (
-        <div className="tw-mon-ev-detail">
-          <div className="tw-mon-dt">
-            <span className="tw-mon-dt-h">איך זה עקף את האפליקציה</span>
-            <p>{surface.text}</p>
-          </div>
-          <div className="tw-mon-dt">
-            <span className="tw-mon-dt-h">למה זה מנוגד להגדרות</span>
-            <p>{technical}</p>
-          </div>
-          <div className="tw-mon-dt-meta">
-            <span>אייטם: <b>{e.itemName || e.itemId}</b></span>
-            <span>מי שינה: <b>{who}</b></span>
-            <span>מתי: <b>{when.day} {when.year} · {when.time}</b></span>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 

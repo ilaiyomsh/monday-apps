@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AttentionBox, Button, Heading } from '@vibe/core';
 import { emptyLabelRule, validateSettings } from '../../domain/settingsSchema';
 import { isSupportedFormColumnType } from '../../domain/columnFields';
@@ -13,15 +12,12 @@ import {
 } from '../../domain/columnOwners';
 import {
   buildCreateLabelPayload,
-  buildStatusLabelsUpdatePayload,
   buildUpdateStatusColumnMutation,
   createLabelsDraft,
   ensureDefaultLabelRow,
   findCreatedLabel,
-  hasPendingLabelEdits,
   insertLabelBeforeDefault,
   pruneSettingsForActiveLabels,
-  renumberDraftIndexes,
   reorderLabelsDraft,
 } from '../../domain/statusLabelDraft';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';
@@ -33,510 +29,22 @@ import { enrollColumnGuard } from '../../services/guardEnroll';
 import { startGuardAuthorization } from '../../services/guardAuthorize';
 import { getGuardStatus } from '../../services/guardStatus';
 import mondayService from '../../services/mondayService';
+import { syncStatusLabels } from '../../services/statusLabelsSync';
 import BypassMonitor from './BypassMonitor';
+import LabelCard from './LabelCard';
+import OwnersEditor from './OwnersEditor';
 import { loadAccountTeams } from '../../services/teamsAccess';
 import useColumnSettings from '../../hooks/useColumnSettings';
-import { useDismissOnOutside } from '../../hooks/useDismissOnOutside';
 import logger from '../../utils/logger';
-import { clampOverlayLeft } from '../../utils/overlayPlacement';
 import { VERSION_LABEL } from '../../utils/versionLabel';
 import ErrorState, { SETTINGS_LOAD_ERROR_MESSAGE } from '../shared/ErrorState';
 import LoadingState from '../shared/LoadingState';
-import { PersonPicker } from '../shared/PersonPicker';
-import StatusColorPicker from './StatusColorPicker';
 import './ColumnSettings.css';
 
 const TEAMS_SCOPE_HINT =
   'חסר הסקופ teams:read — בחירת צוותים לא זמינה.';
 
 const byIdMap = (list, valueOf) => Object.fromEntries((list ?? []).map((x) => [String(x.id), valueOf(x)]));
-
-function OptionChecklist({ options, values, disabled, onChange, emptyText }) {
-  const selected = new Set((values ?? []).map(String));
-  if (!options.length) {
-    return <p className="twyst-field-empty">{emptyText}</p>;
-  }
-  return (
-    <div className="twyst-check-list" role="group">
-      {options.map((option) => {
-        const id = String(option.id);
-        return (
-          <label key={id} className="twyst-check-row">
-            <input
-              type="checkbox"
-              checked={selected.has(id)}
-              disabled={disabled || option.disabled}
-              onChange={() => {
-                const next = new Set(selected);
-                if (next.has(id)) next.delete(id);
-                else next.add(id);
-                onChange([...next]);
-              }}
-            />
-            <span>{option.label}</span>
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Custom dropdown — matches settings field chrome (not native <select>). */
-function SelectDropdown({
-  id,
-  value,
-  options,
-  disabled,
-  onChange,
-  placeholder = 'בחירה',
-  emptyText = 'אין אפשרויות',
-}) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState(null);
-  const triggerRef = useRef(null);
-  const menuRef = useRef(null);
-  const selected = options.find((option) => String(option.value) === String(value));
-  const label = selected?.label || placeholder;
-
-  useDismissOnOutside(open, [menuRef, triggerRef], () => setOpen(false));
-
-  const openMenu = () => {
-    if (disabled) return;
-    try {
-      const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const width = Math.max(rect.width, 200);
-      const left = clampOverlayLeft(rect.left, width, window.innerWidth);
-      setPos({ top: rect.bottom + 4, left, width });
-      setOpen(true);
-    } catch (err) {
-      logger.error('SelectDropdown', 'Failed to open dropdown', err);
-    }
-  };
-
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        id={id}
-        type="button"
-        className={`twyst-select-trigger${open ? ' is-open' : ''}`}
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => (open ? setOpen(false) : openMenu())}
-      >
-        <span className={`twyst-select-value${!selected ? ' is-placeholder' : ''}`}>{label}</span>
-        <span className="twyst-select-chevron" aria-hidden="true">▾</span>
-      </button>
-      {open && pos && createPortal(
-        <div
-          ref={menuRef}
-          className="twyst-select-menu"
-          role="listbox"
-          style={{
-            position: 'fixed',
-            top: pos.top,
-            left: pos.left,
-            width: pos.width,
-            zIndex: 10000,
-          }}
-        >
-          {options.length === 0 ? (
-            <div className="twyst-select-empty">{emptyText}</div>
-          ) : (
-            options.map((option) => {
-              const isActive = String(option.value) === String(value);
-              return (
-                <button
-                  key={String(option.value) || '__none__'}
-                  type="button"
-                  role="option"
-                  aria-selected={isActive}
-                  className={`twyst-select-option${isActive ? ' is-active' : ''}`}
-                  onClick={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                  }}
-                >
-                  {option.label}
-                </button>
-              );
-            })
-          )}
-        </div>,
-        document.body,
-      )}
-    </>
-  );
-}
-
-/** Small inline SVG icons — the text glyphs (↑ ↓ הסרה) read as an afterthought. */
-function ChevronUpIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M3.5 10 8 5.5 12.5 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function ChevronDownIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M3.5 6 8 10.5 12.5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function TrashIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M2.5 4h11M6.5 4V2.8a.8.8 0 0 1 .8-.8h1.4a.8.8 0 0 1 .8.8V4m2.7 0-.5 9.2a1 1 0 0 1-1 .95H5.3a1 1 0 0 1-1-.95L3.8 4M6.5 7v4M9.5 7v4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function LabelCard({
-  label,
-  hidden,
-  rule,
-  users,
-  teams,
-  teamsAvailable,
-  columns,
-  peopleColumns,
-  usedColors,
-  transitionTargets,
-  saving,
-  isFirst,
-  isLast,
-  onRename,
-  onRecolor,
-  onRemove,
-  onMove,
-  onToggleHidden,
-  onChangeRule,
-}) {
-  // Accordion closed by default for every label — never auto-open on config.
-  const [open, setOpen] = useState(false);
-  const [requiredOpen, setRequiredOpen] = useState(false);
-  const [transitionsOpen, setTransitionsOpen] = useState(false);
-
-  const selectedActors = useMemo(() => {
-    const people = (rule.allowedUserIds ?? []).map((id) => {
-      const match = users.find((user) => String(user.id) === String(id));
-      return match
-        ? { id: String(match.id), name: match.name, kind: 'person' }
-        : { id: String(id), name: String(id), kind: 'person' };
-    });
-    const teamEntries = (rule.allowedTeamIds ?? []).map((id) => {
-      const match = teams.find((team) => String(team.id) === String(id));
-      return match
-        ? { id: String(match.id), name: match.name, kind: 'team' }
-        : { id: String(id), name: String(id), kind: 'team' };
-    });
-    return [...people, ...teamEntries];
-  }, [rule.allowedUserIds, rule.allowedTeamIds, users, teams]);
-
-  const gatePeopleColumnId = rule.requiredPeopleColumnIds?.[0] ?? '';
-  const gatePeopleTitle = peopleColumns.find((column) => column.id === gatePeopleColumnId)?.title;
-  const peopleGateOptions = useMemo(() => ([
-    { value: '', label: 'ללא הגבלה' },
-    ...peopleColumns.map((column) => ({ value: column.id, label: column.title })),
-  ]), [peopleColumns]);
-
-  /*
-   * round321 — transitions. The rule field is an ARRAY only while restricted
-   * (see settingsSchema); no array = every target allowed, which is what the
-   * all-checked checklist stores back as `null` so old blobs stay byte-identical.
-   */
-  const restricted = Array.isArray(rule.nextLabelIds);
-  const allowedNext = restricted ? new Set(rule.nextLabelIds.map(String)) : null;
-  const isTargetChecked = (id) => (allowedNext === null ? true : allowedNext.has(String(id)));
-  const toggleTarget = (id) => {
-    const next = transitionTargets
-      .filter((target) => (String(target.id) === String(id)
-        ? !isTargetChecked(target.id)
-        : isTargetChecked(target.id)))
-      .map((target) => String(target.id));
-    onChangeRule(label.id, {
-      nextLabelIds: next.length === transitionTargets.length ? null : next,
-    });
-  };
-
-  const summaryBits = [];
-  if (hidden) summaryBits.push('מוסתר');
-  if (rule.allowedUserIds?.length || rule.allowedTeamIds?.length) {
-    const n = (rule.allowedUserIds?.length ?? 0) + (rule.allowedTeamIds?.length ?? 0);
-    summaryBits.push(`${n} מורשים`);
-  }
-  if (gatePeopleTitle) summaryBits.push(gatePeopleTitle);
-  if (rule.requiredColumnIds?.length) summaryBits.push(`${rule.requiredColumnIds.length} שדות חובה`);
-  if (restricted) summaryBits.push(rule.nextLabelIds.length > 0 ? `מעברים: ${rule.nextLabelIds.length}` : 'ללא מעברים');
-
-  const requiredCount = rule.requiredColumnIds?.length ?? 0;
-  const cardName = label.isDefaultEmpty === true && !label.label.trim() ? 'ברירת המחדל' : label.label;
-
-  /*
-   * The grey DEFAULT label — monday's empty status. Its card carries the one thing that
-   * IS editable about it, the text, and nothing that is not: monday forces the colour to
-   * grey and refuses to delete the label once it exists, so a colour picker and a remove
-   * button here would be two controls that lie. Leaving the text empty is a valid state
-   * (and the one a fresh column is in) — nothing is written until something is typed.
-   */
-  const isDefaultLabel = label.isDefaultEmpty === true;
-
-  return (
-    <article className={`twyst-label-card${open ? ' is-open' : ''}${isDefaultLabel ? ' is-default' : ''}`}>
-      <div className="twyst-label-identity">
-        {isDefaultLabel ? (
-          <span
-            className="twyst-color-circle is-static"
-            style={{ background: label.color }}
-            title="ברירת המחדל של monday — תמיד אפור"
-            aria-hidden="true"
-          />
-        ) : (
-          <StatusColorPicker
-            colorValue={label.colorValue}
-            hex={label.color}
-            usedColorEnums={usedColors}
-            disabled={saving}
-            onChange={(next) => onRecolor(label.clientKey, next)}
-          />
-        )}
-        <input
-          className="twyst-label-name-input"
-          type="text"
-          value={label.label}
-          aria-label={isDefaultLabel ? 'שם לייבל ברירת המחדל' : 'שם הלייבל'}
-          placeholder={isDefaultLabel ? 'ללא טקסט' : undefined}
-          disabled={saving}
-          onChange={(event) => onRename(label.clientKey, event.target.value)}
-        />
-        <div className="twyst-label-actions">
-          {isDefaultLabel ? (
-            <span className="twyst-label-default-tag">ברירת מחדל</span>
-          ) : (
-            <>
-              <div className="twyst-label-order" role="group" aria-label="סדר הלייבל">
-                <button
-                  type="button"
-                  className="twyst-icon-btn"
-                  disabled={saving || isFirst}
-                  aria-label="הזז למעלה"
-                  title="הזז למעלה"
-                  onClick={() => onMove(label.clientKey, -1)}
-                >
-                  <ChevronUpIcon />
-                </button>
-                <button
-                  type="button"
-                  className="twyst-icon-btn"
-                  disabled={saving || isLast}
-                  aria-label="הזז למטה"
-                  title="הזז למטה"
-                  onClick={() => onMove(label.clientKey, 1)}
-                >
-                  <ChevronDownIcon />
-                </button>
-              </div>
-              <button
-                type="button"
-                className="twyst-icon-btn is-danger"
-                disabled={saving}
-                aria-label="הסרה"
-                title="הסרה"
-                onClick={() => onRemove(label.clientKey)}
-              >
-                <TrashIcon />
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/*
-        Rendered for a NEW label too, which is the point of 3.9.0. Its rules are held
-        under the draft's client key ("new:1") and moved onto the id monday assigns in
-        the same save — see handleSave. This section used to be hidden until the label
-        existed, so creating one and restricting it took two visits with nothing on the
-        card to say why the accordion was missing.
-      */}
-      <div className="twyst-label-access">
-        <div className="twyst-label-access-bar">
-          <label className="twyst-check">
-            <input
-              type="checkbox"
-              checked={hidden}
-              disabled={saving}
-              onChange={() => onToggleHidden(label.id)}
-            />
-            <span>מוסתר בבורר</span>
-          </label>
-          {/* The configuration at a glance, without opening anything: one quiet chip
-              per active restriction. Rendered beside the toggle (not inside it) so a
-              chip's text never leaks into the button's accessible name. */}
-          {!open && summaryBits.length > 0 && (
-            <span className="twyst-summary-chips" aria-hidden="false">
-              {summaryBits.map((bit, chipIndex) => (
-                // Index-qualified key: one bit is an admin-chosen people-column
-                // TITLE, which may equal another bit's literal text (review P3).
-                <span key={`${chipIndex}-${bit}`} className="twyst-summary-chip">{bit}</span>
-              ))}
-            </span>
-          )}
-          <button
-            type="button"
-            className="twyst-text-btn twyst-accordion-toggle"
-            aria-expanded={open}
-            disabled={saving}
-            onClick={() => setOpen((current) => !current)}
-          >
-            <span className={`twyst-accordion-chevron${open ? ' is-open' : ''}`} aria-hidden="true">▾</span>
-            {open ? 'הסתר הרשאות' : 'הרשאות'}
-          </button>
-        </div>
-
-        {open && (
-          <div className="twyst-permissions">
-            <div className="twyst-section-title">מי רשאי לבחור את הלייבל</div>
-            <div className="twyst-field twyst-field-actors">
-              <span className="twyst-field-label">אנשים וצוותים מורשים</span>
-              <PersonPicker
-                selected={selectedActors}
-                users={users}
-                teams={teamsAvailable ? teams : []}
-                bordered
-                onChange={(actors) => {
-                  const nextActors = actors || [];
-                  onChangeRule(label.id, {
-                    allowedUserIds: nextActors
-                      .filter((actor) => actor.kind !== 'team')
-                      .map((actor) => String(actor.id)),
-                    allowedTeamIds: nextActors
-                      .filter((actor) => actor.kind === 'team')
-                      .map((actor) => String(actor.id)),
-                  });
-                }}
-              />
-            </div>
-
-            <div className="twyst-field twyst-field-people-gate">
-              <label className="twyst-field-label" htmlFor={`people-gate-${label.clientKey}`}>
-                חייב להופיע בעמודת אנשים
-              </label>
-              <SelectDropdown
-                id={`people-gate-${label.clientKey}`}
-                value={gatePeopleColumnId}
-                options={peopleGateOptions}
-                disabled={saving || peopleColumns.length === 0}
-                placeholder="ללא הגבלה"
-                emptyText="אין עמודות אנשים בלוח"
-                onChange={(nextValue) => onChangeRule(label.id, {
-                  requiredPeopleColumnIds: nextValue ? [nextValue] : [],
-                })}
-              />
-            </div>
-
-            <div className="twyst-field twyst-field-required">
-              <button
-                type="button"
-                className="twyst-collapse-toggle"
-                aria-expanded={requiredOpen}
-                disabled={saving}
-                onClick={() => setRequiredOpen((current) => !current)}
-              >
-                <span className={`twyst-accordion-chevron${requiredOpen ? ' is-open' : ''}`} aria-hidden="true">▾</span>
-                <span className="twyst-field-label">שדות חובה במעבר</span>
-                {requiredCount > 0 && (
-                  <span className="twyst-collapse-count">{requiredCount}</span>
-                )}
-              </button>
-              {requiredOpen && (
-                <OptionChecklist
-                  options={columns.map((column) => ({
-                    id: column.id,
-                    label: column.title,
-                    disabled: !isSupportedFormColumnType(column.type),
-                  }))}
-                  values={rule.requiredColumnIds}
-                  disabled={saving}
-                  emptyText="אין עמודות זמינות"
-                  onChange={(next) => onChangeRule(label.id, { requiredColumnIds: next })}
-                />
-              )}
-            </div>
-
-            {/*
-              round321 — transitions FROM this label: which labels the picker offers
-              once this one is the current status. All checked = unrestricted (stored
-              as no rule at all); a subset = only those; none = a terminal status.
-              The default (grey) card is the EMPTY state's source — its rule, keyed
-              by the reserved id 5, governs what may be picked first.
-            */}
-            <div className="twyst-field twyst-field-transitions">
-              <button
-                type="button"
-                className="twyst-collapse-toggle"
-                aria-expanded={transitionsOpen}
-                disabled={saving}
-                onClick={() => setTransitionsOpen((current) => !current)}
-              >
-                <span className={`twyst-accordion-chevron${transitionsOpen ? ' is-open' : ''}`} aria-hidden="true">▾</span>
-                <span className="twyst-field-label">מעברים מותרים</span>
-                {restricted && (
-                  <span className="twyst-collapse-count">{rule.nextLabelIds.length}</span>
-                )}
-              </button>
-              {transitionsOpen && (
-                transitionTargets.length === 0 ? (
-                  <div className="twyst-transition-list">
-                    <p className="twyst-field-empty">אין לייבלים נוספים בעמודה.</p>
-                    {/* A stored restriction with zero visible targets would otherwise
-                        be UNCLEARABLE — the checkboxes are the only other writer. */}
-                    {restricted && (
-                      <button
-                        type="button"
-                        className="twyst-text-btn"
-                        disabled={saving}
-                        onClick={() => onChangeRule(label.id, { nextLabelIds: null })}
-                      >
-                        ביטול ההגבלה
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div
-                    className="twyst-transition-list"
-                    role="group"
-                    aria-label={`מעברים מותרים מ${cardName}`}
-                  >
-                    <p className="twyst-field-hint">
-                      אחרי הלייבל הזה יוצעו בבורר רק הלייבלים המסומנים. השארת כולם
-                      מסומנים = ללא הגבלה.
-                    </p>
-                    {transitionTargets.map((target) => (
-                      <label key={target.id} className="twyst-transition-chip">
-                        <input
-                          type="checkbox"
-                          aria-label={target.label}
-                          checked={isTargetChecked(target.id)}
-                          disabled={saving}
-                          onChange={() => toggleTarget(target.id)}
-                        />
-                        <span className="twyst-transition-dot" style={{ background: target.color }} aria-hidden="true" />
-                        <span className="twyst-transition-name">{target.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                )
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </article>
-  );
-}
 
 function ColumnSettings({ context, variant = 'overlay' }) {
   const isOverlay = variant === 'overlay';
@@ -834,50 +342,13 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         .filter((label) => !label.isDefaultEmpty || label.label.trim() !== '' || liveHasDefaultLabel)
         .map((label) => String(label.id));
 
-      if (hasPendingLabelEdits(labelsDraft, labelsBaseline)) {
-        const revisionData = await mondayService.query(GET_STATUS_COLUMN_REVISION, {
-          boardIds: [String(boardId)],
-          columnIds: [columnId],
-        });
-        const liveColumn = revisionData?.boards?.[0]?.columns?.[0];
-        const revision = liveColumn?.revision;
-        if (!revision) {
-          throw new Error('חסר revision לעמודת הסטטוס — לא ניתן לעדכן לייבלים');
-        }
-        const liveFresh = normalizeStatusLabels(liveColumn.settings);
-        /*
-         * Renumber to 0..n-1 HERE, after the pending-edits check and before the payload:
-         * the payload sends positions, with deactivated rows packed above the actives so
-         * no two indexes collide. Doing it BEFORE `hasPendingLabelEdits` would read as an
-         * edit on any column with a removed label and fire this mutation on every save.
-         */
-        const orderedDraft = renumberDraftIndexes(labelsDraft);
-        const payload = buildStatusLabelsUpdatePayload(orderedDraft, liveFresh);
-        const mutation = buildUpdateStatusColumnMutation(payload);
-        await mondayService.query(mutation, {
-          boardId: String(boardId),
-          columnId,
-          revision: String(revision),
-        });
-
-        const refreshed = await mondayService.query(GET_STATUS_COLUMN_REVISION, {
-          boardIds: [String(boardId)],
-          columnIds: [columnId],
-        });
-        const refreshedColumn = refreshed?.boards?.[0]?.columns?.[0];
-        const refreshedLabels = normalizeStatusLabels(refreshedColumn?.settings);
-        activeLabelIds = refreshedLabels
-          .filter((label) => !label.isDeactivated)
-          .map((label) => String(label.id));
-
-        /*
-         * Re-seed the label draft from what monday now HAS, so a second save attempt —
-         * after a storage failure, or the validation error below — starts from the
-         * persisted state rather than replaying edits that already landed.
-         */
-        const reseeded = ensureDefaultLabelRow(createLabelsDraft(refreshedLabels));
-        setLabelsDraft(reseeded);
-        setLabelsBaseline(reseeded);
+      const synced = await syncStatusLabels({
+        boardId, columnId, labelsDraft, labelsBaseline,
+      });
+      if (synced) {
+        activeLabelIds = synced.activeLabelIds;
+        setLabelsDraft(synced.reseededDraft);
+        setLabelsBaseline(synced.reseededDraft);
       }
 
       // prune rebuilds the labels/hidden shape; re-attach the owner list (round322)
@@ -1129,64 +600,14 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         )}
 
         <section className="twyst-owners" aria-label="בעלי העמודה">
-          <div className="twyst-settings-toolbar-title">
-            <span className="twyst-settings-section-title">בעלי העמודה</span>
-            <span className="twyst-settings-count">{draftOwners?.ownerIds.length ?? 0}</span>
-          </div>
-          <p className="twyst-owners-note">
-            רק בעלי העמודה רואים ומנהלים את ההגדרות. הבעל הראשי הוא מי שעל שמו יירשם
-            ביטול אוטומטי של שינוי שאינו עומד בהגדרות.
-          </p>
-          <div className="twyst-field twyst-field-actors">
-            <span className="twyst-field-label">הוספת בעלים</span>
-            <PersonPicker
-              selected={(draftOwners?.ownerIds ?? []).map((id) => ({ kind: 'person', id }))}
-              users={metadata.users}
-              teams={[]}
-              bordered
-              onChange={(actors) => {
-                const nextIds = new Set(
-                  (actors || []).filter((actor) => actor.kind !== 'team').map((actor) => String(actor.id)),
-                );
-                const currentIds = draftOwners?.ownerIds ?? [];
-                nextIds.forEach((id) => { if (!currentIds.includes(id)) addOwnerId(id); });
-                currentIds.forEach((id) => { if (!nextIds.has(id)) removeOwnerId(id); });
-              }}
-            />
-          </div>
-          <ul className="twyst-owners-list" aria-label="רשימת בעלי העמודה">
-            {(draftOwners?.ownerIds ?? []).map((ownerId) => {
-              const owner = metadata.users.find((user) => String(user.id) === ownerId);
-              const isPrimary = draftOwners?.primaryOwnerId === ownerId;
-              const isLast = (draftOwners?.ownerIds.length ?? 0) <= 1;
-              return (
-                <li key={ownerId} className="twyst-owner-row">
-                  <span className="twyst-owner-name">{owner?.name ?? `משתמש ${ownerId}`}</span>
-                  <label className="twyst-owner-primary">
-                    <input
-                      type="radio"
-                      name="twyst-primary-owner"
-                      checked={isPrimary}
-                      disabled={saving}
-                      onChange={() => makePrimaryOwner(ownerId)}
-                      aria-label={`הגדר כבעלים ראשי: ${owner?.name ?? ownerId}`}
-                    />
-                    בעלים ראשי
-                  </label>
-                  <button
-                    type="button"
-                    className="twyst-owner-remove"
-                    disabled={saving || isLast}
-                    onClick={() => removeOwnerId(ownerId)}
-                    aria-label={`הסרת בעלים: ${owner?.name ?? ownerId}`}
-                    title={isLast ? 'חייב להישאר לפחות בעלים אחד' : 'הסרת בעלים'}
-                  >
-                    הסרה
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <OwnersEditor
+            draftOwners={draftOwners}
+            users={metadata.users}
+            saving={saving}
+            onAddOwner={addOwnerId}
+            onRemoveOwner={removeOwnerId}
+            onMakePrimary={makePrimaryOwner}
+          />
 
           <label className="twyst-autorevert">
             <input
