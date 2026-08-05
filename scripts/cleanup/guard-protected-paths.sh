@@ -2,7 +2,7 @@
 # PreToolUse hook (Edit|Write|MultiEdit) for the cleanup-executor subagent.
 #
 # Reads the hook JSON from stdin. exit 0 = allow, exit 2 = block and send stderr back to
-# the agent as the reason. Together with its sibling guard-bash-ops.sh (same hook, matcher
+# the agent as the reason. Together with its sibling guard-bash-ops.py (same hook, matcher
 # Bash) this is the physical half of "cleanup, twyst-your-status ONLY" — the prompts say it,
 # these two decide it. Both delegate to ONE decision function in lib-path-verdict.sh so a
 # rule can never hold on one surface and not the other.

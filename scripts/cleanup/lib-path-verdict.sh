@@ -2,7 +2,7 @@
 # Shared path decision for the twyst-your-status cleanup guards.
 #
 # ONE function, TWO callers: guard-protected-paths.sh (PreToolUse on Edit|Write|MultiEdit)
-# and guard-bash-ops.sh (PreToolUse on Bash). They existed as one Edit-only guard until a
+# and guard-bash-ops.py (PreToolUse on Bash). They existed as one Edit-only guard until a
 # pre-approval refutation pass pointed out the hole: a dead-file batch deletes files with
 # `rm`, which never reaches an Edit hook, so the scope guard could not see the single most
 # destructive operation in the whole workflow. Keeping the decision here means a rule can
