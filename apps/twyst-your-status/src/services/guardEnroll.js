@@ -38,7 +38,7 @@
  *   fetchImpl?: typeof fetch,
  *   timeoutMs?: number,                   // default 8s — the caller awaits this
  * }} [deps]
- * @returns {Promise<'disabled'|'enrolled'|'not_activated'|'failed'>}
+ * @returns {Promise<'disabled'|'enrolled'|'not_activated'|'not_board_owner'|'failed'>}
  */
 
 import logger from '../utils/logger.js';
