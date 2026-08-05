@@ -86,8 +86,11 @@ export function createOauthRouter({ tokenStore, api, oauthClient, env, logger, n
     // round328 — PIN the consent to the session's account. auth.monday.com uses the
     // browser's ACTIVE monday session, so a multi-account user silently consents on
     // the wrong account: the token stores under the wrong identity, the settings
-    // line never turns "connected", and every revert is skipped. The slug host
-    // (<slug>.monday.com) forces the authorize page onto this account.
+    // line never turns "connected", and every revert is skipped. Per monday's OAuth
+    // docs the slug HOST only sets the default account — the `subdomain` query
+    // param is what actually forces it (Codex P2) — so send both; the callback's
+    // user-identity check stays as the hard net either way.
+    if (session.slug) params.set('subdomain', session.slug);
     const authorizeBase = session.slug
       ? `https://${session.slug}.monday.com/oauth2/authorize`
       : AUTHORIZE_URL;

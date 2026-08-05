@@ -101,9 +101,19 @@ describe('GET /oauth/start', () => {
     expect(res.status).toBe(302);
     const url = new URL(res.headers.location);
     expect(url.origin + url.pathname).toBe('https://acme-co.monday.com/oauth2/authorize');
+    // monday docs: the slug HOST is only the default; the subdomain PARAM is what
+    // forces the account — both must be present.
+    expect(url.searchParams.get('subdomain')).toBe('acme-co');
     // Same OAuth params ride the pinned host.
     expect(url.searchParams.get('client_id')).toBe('cid');
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+  });
+
+  it('sends no subdomain param when the sessionToken carries no slug', async () => {
+    const res = await request(createApp(makeDeps())).get(
+      `/oauth/start?st=${encodeURIComponent(sessionToken())}`
+    );
+    expect(new URL(res.headers.location).searchParams.get('subdomain')).toBe(null);
   });
 
   it('ignores a malformed slug (would-be hostname injection) and falls back to auth.monday.com', async () => {
