@@ -15,6 +15,7 @@ import type {
   Board,
   DigestPreviewResponse,
   DigestRawSendResponse,
+  DigestRunScheduledResponse,
   DigestSendResponse,
 } from '../types';
 import type { DigestDraft } from '../draft';
@@ -73,6 +74,12 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const [sendResult, setSendResult] = useState<DigestSendResponse | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
 
+  // Round348 — run the scheduled action by hand: same send as above, plus the
+  // per-employee CSV report (§5.2) that only the cron produced until now.
+  const [runPhase, setRunPhase] = useState<'idle' | 'confirm' | 'sending'>('idle');
+  const [runResult, setRunResult] = useState<DigestRunScheduledResponse | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+
   // AMP debug lane: the preview's amp4email document, editable, sent as typed.
   const [ampDraft, setAmpDraft] = useState('');
   const [ampTo, setAmpTo] = useState('');
@@ -113,6 +120,16 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const boardOptions = boards.map((b) => toOption(b.id, b.name));
   const peopleOptions = usersColumns.filter((c) => c.type === 'people').map((c) => toOption(c.id, c.title));
   const emailOptions = usersColumns.filter((c) => c.type === 'email').map((c) => toOption(c.id, c.title));
+  // Recipient label gate (round348 §E) — a status column on the SAME users
+  // board, plus one of its labels. Both optional; see the hint below the row.
+  const gateColumnOptions = usersColumns.filter((c) => c.type === 'status').map((c) => toOption(c.id, c.title));
+  const gateLabelOptions: Option[] = (
+    usersColumns.find((c) => c.id === digest.recipientGateColumnId)?.labels ?? []
+  ).map((l) => toOption(String(l.id), l.label));
+  const gateLabelValue =
+    digest.recipientGateLabelId !== null
+      ? (gateLabelOptions.find((o) => o.value === String(digest.recipientGateLabelId)) ?? null)
+      : null;
 
   const loadPreview = async (recipient: string | null) => {
     setPreviewLoading(true);
@@ -214,6 +231,23 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
     }
   };
 
+  const doRunScheduled = async () => {
+    setRunPhase('sending');
+    setRunError(null);
+    setRunResult(null);
+    try {
+      const res = await apiFetch<DigestRunScheduledResponse>('/api/digest/run-scheduled', {
+        method: 'POST',
+      });
+      setRunResult(res);
+    } catch (err) {
+      logger.error('admin', 'digest_run_scheduled_failed', err);
+      setRunError(guardMessage(err));
+    } finally {
+      setRunPhase('idle');
+    }
+  };
+
   return (
     <>
       <section className="dc-section">
@@ -248,6 +282,8 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                       usersBoardId: opt?.value ?? null,
                       usersPeopleColumnId: null,
                       usersEmailColumnId: null,
+                      recipientGateColumnId: null,
+                      recipientGateLabelId: null,
                     })
                   }
                   clearable={false}
@@ -295,6 +331,43 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                 />
               </div>
             </div>
+            <div className="dc-row">
+              <div className="dc-field">
+                <label>עמודת סטטוס לסינון נמענים (אופציונלי)</label>
+                <Dropdown
+                  placeholder={usersColumnsLoading ? 'טוען עמודות…' : 'ללא סינון — כולם מקבלים'}
+                  disabled={!digest.usersBoardId || usersColumnsLoading}
+                  options={gateColumnOptions}
+                  value={findOption(gateColumnOptions, digest.recipientGateColumnId)}
+                  onChange={(opt: Option | null) =>
+                    onChange({
+                      recipientGateColumnId: opt?.value ?? null,
+                      recipientGateLabelId: null,
+                    })
+                  }
+                  clearable
+                />
+              </div>
+              <div className="dc-field">
+                <label>לייבל שמאשר קבלת מייל</label>
+                <Dropdown
+                  placeholder={!digest.recipientGateColumnId ? 'בחרו קודם עמודת סטטוס' : 'בחרו לייבל'}
+                  disabled={!digest.recipientGateColumnId}
+                  options={gateLabelOptions}
+                  value={gateLabelValue}
+                  onChange={(opt: Option | null) =>
+                    onChange({ recipientGateLabelId: opt ? Number(opt.value) : null })
+                  }
+                  clearable
+                />
+              </div>
+            </div>
+            <div className="dc-hint">
+              ברירת מחדל — <b>ללא סינון</b>: כל שורה בלוח המשתמשים מקבלת את המייל, בדיוק כמו היום.
+              אם בוחרים עמודה <b>וגם</b> לייבל, רק שורות שמסומן להן הלייבל הזה יקבלו את המייל —
+              דרך לכבות את המייל לאדם ספציפי בלי לגעת בשאר ההגדרות. שורה שנחסמה כך תופיע בדוח
+              ה-CSV עם הסיבה "לא מסומן לקבלת מייל".
+            </div>
           </>
         )}
       </section>
@@ -321,6 +394,11 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
             יש שינויים שלא נשמרו — התצוגה המקדימה והשליחה משקפות את ההגדרות השמורות בלבד.
           </div>
         )}
+        <div className="dc-hint">
+          <b>שליחה עכשיו</b> שולחת את המייל המסכם לכל הנמענים, מיד.{' '}
+          <b>הרצת הפעולה המתוזמנת</b> עושה את אותו הדבר <b>וגם</b> מפיקה ושולחת את דוח ה-CSV
+          לתיבת השולח — בדיוק כמו הרצה אוטומטית של הקרון.
+        </div>
         <div className="dc-row">
           <Button
             kind={Button.kinds.SECONDARY}
@@ -347,9 +425,29 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
               </Button>
             </>
           )}
+          {runPhase !== 'confirm' ? (
+            <Button
+              kind={Button.kinds.SECONDARY}
+              onClick={() => setRunPhase('confirm')}
+              loading={runPhase === 'sending'}
+              disabled={runPhase === 'sending'}
+            >
+              הרצת הפעולה המתוזמנת
+            </Button>
+          ) : (
+            <>
+              <Button color={Button.colors.NEGATIVE} onClick={() => void doRunScheduled()}>
+                לאשר הרצה לכל הנמענים + דוח
+              </Button>
+              <Button kind={Button.kinds.TERTIARY} onClick={() => setRunPhase('idle')}>
+                ביטול
+              </Button>
+            </>
+          )}
         </div>
         {previewError && <div className="dc-error">{previewError}</div>}
         {sendError && <div className="dc-error">{sendError}</div>}
+        {runError && <div className="dc-error">{runError}</div>}
 
         {sendResult && (
           <div className="dc-field">
@@ -368,6 +466,30 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                 {sendResult.skippedUsers.map((s) => s.name).join(', ')}
               </div>
             )}
+          </div>
+        )}
+
+        {runResult && (
+          <div className="dc-field">
+            <label>{runResult.ok ? 'ההרצה הסתיימה בהצלחה ✓' : 'ההרצה הסתיימה עם שגיאות'}</label>
+            <ul style={{ margin: 0, paddingInlineStart: 18 }}>
+              {runResult.results.map((r) => (
+                <li key={r.email} className={r.ok ? 'dc-success' : 'dc-error'}>
+                  {r.name} ({r.email}) — {r.ok ? `נשלחו ${r.taskCount} משימות ✓` : `נכשל: ${r.error ?? ''}`}
+                </li>
+              ))}
+              {runResult.results.length === 0 && <li className="dc-hint">אין נמענים עם משימות ממתינות — לא נשלח דבר.</li>}
+            </ul>
+            {runResult.skippedUsers.length > 0 && (
+              <div className="dc-hint">
+                דולגו {runResult.skippedUsers.length} שורות בלוח המשתמשים (חסר אימייל או איש):{' '}
+                {runResult.skippedUsers.map((s) => s.name).join(', ')}
+              </div>
+            )}
+            <div className="dc-hint">
+              משך ריצה: {runResult.durationMs.toLocaleString('en-US')} מ״ש · דוח ה-CSV{' '}
+              {runResult.reportSent ? 'נשלח לתיבת השולח שלכם ✓' : 'לא נשלח (אין תיבה מחוברת, או שהשליחה נכשלה)'}
+            </div>
           </div>
         )}
 
@@ -526,7 +648,9 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                           ? 'חסר איש'
                           : s.reason === 'multi_person'
                             ? 'יותר מאיש אחד'
-                            : s.reason;
+                            : s.reason === 'not_labeled'
+                              ? 'לא מסומן לקבלת מייל'
+                              : s.reason;
                     return `${s.name} (${reason})`;
                   })
                   .join(', ')}

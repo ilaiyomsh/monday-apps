@@ -33,7 +33,12 @@ import { generateSecret, maskSecret } from '../services/secret.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
 import { renderDigestPlain } from '../helpers/digest-plain.js';
 import { buildMultipartAlternative } from '../helpers/mime-alternative.js';
-import { buildDigest, digestTaskColumnIds, decorateRecipientSections } from '../services/digest-service.js';
+import {
+  buildDigest,
+  digestTaskColumnIds,
+  digestUsersColumnIds,
+  decorateRecipientSections,
+} from '../services/digest-service.js';
 import {
   DIGEST_FONTS,
   FONT_SIZE_MAX,
@@ -49,6 +54,7 @@ import {
   sectionsFromBlocks,
 } from '../services/digest-blocks.js';
 import { runDigestForAccount, todayInJerusalem as todayInJerusalemFromRun } from '../services/digest-run.js';
+import { runScheduledForAccount } from '../services/scheduled-run.js';
 import { MondayApiError } from '../services/monday-api.js';
 import { logError, logInfo } from '../helpers/logger.js';
 
@@ -251,6 +257,28 @@ function validateConfig(body) {
     if (!isNonEmptyString(raw.usersEmailColumnId)) return { field: 'digest.usersEmailColumnId' };
     if (!isNonEmptyString(raw.subject, 120)) return { field: 'digest.subject' };
 
+    // --- recipient label gate (round348 §E, optional) ------------------------
+    // Column and label travel independently: EITHER absent means the gate is
+    // OFF and every users-board row qualifies, same as every digest before
+    // this feature (digest-service.js's buildDigest). A reversed default would
+    // silently mute mail for every existing tenant the moment they upgrade,
+    // with nobody having touched the setting.
+    let recipientGateColumnId = null;
+    if (raw.recipientGateColumnId !== undefined && raw.recipientGateColumnId !== null) {
+      if (!isNonEmptyString(raw.recipientGateColumnId)) {
+        return { field: 'digest.recipientGateColumnId' };
+      }
+      recipientGateColumnId = raw.recipientGateColumnId;
+    }
+    let recipientGateLabelId = null;
+    if (raw.recipientGateLabelId !== undefined && raw.recipientGateLabelId !== null) {
+      // 0 is a valid label id — Number.isInteger, never a truthy/falsy check.
+      if (!Number.isInteger(raw.recipientGateLabelId)) {
+        return { field: 'digest.recipientGateLabelId' };
+      }
+      recipientGateLabelId = raw.recipientGateLabelId;
+    }
+
     // --- the body (0.15.0): an ordered block list, or the legacy sections ----
     // `blocks` is the source of truth and `sections` is DERIVED from it, in
     // block order — that derivation is what makes the mail's order the cluster
@@ -318,6 +346,8 @@ function validateConfig(body) {
       usersBoardId: raw.usersBoardId,
       usersPeopleColumnId: raw.usersPeopleColumnId,
       usersEmailColumnId: raw.usersEmailColumnId,
+      recipientGateColumnId,
+      recipientGateLabelId,
       subject: raw.subject,
       sendHour,
       sections,
@@ -384,7 +414,10 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         api.getBoardItems({
           token,
           boardId: digest.usersBoardId,
-          columnIds: [digest.usersPeopleColumnId, digest.usersEmailColumnId],
+          // Also requests the recipient label gate's status column (round348
+          // §E) when configured — the preview must gate the same recipients
+          // the send path would.
+          columnIds: digestUsersColumnIds(digest),
         }),
       ]);
     } catch (err) {
@@ -599,6 +632,44 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
   // T12 / D8 — resend today for ALL recipients using the current slot
   // (same pipeline as send; currentSlot is derived from live `now`).
   router.post('/api/digest/resend-today', guarded(handleDigestSend));
+
+  // Round348 — run the scheduled action by hand, for THIS tenant.
+  // Distinct from /api/digest/send in exactly one way that matters: it also
+  // produces the per-employee CSV report (§5.2), which until now only the cron
+  // could make. `skipAlreadySent` stays FALSE (owner decision 2026-08-05): the
+  // button re-sends to everyone every time, and therefore also leaves no
+  // per-slot marker — see services/scheduled-run.js for why both follow.
+  async function handleRunScheduled(req, res) {
+    if (!emailSender) {
+      res.status(409).json({ error: 'email_not_configured' });
+      return;
+    }
+    const out = await runScheduledForAccount({
+      accountId: req.session.accountId,
+      storage,
+      api,
+      baseUrl: env.baseUrl,
+      emailSender,
+      todayIso,
+      now,
+      tag: 'admin_api',
+    });
+    if (out.skip) {
+      res.status(out.skip === 'monday_api_failed' ? 502 : 409).json({ error: out.skip });
+      return;
+    }
+    res.json({
+      ok: out.failed === 0,
+      slot: out.slot,
+      results: out.results,
+      skippedUsers: out.skippedUsers,
+      truncated: out.truncated,
+      durationMs: out.durationMs,
+      reportSent: out.reportSent,
+    });
+  }
+
+  router.post('/api/digest/run-scheduled', guarded(handleRunScheduled));
 
 
   function guarded(handler) {

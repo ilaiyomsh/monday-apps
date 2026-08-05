@@ -1,11 +1,16 @@
 // T10/T11 — monday-code digest scheduler + D8 operator summary.
 // Dual path: /mndy-cronjob/digest-send (platform cron) and
 // /scheduler/digest-send (manual test). No session auth — monday signs the
-// cron request. Iterates env.allowedAccountIds; tenants whose sendHour does
-// not match the current Asia/Jerusalem hour are silent-skipped (not listed);
-// incomplete tenants are listed with a skip reason and do not raise.
-// Gmail OAuth (T9b/T9c) is deferred — when emailSender is absent, due tenants
-// skip as email_not_configured.
+// cron request. Iterates env.allowedAccountIds; tenants whose sendHour has not
+// yet arrived this Asia/Jerusalem day are silent-skipped (not listed).
+// Tenants whose sendHour has ALREADY passed today are §7.4 CATCH-UP candidates
+// — every tick for the rest of the day re-attempts them, relying on the
+// per-slot marker (skipAlreadySent, digest-run.js) to make that safe: nobody
+// already sent gets mailed twice. A tick that never fired for a tenant's exact
+// hour (or died mid-run) used to cost that tenant the whole day; now the next
+// tick completes it. Incomplete tenants are listed with a skip reason and do
+// not raise. Gmail OAuth (T9b/T9c) is deferred — when emailSender is absent,
+// due tenants skip as email_not_configured.
 
 import express from 'express';
 import { hourInJerusalem, runDigestForAccount } from '../services/digest-run.js';
@@ -54,8 +59,12 @@ export function createSchedulerRouter({ storage, api, env, emailSender, todayIso
         }
 
         const sendHour = config.digest.sendHour ?? 8;
-        if (sendHour !== hour) {
-          // Not due this hour — silent (no operator noise).
+        // §7.4 — an exact-hour match is the NORMAL tick; an hour that has
+        // already passed today is a catch-up attempt (their tick never fired,
+        // or died mid-run). Only an hour not yet reached is silent-skipped —
+        // no operator noise for a tenant whose time simply has not come yet.
+        const isScheduledHour = sendHour === hour;
+        if (hour < sendHour) {
           continue;
         }
 
@@ -91,11 +100,19 @@ export function createSchedulerRouter({ storage, api, env, emailSender, todayIso
           recipients: result.results?.length ?? 0,
           skip: result.skip,
         });
-        // `due` marks the ones past the sendHour gate — the summary's audience.
-        // It is stripped from the response so the wire shape stays what it was.
-        // `durationMs` is NOT stripped: `scheduler:run` prints the response, so
-        // the timeout question is answerable from one manual tick.
-        tenants.push({ accountId, ...result, durationMs, due: true });
+        // `due` marks the summary's audience (operator mail + CSV report) — NOT
+        // simply "past the sendHour gate" any more. At the tenant's own scheduled
+        // hour it is always true (the expected reporting moment, even for zero
+        // recipients). On a §7.4 catch-up hour it is true only when this tick
+        // actually did something (sent or failed): a catch-up attempt that found
+        // everyone already covered must stay silent, or the widened gate turns
+        // into the exact hourly-noise bug §5.1 already fixed once, every
+        // remaining hour of every day. It is stripped from the response so the
+        // wire shape stays what it was. `durationMs` is NOT stripped:
+        // `scheduler:run` prints the response, so the timeout question is
+        // answerable from one manual tick.
+        const due = isScheduledHour || (result.sent ?? 0) > 0 || (result.failed ?? 0) > 0;
+        tenants.push({ accountId, ...result, durationMs, due });
       }
 
       let summarySent = false;

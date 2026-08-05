@@ -13,7 +13,7 @@
 //     text editor uses a native textarea with a ref rather than a Vibe TextField:
 //     the caret position is the whole feature.
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Button, Dropdown, TextField } from '@vibe/core';
 import type { ActionButton, BoardColumn, Direction, TextAlign } from '../types';
 import { DIGEST_FONTS, DIGEST_TEXT_COLOR_PRESETS } from '../types';
@@ -66,6 +66,16 @@ const toOption = (value: string, label: string): Option => ({ value, label });
 const findOption = (options: Option[], value: string | null) =>
   options.find((o) => o.value === value) ?? null;
 
+const BLOCK_SUMMARY_MAX = 60;
+
+/** One-line identifier shown while a block is collapsed — otherwise its content is invisible. */
+function blockSummary(block: DigestBlockDraft): string {
+  if (block.type === 'cluster') return block.title.trim() || 'ללא כותרת';
+  const text = block.text.trim();
+  if (!text) return '(ריק)';
+  return text.length > BLOCK_SUMMARY_MAX ? `${text.slice(0, BLOCK_SUMMARY_MAX)}…` : text;
+}
+
 export function DigestBlocksSection({
   tasksColumns,
   tasksColumnsLoading,
@@ -76,6 +86,19 @@ export function DigestBlocksSection({
   const blocks = digest.blocks;
   const clusterCount = digestClusters(digest).length;
 
+  // Accordion state — pure UI, keyed by block id so it survives reordering and
+  // is never part of the saved draft. Every block starts collapsed (owner
+  // decision 2026-08-05): a config with several blocks otherwise renders all of
+  // them open and buries "תצוגה מקדימה ושליחה" below the fold.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   // All four go through digest-block-ops: moving a block moves the mail AND (for
   // clusters) the priority, which is exactly why that rule is tested rather than
   // inlined here.
@@ -83,7 +106,12 @@ export function DigestBlocksSection({
     onChange({ blocks: patchBlock(blocks, index, next) });
   const onRemove = (index: number) => onChange({ blocks: removeBlock(blocks, index) });
   const onMove = (index: number, delta: -1 | 1) => onChange({ blocks: moveBlock(blocks, index, delta) });
-  const onAdd = (block: DigestBlockDraft) => onChange({ blocks: addBlock(blocks, block) });
+  const onAdd = (block: DigestBlockDraft) => {
+    onChange({ blocks: addBlock(blocks, block) });
+    // The block just added is the one exception to "collapsed by default" — the
+    // operator opened it on purpose and needs to see it to fill it in.
+    setExpandedIds((prev) => new Set(prev).add(block.id));
+  };
 
   const dateOptions = tasksColumns.filter((c) => c.type === 'date').map((c) => toOption(c.id, c.title));
   const textOptions = tasksColumns.filter((c) => c.type === 'text').map((c) => toOption(c.id, c.title));
@@ -120,61 +148,74 @@ export function DigestBlocksSection({
         <div className="dc-error">אין בלוקים — מייל כזה יישלח ריק. הוסיפו לפחות בלוק מקבץ אחד.</div>
       )}
 
-      {blocks.map((block, index) => (
-        <div key={block.id} className="dc-card">
-          <div className="dc-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="dc-hint">
-              {block.type === 'text' ? `בלוק טקסט · ${index + 1}` : `בלוק מקבץ · ${index + 1}`}
-            </span>
-            <span>
-              <Button
-                size="xs"
-                kind="tertiary"
-                ariaLabel="העלאת הבלוק"
-                disabled={index === 0}
-                onClick={() => onMove(index, -1)}
+      {blocks.map((block, index) => {
+        const isOpen = expandedIds.has(block.id);
+        return (
+          <div key={block.id} className="dc-card">
+            <div className="dc-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="dc-block-toggle"
+                aria-expanded={isOpen}
+                onClick={() => toggleExpanded(block.id)}
               >
-                ▲
-              </Button>
-              <Button
-                size="xs"
-                kind="tertiary"
-                ariaLabel="הורדת הבלוק"
-                disabled={index === blocks.length - 1}
-                onClick={() => onMove(index, 1)}
-              >
-                ▼
-              </Button>
-              <Button
-                size="xs"
-                kind="tertiary"
-                color="negative"
-                ariaLabel="הסרת הבלוק"
-                onClick={() => onRemove(index)}
-              >
-                ✕
-              </Button>
-            </span>
-          </div>
+                <span className="dc-hint">
+                  {isOpen ? '▾' : '▸'}{' '}
+                  {block.type === 'text' ? `בלוק טקסט · ${index + 1}` : `בלוק מקבץ · ${index + 1}`}
+                  {!isOpen && ` — ${blockSummary(block)}`}
+                </span>
+              </button>
+              <span>
+                <Button
+                  size="xs"
+                  kind="tertiary"
+                  ariaLabel="העלאת הבלוק"
+                  disabled={index === 0}
+                  onClick={() => onMove(index, -1)}
+                >
+                  ▲
+                </Button>
+                <Button
+                  size="xs"
+                  kind="tertiary"
+                  ariaLabel="הורדת הבלוק"
+                  disabled={index === blocks.length - 1}
+                  onClick={() => onMove(index, 1)}
+                >
+                  ▼
+                </Button>
+                <Button
+                  size="xs"
+                  kind="tertiary"
+                  color="negative"
+                  ariaLabel="הסרת הבלוק"
+                  onClick={() => onRemove(index)}
+                >
+                  ✕
+                </Button>
+              </span>
+            </div>
 
-          {block.type === 'text' ? (
-            <TextBlockEditor
-              block={block}
-              onChange={(next) => onPatch(index, next)}
-            />
-          ) : (
-            <ClusterBlockEditor
-              block={block}
-              tasksColumnsLoading={tasksColumnsLoading}
-              dateOptions={dateOptions}
-              textOptions={textOptions}
-              buttonOptions={buttonOptions}
-              statusOptions={statusLabelOptionsFor(block.buttonIds[0] ?? block.buttonId)}
-              onChange={(next) => onPatch(index, next)}
-            />
-          )}
-        </div>
-      ))}
+            {isOpen &&
+              (block.type === 'text' ? (
+                <TextBlockEditor
+                  block={block}
+                  onChange={(next) => onPatch(index, next)}
+                />
+              ) : (
+                <ClusterBlockEditor
+                  block={block}
+                  tasksColumnsLoading={tasksColumnsLoading}
+                  dateOptions={dateOptions}
+                  textOptions={textOptions}
+                  buttonOptions={buttonOptions}
+                  statusOptions={statusLabelOptionsFor(block.buttonIds[0] ?? block.buttonId)}
+                  onChange={(next) => onPatch(index, next)}
+                />
+              ))}
+          </div>
+        );
+      })}
 
       <div className="dc-row">
         <Button
