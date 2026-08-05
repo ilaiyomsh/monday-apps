@@ -37,7 +37,7 @@ export function verifyWebhookJwt(rawAuthorization, signingSecret, logger) {
   }
 }
 
-/** @returns {{ accountId: string, userId: string }|null} */
+/** @returns {{ accountId: string, userId: string, slug: string|null }|null} */
 export function verifySessionToken(rawToken, clientSecret, logger) {
   const token = stripBearer(rawToken);
   if (!token || !clientSecret) return null;
@@ -47,7 +47,13 @@ export function verifySessionToken(rawToken, clientSecret, logger) {
     const accountId = claims?.account_id ?? claims?.accountId;
     const userId = claims?.user_id ?? claims?.userId;
     if (accountId == null || userId == null) return null;
-    return { accountId: String(accountId), userId: String(userId) };
+    // round328 — the account slug rides the sessionToken; the OAuth start uses it
+    // to PIN the authorize page to this account (a multi-account browser session
+    // otherwise consents on whichever account is active). Signed by monday, but
+    // it becomes a hostname — accept only a safe slug shape.
+    const rawSlug = claims?.slug;
+    const slug = typeof rawSlug === 'string' && /^[a-z0-9][a-z0-9-]*$/i.test(rawSlug) ? rawSlug : null;
+    return { accountId: String(accountId), userId: String(userId), slug };
   } catch (err) {
     logger?.debug?.('session_token_verify_failed', 'auth', { reason: err?.name ?? 'verify_error' });
     return null; // fail-closed; the route answers 401

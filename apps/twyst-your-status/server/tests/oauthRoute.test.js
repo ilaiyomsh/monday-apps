@@ -47,8 +47,8 @@ function makeDeps(envOverrides = {}) {
   };
 }
 
-function sessionToken(secret = CLIENT_SECRET) {
-  return jwt.sign({ dat: { account_id: 999, user_id: 41 } }, secret);
+function sessionToken(secret = CLIENT_SECRET, extraDat = {}) {
+  return jwt.sign({ dat: { account_id: 999, user_id: 41, ...extraDat } }, secret);
 }
 
 /** Drives /oauth/start and returns the { state, challenge } carried in the redirect. */
@@ -94,6 +94,35 @@ describe('GET /oauth/start', () => {
     expect(new URL(res.headers.location).searchParams.get('app_version_id')).toBe('77');
   });
 
+  it('pins the authorize page to the session account when the sessionToken carries a slug (round328 — multi-account browsers consent on the active account otherwise)', async () => {
+    const res = await request(createApp(makeDeps())).get(
+      `/oauth/start?st=${encodeURIComponent(sessionToken(CLIENT_SECRET, { slug: 'acme-co' }))}`
+    );
+    expect(res.status).toBe(302);
+    const url = new URL(res.headers.location);
+    expect(url.origin + url.pathname).toBe('https://acme-co.monday.com/oauth2/authorize');
+    // monday docs: the slug HOST is only the default; the subdomain PARAM is what
+    // forces the account — both must be present.
+    expect(url.searchParams.get('subdomain')).toBe('acme-co');
+    // Same OAuth params ride the pinned host.
+    expect(url.searchParams.get('client_id')).toBe('cid');
+    expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+  });
+
+  it('sends no subdomain param when the sessionToken carries no slug', async () => {
+    const res = await request(createApp(makeDeps())).get(
+      `/oauth/start?st=${encodeURIComponent(sessionToken())}`
+    );
+    expect(new URL(res.headers.location).searchParams.get('subdomain')).toBe(null);
+  });
+
+  it('ignores a malformed slug (would-be hostname injection) and falls back to auth.monday.com', async () => {
+    const res = await request(createApp(makeDeps())).get(
+      `/oauth/start?st=${encodeURIComponent(sessionToken(CLIENT_SECRET, { slug: 'evil.attacker.com/x?' }))}`
+    );
+    expect(new URL(res.headers.location).origin).toBe('https://auth.monday.com');
+  });
+
   it('sends a code_challenge that is the S256 hash of a 43-char verifier (never plain)', async () => {
     // The verifier is server-held; assert only that the challenge is a proper
     // base64url S256 digest length (43 chars) — plain PKCE is rejected by monday.
@@ -113,7 +142,7 @@ describe('GET /oauth/callback', () => {
   it('exchanges the code at the oauth_ms endpoint WITH the PKCE verifier, resolves identity, persists the token RECORD, and responds 200 html', async () => {
     const deps = makeDeps();
     deps.oauthClient.exchangeCode.mockResolvedValue(tokensDouble());
-    deps.api.me.mockResolvedValue({ id: 314, name: 'Owner' });
+    deps.api.me.mockResolvedValue({ id: 41, name: 'Owner' });
     const app = createApp(deps);
 
     const { state } = await startAndGrab(app);
@@ -136,21 +165,37 @@ describe('GET /oauth/callback', () => {
     expect(deps.api.me).toHaveBeenCalledWith('newtok');
     expect(deps.tokenStore.setOwnerToken).toHaveBeenCalledWith(
       '999',
-      '314',
+      '41',
       expect.objectContaining({
         token: 'newtok',
         refreshToken: 'refresh-1',
         expiresAt: 5_000_000,
         status: 'active',
-        userId: '314',
+        userId: '41',
       })
     );
+  });
+
+  it('refuses with 409 and never persists when the consent comes back as a DIFFERENT user than the one who clicked connect (round328 — multi-account browser)', async () => {
+    const deps = makeDeps();
+    deps.oauthClient.exchangeCode.mockResolvedValue(tokensDouble());
+    deps.api.me.mockResolvedValue({ id: 314, name: 'Someone Else' });
+    const app = createApp(deps);
+
+    const { state } = await startAndGrab(app);
+    const res = await request(app).get(`/oauth/callback?code=thecode&state=${encodeURIComponent(state)}`);
+
+    expect(res.status).toBe(409);
+    expect(res.headers['content-type']).toMatch(/html/);
+    expect(deps.tokenStore.setOwnerToken).not.toHaveBeenCalled();
+    // Machine ids only in the log — and it must fire.
+    expect(deps.logger.warn).toHaveBeenCalled();
   });
 
   it('consumes state on first use: replaying the same callback returns 4xx and setOwnerToken stays at exactly one call', async () => {
     const deps = makeDeps();
     deps.oauthClient.exchangeCode.mockResolvedValue(tokensDouble());
-    deps.api.me.mockResolvedValue({ id: 314, name: 'Owner' });
+    deps.api.me.mockResolvedValue({ id: 41, name: 'Owner' });
     const app = createApp(deps);
 
     const { state } = await startAndGrab(app);

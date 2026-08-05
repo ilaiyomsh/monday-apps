@@ -62,7 +62,14 @@ export function createOauthRouter({ tokenStore, api, oauthClient, env, logger, n
     const verifier = crypto.randomBytes(32).toString('base64url');
     const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
     const nonce = crypto.randomBytes(16).toString('base64url');
-    pendingStates.set(nonce, { accountId: session.accountId, verifier, expiresAt: now() + STATE_TTL_MS });
+    // round328: carry the CLICKING user too — the callback refuses a consent that
+    // came back as anyone else (multi-account browsers, see below).
+    pendingStates.set(nonce, {
+      accountId: session.accountId,
+      userId: session.userId,
+      verifier,
+      expiresAt: now() + STATE_TTL_MS,
+    });
 
     const params = new URLSearchParams({
       client_id: env.clientId,
@@ -76,7 +83,18 @@ export function createOauthRouter({ tokenStore, api, oauthClient, env, logger, n
     // OAuth config (scopes/redirects + the New OAuth Flow toggle) is per app VERSION;
     // during draft testing the authorize request must name the draft version.
     if (env.oauthAppVersionId) params.set('app_version_id', env.oauthAppVersionId);
-    res.redirect(302, `${AUTHORIZE_URL}?${params.toString()}`);
+    // round328 — PIN the consent to the session's account. auth.monday.com uses the
+    // browser's ACTIVE monday session, so a multi-account user silently consents on
+    // the wrong account: the token stores under the wrong identity, the settings
+    // line never turns "connected", and every revert is skipped. Per monday's OAuth
+    // docs the slug HOST only sets the default account — the `subdomain` query
+    // param is what actually forces it (Codex P2) — so send both; the callback's
+    // user-identity check stays as the hard net either way.
+    if (session.slug) params.set('subdomain', session.slug);
+    const authorizeBase = session.slug
+      ? `https://${session.slug}.monday.com/oauth2/authorize`
+      : AUTHORIZE_URL;
+    res.redirect(302, `${authorizeBase}?${params.toString()}`);
   });
 
   router.get('/oauth/callback', async (req, res) => {
@@ -103,6 +121,24 @@ export function createOauthRouter({ tokenStore, api, oauthClient, env, logger, n
       }
 
       const me = await api.me(tokens.accessToken);
+      // round328 — the consent must come back as the SAME user who clicked
+      // connect. A multi-account browser session can complete the consent as a
+      // different user (or a different ACCOUNT entirely) — storing that token
+      // would point the account reader at foreign boards and leave this
+      // column's reverts silently skipped, while the success page tells the
+      // clicking owner they are connected. Refuse and explain instead.
+      if (pending.userId != null && String(me.id) !== String(pending.userId)) {
+        logger.warn('oauth consent returned a different user — token NOT stored', TAG, {
+          accountId: pending.accountId,
+          expectedUserId: String(pending.userId),
+          actualUserId: String(me.id),
+        });
+        sendPage(res, 409, page(
+          'האישור בוצע ממשתמש אחר',
+          'לשונית האישור של monday הייתה מחוברת לחשבון או למשתמש אחר. עברו בלשונית של monday לחשבון שבו פתחתם את ההגדרות, ונסו שוב מכפתור החיבור.',
+        ));
+        return;
+      }
       // The authorizing user is a real OWNER lending their identity to reverts —
       // stored per-user AND pointed to by the account reader (services/stores.js).
       const nowMs = now();
