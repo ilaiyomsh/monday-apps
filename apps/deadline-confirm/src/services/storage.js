@@ -23,6 +23,10 @@ export const KEYS = {
   GOOGLE_SENDER: 'google_sender',
   // Separate namespace from OAUTH_STATE_PREFIX — see issueGoogleOauthState.
   GOOGLE_OAUTH_STATE_PREFIX: 'google_oauth_state:',
+  // Who has already been emailed in the CURRENT slot: { slot, personIds }.
+  // One key per tenant, not one per slot — the stored slot IS the expiry, so a
+  // record from an earlier slot reads as an empty slate and nothing accumulates.
+  DIGEST_SENT: 'digest_sent',
 };
 
 /**
@@ -120,6 +124,17 @@ export function createAppStorage({ backend, ttlMs = 60_000, stateMaxAgeMs = 600_
       },
       async setGoogleSender(record) {
         await backend.set(scopedKey(KEYS.GOOGLE_SENDER), record);
+      },
+
+      // Per-slot send marker — read/write THROUGH, never cached, and the reason
+      // is a number: the platform's scheduler retries with a 60s default backoff
+      // and this cache holds entries for 60s. A cached read is exactly the window
+      // in which a retry cannot see what the attempt before it already sent.
+      async getDigestSent() {
+        return (await backend.get(scopedKey(KEYS.DIGEST_SENT))) ?? null;
+      },
+      async setDigestSent(record) {
+        await backend.set(scopedKey(KEYS.DIGEST_SENT), record);
       },
     };
   }

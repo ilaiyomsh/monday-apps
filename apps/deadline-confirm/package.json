@@ -1,6 +1,6 @@
 {
   "name": "deadline-confirm",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "One-click deadline confirmation from email — status transition + attribution update (monday code)",
   "private": true,
   "type": "module",
