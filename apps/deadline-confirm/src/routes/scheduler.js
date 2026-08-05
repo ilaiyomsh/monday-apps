@@ -66,12 +66,29 @@ export function createSchedulerRouter({ storage, api, env, emailSender, todayIso
           emailSender,
           todayIso,
           now: () => clock,
+          // ONLY the cron enforces the per-slot marker. The platform retries a
+          // failed or timed-out tick (measured 2026-08-05: maxRetries 3,
+          // minBackoffDuration 60s — and `-r 0` is silently ignored by the CLI),
+          // so without this a tick killed at the 300s timeout re-sends to
+          // everyone it had already emailed. The admin's manual send and
+          // resend-today deliberately pass nothing: re-sending inside the same
+          // slot is exactly what they are for.
+          skipAlreadySent: true,
         });
-        tenants.push({ accountId, ...result });
+        // `due` marks the ones past the sendHour gate — the summary's audience.
+        // It is stripped from the response so the wire shape stays what it was.
+        tenants.push({ accountId, ...result, due: true });
       }
 
       let summarySent = false;
-      const dueTenants = tenants.filter((t) => !t.skip || t.skip !== 'wrong_hour');
+      // "Due" means the sendHour matched and the run was actually attempted — NOT
+      // merely "appeared in the list". The old filter was `!t.skip || t.skip !==
+      // 'wrong_hour'`, which is true for every possible value: `wrong_hour` is a
+      // skip reason no code produces, because the not-due branch `continue`s
+      // without pushing. So an account that had simply never configured a digest
+      // counted as due on EVERY tick, and with an hourly cron that is a summary
+      // mail every hour, all day (measured 2026-08-05).
+      const dueTenants = tenants.filter((t) => t.due);
       if (emailSender && env.operatorEmail && dueTenants.length > 0) {
         const slot =
           dueTenants.find((t) => t.slot)?.slot ??
@@ -100,9 +117,13 @@ export function createSchedulerRouter({ storage, api, env, emailSender, todayIso
       logInfo(TAG, 'cron_tick', {
         hour,
         tenants: tenants.length,
+        due: dueTenants.length,
         summarySent,
       });
-      res.status(200).json({ ok: true, hour, tenants, summarySent });
+      // `due` is an internal marker for the summary audience — strip it so the
+      // response keeps the exact shape its consumers (and tests) already expect.
+      const reported = tenants.map(({ due: _due, ...rest }) => rest);
+      res.status(200).json({ ok: true, hour, tenants: reported, summarySent });
     } catch (err) {
       logError(TAG, 'cron_tick failed', { error: String(err?.message ?? err) });
       res.status(500).json({ error: 'digest-send failed' });

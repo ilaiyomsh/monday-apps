@@ -2,6 +2,58 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.13.1 — 2026-08-05 — the scheduler exists now, and cannot mail anyone twice
+
+**The digest had never been sent automatically.** `mapps scheduler:list -a
+11704868` answered "No scheduler jobs found": the endpoint, the `sendHour` filter
+and their tests were all fine, but the post-deploy registration step (README §6)
+had simply never run. Everything that ever went out was sent by hand from the
+admin screen. The job is registered as of today, and the README now states the
+history so nobody reads the app as "sending on a schedule" again.
+
+**Registering it exposed a CLI bug worth knowing.** `scheduler:create … -r 0` is
+IGNORED — the CLI treats 0 as "not supplied", drops into an interactive prompt
+and stores its own default. What actually got stored:
+
+    retryConfig: { maxRetries: 3, minBackoffDuration: 60 }, timeout: 300
+
+So zero retries is not reachable from the CLI, and a tick killed at the 300s
+timeout is re-invoked up to three times, a minute apart. Against a send loop with
+no memory that means every recipient already emailed gets emailed again. The
+guard had to move into the handler.
+
+**Per (slot × recipient), persisted as it goes.** The cron now passes
+`skipAlreadySent: true`, which loads a per-slot marker (`digest_sent` =
+`{ slot, personIds }`) and writes it back **after every successful send** rather
+than once at the end. Two properties come out of that shape, and both are pinned
+by tests:
+- a retry SKIPS whoever already has the mail and SENDS whoever is still missing,
+  so a killed run resumes instead of either duplicating or abandoning the batch;
+- a recipient is recorded only when their own send succeeded.
+
+The marker is read and written THROUGH the 60s read cache, never from it — the
+platform's default backoff is 60 seconds, exactly the window in which a cached
+read cannot see what the previous attempt did. The stored slot doubles as the
+expiry, so one key per tenant self-cleans and yesterday can never block today.
+
+**It is opt-in, and that is load-bearing.** `/api/digest/send` and
+`resend-today` exist to re-send deliberately inside the same slot, so only the
+cron enforces the marker. A mutation that defaults the flag on is killed by test.
+
+**And the operator summary stopped firing every hour.** The gate read
+`!t.skip || t.skip !== 'wrong_hour'` — true for every possible value, because
+`wrong_hour` is a skip reason no code produces (the not-due branch `continue`s
+without pushing). An account that had merely never configured a digest therefore
+counted as "due" on every tick: with an hourly cron, a summary mail every hour of
+every day, or an hourly failed-send in the log when that account has no mailbox.
+Measured before the fix, then fixed to count only tenants that really were due.
+The tick's JSON still names unconfigured tenants — that costs nobody an email.
+
+⚠️ **Still open:** whether the cron drives the live or the draft version. 0.13.0
+is on draft only, so verify with `app-version:list` + `code:logs` which version's
+log carries the `cron_tick` line before trusting an automatic send to exercise
+the new email.
+
 ## 0.13.0 — 2026-08-04 — the email updates the board as you go: no send button, a form per row, two layouts
 
 Three changes in one round, all to the body of the digest mail.

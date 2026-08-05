@@ -214,9 +214,29 @@ src/
   oversized body answers 413 `payload_too_large` instead of 500.
   **`POST /api/secret/rotate` → `{ ok: true, secret: '****xxxx' }`** (masked
   only — full secret never leaves the server).
-- **V6 scheduler:** `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`)
+- **V6 scheduler — full account in `docs/scheduling.md`** (registered 2026-08-05;
+  before that date NOTHING was sent automatically): `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`)
   walks `ALLOWED_ACCOUNT_IDS`, runs tenants whose `digest.sendHour` matches the
-  current Asia/Jerusalem hour; then optional operator summary to `OPERATOR_EMAIL`.
+  current Asia/Jerusalem hour; then optional operator summary to
+  `OPERATOR_EMAIL`. The platform cron must be **hourly** (`0 * * * *` UTC) — the
+  hour filter lives in the app, so a non-hourly expression means tenants on other
+  hours never send at all. Job as stored: `retryConfig { maxRetries: 3,
+  minBackoffDuration: 60 }`, `timeout: 300`, `targetUrl /digest-send`.
+  - **`-r 0` is NOT reachable from the CLI** — it treats 0 as "not supplied",
+    prompts, and stores the default 3. So retries are a fact of life, and the
+    handler carries the guard: the cron passes **`skipAlreadySent: true`**, which
+    consults a per-slot marker (`digest_sent` = `{ slot, personIds }`, read/write
+    THROUGH the cache because the 60s backoff equals the 60s cache TTL) and
+    persists it **after every successful send**. A tick killed at 300s therefore
+    RESUMES on retry instead of re-mailing everyone. The marker is per
+    (slot × personId) for exactly that reason.
+  - **Only the cron opts in.** `/api/digest/send` and `resend-today` deliberately
+    do not — a deliberate re-send inside the same slot is what they are for. Do
+    not "fix" that by defaulting the flag on.
+  - The operator summary counts only tenants that were really due (`t.due`). The
+    old filter tested a `wrong_hour` skip reason no code produces, so an account
+    that had merely never configured a digest counted as due on every tick — an
+    hourly summary mail, measured.
 - **V6 resend:** `POST /api/digest/resend-today` — all recipients, current slot.
 
 ## Env & deploy

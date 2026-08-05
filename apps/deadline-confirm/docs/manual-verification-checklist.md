@@ -167,8 +167,10 @@ Admin console → Gmail → הגדרות דוא"ף דינמי.
    README שלב 6).
 2. לוודא `digest.sendHour` במסך האדמין (ברירת מחדל 8, שעון ירושלים) ולחכות
    לסבב של השעה הזו.
-3. אחרי השעה: לבדוק שההודעה הגיעה לשתי התיבות, ואת הלוגים —
-   `mapps code:logs -i 11704868` (חלון הלוגים קצר; להריץ סמוך לשעה).
+3. אחרי השעה: לבדוק שההודעה הגיעה לשתי התיבות, ואת הלוגים. **`-i` הוא app
+   VERSION id ולא ה-app id** — `mapps app-version:list -i 11704868` ואז
+   `mapps code:logs -i <APP_VERSION_ID> -t console -s live`
+   (חלון הלוגים קצר; להריץ סמוך לשעה).
 4. אם `OPERATOR_EMAIL` מוגדר — לוודא שהגיע מייל סיכום למפעיל.
 
 **עובר אם:** ההודעות הגיעו בתוך שעת ה-`sendHour` (הסינון הוא לפי שעה שלמה
@@ -186,7 +188,8 @@ Admin console → Gmail → הגדרות דוא"ף דינמי.
 (קוד ה-nodemailer יהיה `ECONNECTION`/`ETIMEDOUT` בלוגים).
 
 **אבחון:** ההודעה של `smtp_connect_failed` חוזרת בתשובת ה-502 של
-`POST /api/digest/send` ובלוגים (`mapps code:logs -i 11704868`) — היא נכתבה
+`POST /api/digest/send` ובלוגים (`mapps code:logs -i <APP_VERSION_ID>` — version
+id, לא app id) — היא נכתבה
 כדי להיות פלט הדיבוג של המפעיל.
 
 **הפתרון המוכן:** מעבר לפורט 587 עם STARTTLS. אופציות ה-transport כבר
