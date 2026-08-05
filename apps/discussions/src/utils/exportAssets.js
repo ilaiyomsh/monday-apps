@@ -60,6 +60,51 @@ function normalize(raw) {
   };
 }
 
+/*
+ * round358 (owner report: "שמרנו את קובץ התבנית והוא לא שם") — monday.storage.setItem
+ * can REJECT a write by RESOLVING `{ data: { success: false } }` instead of throwing
+ * (observed with multi-MB values), and nothing in the app inspected that response, so
+ * a rejected save looked exactly like a successful one. Two layers close it:
+ *   1. an explicit `success === false` is thrown as a failure, with monday's reason;
+ *   2. the key is read back and the normalized field lengths compared — catching any
+ *      silent-failure shape the flag misses. The verify is best-effort on purpose: an
+ *      UNREADABLE read-back must not fail a write that did land, or a flaky read would
+ *      re-create the false alarm in the opposite direction.
+ * Only the export-assets keys carry multi-MB values, which is why the guard lives here
+ * and not on every tiny settings write.
+ */
+function assertWriteAccepted(res, what) {
+  if (res?.data?.success === false) {
+    const reason = res?.data?.reason || res?.data?.error || 'הכתיבה נדחתה על ידי monday';
+    const err = new Error(`${what}: ${reason}`);
+    err.code = 'storage-rejected';
+    throw err;
+  }
+}
+
+async function verifyWriteLanded(key, clean, what) {
+  let stored;
+  try {
+    const res = await withTimeout(monday.storage.getItem(key));
+    stored = res?.data?.value ? normalize(JSON.parse(res.data.value)) : normalize(null);
+  } catch (err) {
+    logger.warn('exportAssets', `${what}: קריאת האימות אחרי הכתיבה נכשלה — מניחים שהכתיבה נקלטה`, err);
+    return;
+  }
+  // Codex P2 on this round — content, not length: replacing a file with different
+  // content of the SAME size (two versions of the same logo, a re-exported .docx)
+  // must not pass verification against a stale read-back. Multi-MB string equality
+  // is a cheap memcmp-style check; the save is rare and already does a full read.
+  const mismatch = ['headerLogo', 'footerLogo', 'templateDocx'].find(
+    (f) => (stored[f] || '') !== (clean[f] || '')
+  );
+  if (mismatch) {
+    const err = new Error(`${what}: הכתיבה לא נקלטה באחסון (אימות ${mismatch} נכשל) — נסו קובץ קטן יותר`);
+    err.code = 'storage-verify';
+    throw err;
+  }
+}
+
 /**
  * Approximate stored size in bytes (the JSON value monday persists). Strings are
  * ~1 byte/char for base64/ascii data URIs, so the character count is a close and
@@ -102,7 +147,11 @@ export async function saveExportAssets(context, assets) {
     throw err;
   }
   try {
-    await withTimeout(monday.storage.setItem(instanceKey(context), JSON.stringify(clean)));
+    const res = await withTimeout(monday.storage.setItem(instanceKey(context), JSON.stringify(clean)));
+    if (context?.instanceId || context?.boardId) {
+      assertWriteAccepted(res, 'שמירת נכסי הייצוא');
+      await verifyWriteLanded(instanceKey(context), clean, 'שמירת נכסי הייצוא');
+    }
   } catch (err) {
     if (context?.instanceId || context?.boardId) {
       logger.error('exportAssets', 'שמירת נכסי הייצוא נכשלה — ייתכן שהשינוי לא נשמר', err);
@@ -172,7 +221,11 @@ export async function saveTypeExportAssets(context, typeName, assets) {
     throw err;
   }
   try {
-    await withTimeout(monday.storage.setItem(typeKey(context, typeName), JSON.stringify(clean)));
+    const res = await withTimeout(monday.storage.setItem(typeKey(context, typeName), JSON.stringify(clean)));
+    if (context?.instanceId || context?.boardId) {
+      assertWriteAccepted(res, 'שמירת נכסי הייצוא של סוג הדיון');
+      await verifyWriteLanded(typeKey(context, typeName), clean, 'שמירת נכסי הייצוא של סוג הדיון');
+    }
   } catch (err) {
     if (context?.instanceId || context?.boardId) {
       logger.error('exportAssets', 'שמירת נכסי הייצוא של סוג הדיון נכשלה — ייתכן שהשינוי לא נשמר', err);
