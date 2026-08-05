@@ -15,6 +15,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { countPoints } from '@generated/utils/templates.js';
+import { shouldApplyTypeEdit } from './typeEditRequest.js';
 import {
   useDropdownOptions,
   addDropdownLabel,
@@ -233,7 +234,14 @@ function draftToTemplate(draft) {
  * People pickers for a role column appear ONLY when that column is mapped in
  * Settings (the "יוצר" creator column is intentionally never shown/edited here).
  */
-export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ onExportWide } = {}, ref) {
+/*
+ * round355 — `pendingTypeEdit` ({ type, nonce }) asks this panel to open ONE
+ * discussion type's editor, and `onTypeSaved(typeName)` reports a successful save
+ * back out. Together they let the create-discussion card's pencil hand the user
+ * here and get them back (see typeEditRequest.js for the two guards this needs).
+ * Both default to inert, so every existing mount behaves exactly as before.
+ */
+export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ onExportWide, pendingTypeEdit = null, onTypeSaved = null } = {}, ref) {
   const { settings } = useSettings();
   const {
     templates,
@@ -422,6 +430,20 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
     setIsNew(false);
   };
 
+  // round355 — honour an external "edit this type's template" request (the pencil in
+  // the create-discussion card). `shouldApplyTypeEdit` holds the two rules: wait for
+  // the templates to load (entering blank would make the save WIPE the stored
+  // template) and apply each nonce at most once (re-applying resets the draft under
+  // the user). The tab is forced to "types" because the request is type-scoped.
+  const appliedTypeEditRef = useRef(null);
+  useEffect(() => {
+    if (!shouldApplyTypeEdit({ request: pendingTypeEdit, loading, appliedNonce: appliedTypeEditRef.current })) return;
+    appliedTypeEditRef.current = pendingTypeEdit.nonce;
+    setKind('types');
+    startEditType(pendingTypeEdit.type);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingTypeEdit, loading]);
+
   // round256 — any user edit inside the export sub-tab marks it dirty, so save
   // persists the type's OWN template/assets (otherwise it stays on the system
   // default). These wrap the plain setters passed to ExportTemplateTab.
@@ -497,6 +519,8 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
 
   const handleSave = async () => {
     if (!canSave || saving) return;
+    // round355 — set only on a successful TYPE save; drives the hand-back below.
+    let savedTypeName = null;
     // Per-kind uniqueness: at most one template of the current kind may be
     // assigned to a given "סוג דיון". Re-check here (the UI already greys taken
     // types) so a stale/edge case can't slip a duplicate through.
@@ -557,8 +581,13 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
         });
         // Persist the chosen color for this type.
         if (typeColorDraft) await setTypeColor(draft.discussionType, typeColorDraft);
+        savedTypeName = draft.discussionType;
       }
       backToList();
+      // round355 — when the editor was entered from the create-discussion card's
+      // pencil, saving IS the hand-back signal: the host restores that card exactly
+      // as the user left it. Inert (no listener) on every other entry path.
+      if (savedTypeName) onTypeSaved?.(savedTypeName);
     } finally {
       setSaving(false);
     }
