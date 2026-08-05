@@ -317,10 +317,35 @@ export const PARTICIPANT_CF_PREFIX = 'cf:';
 export const PARTICIPANT_SEPARATORS = [
   { value: ', ', label: 'פסיק' },
   { value: ' ', label: 'רווח' },
-  { value: ' — ', label: 'מקף' },
+  /*
+   * round357 (owner spec) — the SHORT dash (en dash), not the long em dash it used to
+   * be. The renderer also writes every separator BOLD, which is the other half of the
+   * owner's "קצר ועבה" request; bold lives in the run, so it cannot be a value here.
+   * The retired ' — ' is mapped forward in resolveParticipantParts.
+   */
+  { value: ' – ', label: 'מקף' },
   { value: '', label: 'ללא' },
 ];
 export const DEFAULT_PARTICIPANT_SEPARATOR = ', ';
+// round357 — the em dash offered as 'מקף' until this round. Stored templates still
+// carry it; resolveParticipantParts maps it to the short dash that replaced it.
+export const RETIRED_LONG_DASH_SEPARATOR = ' — ';
+
+/*
+ * round357 (owner spec) — the marker written to the RIGHT of each person's record,
+ * chosen PER people component (מוביל דיון / מרכז דיון / משתתפים). 'none' is the
+ * default: today's export has no marker and an upgrade must not restyle a document.
+ * Only meaningful in line-per-person mode — a single joined row has no records.
+ */
+export const RECORD_MARKER_NONE = 'none';
+export const RECORD_MARKER_NUMBER = 'number';
+export const RECORD_MARKER_BULLET = 'bullet';
+export const RECORD_MARKERS = [
+  { value: RECORD_MARKER_NONE, label: 'ללא' },
+  { value: RECORD_MARKER_NUMBER, label: 'מספור' },
+  { value: RECORD_MARKER_BULLET, label: 'נקודות' },
+];
+export const RECORD_BULLET_GLYPH = '•';
 // The shipped composition: the name alone — byte-for-byte today's export.
 export const DEFAULT_PARTICIPANT_PARTS = [{ key: PARTICIPANT_PART_NAME, sep: DEFAULT_PARTICIPANT_SEPARATOR }];
 

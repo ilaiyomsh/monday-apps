@@ -7,9 +7,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
  * 1. Loading gate: the box assembles THE REAL discussion model + the stored
  *    per-discussion overrides before showing the template editor, and hands the
  *    real model to the preview (previewModel).
- * 2. "הפק מסמך": persists the per-discussion template, delivers the docx with
- *    {template, assets, discussionId}, notifies, closes. The assets override is
- *    written ONLY when the user changed assets inside the dialog.
+ * 2. "הפק מסמך": delivers the docx with {template, assets, discussionId}, notifies,
+ *    closes. round356 — it persists NOTHING: what the owner adjusted here shapes THIS
+ *    document only, and the next export starts from the discussion's type again.
  */
 const h = vi.hoisted(() => ({
   assembleDiscussionModel: vi.fn(),
@@ -117,12 +117,17 @@ describe('ExportDialog (round207)', () => {
     expect(props.onNotify).toHaveBeenCalledWith('המסמך הופק בהצלחה');
   });
 
-  it('a stored per-discussion template wins over the instance default', async () => {
-    const own = { font: 'perDiscussion', sections: [] };
-    h.loadDiscussionExportTemplate.mockResolvedValue(own);
+  /*
+   * round356 (owner spec) — a per-discussion template stored by an older version is not
+   * read: the cascade is system → type → the edits made in THIS dialog, and those last
+   * ones are ephemeral. Without a type, the instance default is what opens.
+   */
+  it('ignores a stored per-discussion template — the instance default opens', async () => {
+    h.loadDiscussionExportTemplate.mockResolvedValue({ font: 'perDiscussion', sections: [] });
     renderDialog({ settings: { exportTemplate: { font: 'instance' } } });
     await screen.findByTestId('export-template-tab');
-    expect(h.tabProps.current.template).toEqual(own);
+    expect(h.tabProps.current.template).toEqual({ font: 'instance' });
+    expect(h.loadDiscussionExportTemplate).not.toHaveBeenCalled();
   });
 
   it('round254 — the discussion TYPE\'s export template wins over the instance default (no per-discussion override)', async () => {
@@ -140,16 +145,15 @@ describe('ExportDialog (round207)', () => {
     expect(h.tabProps.current.assets).toEqual({ headerLogo: 'typeLogo' });
   });
 
-  it('round254 — a per-discussion override still wins over the TYPE template', async () => {
-    const own = { font: 'own', sections: [] };
+  it('round356 — the TYPE template beats the instance default, and a stored override is ignored', async () => {
     const typeTpl = { font: 'typeTpl', sections: [] };
-    h.loadDiscussionExportTemplate.mockResolvedValue(own);
+    h.loadDiscussionExportTemplate.mockResolvedValue({ font: 'own', sections: [] });
     h.typeTemplates = [{ discussionType: 'סבב', exportTemplate: typeTpl }];
     renderDialog({
       discussion: { id: 7, name: 'x', discussionTypeID: 'סבב' },
       settings: { exportTemplate: { font: 'instance' } },
     });
     await screen.findByTestId('export-template-tab');
-    expect(h.tabProps.current.template).toEqual(own);
+    expect(h.tabProps.current.template).toEqual(typeTpl);
   });
 });
