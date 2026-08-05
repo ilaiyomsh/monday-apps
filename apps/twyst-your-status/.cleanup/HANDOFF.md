@@ -83,6 +83,61 @@ open:
 - **Batch 7 — structure, 13 findings of which 2 are STRUCK, so 11 to execute, risk L.**
   `A-structure-01, -03, -04, -05, -06, -07, -09, -10, -11, -12, -13`.
 
+## 2c. Branches — where to work, and what to do before you start
+
+**Work on this same branch: `claude/twystyourstatus-cleanup-workflow-ud6gpw`.** Do not start a
+fresh branch off `develop`, and do not cherry-pick batches 5/7 onto a clean base.
+
+Why this branch and not a new one: batches 5 and 7 must run on a tree where batches 1-4+6 are
+already applied. They share files — `ColumnSettings.jsx` was touched by 2 round-1 commits,
+`PersonPicker.jsx` by 4, `graphqlQueries.js` by 2, `stores.js` by 2 — and the plan's `done`
+statuses, its amended anchors, and the `A-structure-10` ↔ `A-patterns-04` ordering note all
+describe the post-round-1 tree. On a clean base the findings do not describe reality.
+
+**First action, before `baseline.sh`: merge `develop` in.** As of `f8fd039` this branch is
+**25 ahead / 23 behind** `origin/develop`, and develop carries a feature commit inside this
+very app:
+
+- `6931dc3 feat(twyst-your-status): resilient SecureStorage — retry transient Vault errors,
+  coalesce reads` — adds `server/src/helpers/secure-storage-resilient.js` (93 lines), wires it
+  in `server/src/index.js`, and adds `server/tests/secure-storage-resilient.test.js` (10
+  tests). It does **not** touch `stores.js`.
+
+```
+git fetch origin develop
+git merge origin/develop        # verified CLEAN at f8fd039 — no conflicts
+bash scripts/cleanup/baseline.sh
+```
+
+Three consequences you must not skip:
+
+1. **Re-run `baseline.sh` after the merge.** The existing `baseline.json` was captured at
+   `4380d77`, which predates that feature. Every metric and the recorded command set are
+   stale until you re-capture.
+2. **The server suite grows 221 → 231 tests.** A gate that reports 221 after the merge means
+   the merge did not land — treat that as a failure, not a variation.
+3. **`secure-storage-resilient.js` is new source the audit never scanned**, and it is inside
+   the cleanup allowlist (`server/src/**`). Batch 5 is the *duplication* batch and that file
+   is retry/coalescing logic, so it is exactly the shape that could duplicate something
+   already present. Do not add it to a batch on your own judgement — if a scan flags it,
+   surface it as a NEW finding for the owner rather than folding it into an approved batch.
+   An approved batch covers the findings it lists and nothing else.
+
+Do not rebase this branch. It is pushed and its commits are the audit trail — one revertable
+commit per batch is the whole safety model, and a rebase rewrites the shas the report and this
+handoff cite. Merge, never rebase.
+
+**If the owner decides to split the branch (report finding 1),** the tooling PR merges FIRST:
+`scripts/cleanup/**`, `.claude/workflows/cleanup-*.js`, `.claude/agents/cleanup-*.md`,
+`CLAUDE.md`, `AGENTS.md`. The cleanup run cannot be re-verified without the guards and
+workflows, so a cleanup-only PR that lands first is not reproducible. Ask before splitting —
+it rewrites history that the report cites.
+
+**Targets and prohibitions:** the PR targets `develop`, never `main`. Check the release freeze
+before merging anything into `develop` (`gh pr list --base main` — nothing merges into
+`develop` while a develop→main PR is open). Cloud sessions push `claude/*` branches based on
+`develop`; that is what this branch is.
+
 ## 3. The approval gate — read this before you write anything
 
 `approved` is a **human-only** word (CLAUDE.md). No agent writes it on its own judgement.
