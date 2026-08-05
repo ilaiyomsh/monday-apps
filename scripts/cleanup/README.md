@@ -101,6 +101,12 @@ Every deviation is a monorepo fact, not a preference:
 
 - **Agent not found** → `.claude/agents/` was created after the session started; restart
   Claude Code so the five agents load.
+- **You edited a workflow and the old behaviour persists** → invoking by name serves the
+  copy the session registered at startup, not the file on disk (verified 2026-08-05: a
+  fixed `cleanup-audit.js` kept refusing with the pre-fix message). Either restart Claude
+  Code, or invoke by path: `Workflow({scriptPath: ".claude/workflows/cleanup-audit.js"})`.
+  Each run also persists its own copy under the session's `workflows/scripts/` — diff that
+  copy against the repo file when a run behaves like an older version.
 - **Hook did not fire** → workspace trust not granted, or `scripts/cleanup/*.sh` lost `+x`.
   Verify with `bash scripts/cleanup/guard-protected-paths.test.sh`.
 - **`jq: command not found`** → the guard and `baseline.sh` fail closed on purpose. Install jq.
