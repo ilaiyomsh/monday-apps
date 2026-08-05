@@ -43,7 +43,7 @@ const buttonStyle = {
 
 function ErrorState({ message = 'An error occurred', onRetry }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12">
+    <div className="twyst-center-column">
       <svg
         style={iconStyle}
         fill="none"

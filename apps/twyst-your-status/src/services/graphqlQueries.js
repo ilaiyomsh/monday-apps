@@ -138,6 +138,12 @@ export const GET_ACCOUNT_TEAMS = `
   }
 `;
 
+/*
+ * Avatar URLs use monday's photo_thumb (API 2026-04 pin — photo_url { thumb } only
+ * exists from 2026-07).
+ */
+export const GET_ACCOUNT_USERS = 'query AccountUsers($limit: Int) { users(limit: $limit) { id name photo_thumb } }';
+
 /**
  * Everything the required-fields modal needs, in one round trip: the gated status
  * column's labels (to name the label being written) plus the item's current values

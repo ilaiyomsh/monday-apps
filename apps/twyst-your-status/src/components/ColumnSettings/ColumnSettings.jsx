@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AttentionBox, Button, Heading } from '@vibe/core';
-import { validateSettings } from '../../domain/settingsSchema';
+import { emptyLabelRule, validateSettings } from '../../domain/settingsSchema';
 import { isSupportedFormColumnType } from '../../domain/columnFields';
 import { RESERVED_EMPTY_LABEL_ID, pickColorForNewLabel, resolveStatusColorHex } from '../../domain/statusColors';
 import {
@@ -653,12 +653,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     [formColumns],
   );
 
-  const getRule = (labelId) => draft?.labels?.[labelId] ?? {
-    allowedUserIds: [],
-    allowedTeamIds: [],
-    requiredColumnIds: [],
-    requiredPeopleColumnIds: [],
-  };
+  const getRule = (labelId) => draft?.labels?.[labelId] ?? emptyLabelRule();
 
   const toggleHidden = (labelId) => {
     setDraft((current) => {
@@ -695,12 +690,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
 
   const changeRule = (labelId, patch) => {
     setDraft((current) => {
-      const existing = current.labels?.[labelId] ?? {
-        allowedUserIds: [],
-        allowedTeamIds: [],
-        requiredColumnIds: [],
-        requiredPeopleColumnIds: [],
-      };
+      const existing = current.labels?.[labelId] ?? emptyLabelRule();
       return {
         ...current,
         labels: {

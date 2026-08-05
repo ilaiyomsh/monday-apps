@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom';
 import { Avatar, AvatarGroup } from '@vibe/core';
 import { Check, CloseSmall, Search, Person } from '@vibe/icons';
 import { computeFloatingPosition } from '../../utils/overlayPlacement';
+import { GET_ACCOUNT_USERS } from '../../services/graphqlQueries';
 import mondayService from '../../services/mondayService';
 import logger from '../../utils/logger';
 import styles from './PersonPicker.module.css';
@@ -31,15 +32,14 @@ function entryKey(entry) {
 }
 
 // Module-level roster cache: one users query per page load, shared by every
-// picker instance. Avatar URLs use monday's photo_thumb (API 2026-04 pin —
-// photo_url { thumb } only exists from 2026-07).
+// picker instance.
 let rosterCache = null;
 let rosterPromise = null;
 async function loadRoster() {
   if (rosterCache) return rosterCache;
   if (!rosterPromise) {
     rosterPromise = mondayService
-      .query('query AccountUsers($limit: Int) { users(limit: $limit) { id name photo_thumb } }', { limit: 500 })
+      .query(GET_ACCOUNT_USERS, { limit: 500 })
       .then((data) => {
         rosterCache = data?.users || [];
         return rosterCache;

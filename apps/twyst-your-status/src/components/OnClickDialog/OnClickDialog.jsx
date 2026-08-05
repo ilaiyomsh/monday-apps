@@ -37,7 +37,6 @@ function OnClickDialog({ context }) {
   const [currentValue, setCurrentValue] = useState(null);
   const [peopleByColumnId, setPeopleByColumnId] = useState({});
   const [actor, setActor] = useState({ userId: String(user?.id ?? ''), teamIds: [] });
-  const [columnsById, setColumnsById] = useState(new Map());
   const [error, setError] = useState(null);
   const [savingLabelId, setSavingLabelId] = useState(null);
   // Which fetch inputs the state currently in hand was loaded for, and a counter
@@ -133,11 +132,6 @@ function OnClickDialog({ context }) {
         userId: String(user?.id ?? ''),
         teamIds: teamsResult.teamIds,
       });
-      setColumnsById(new Map(
-        (item?.column_values ?? [])
-          .filter((value) => value.column)
-          .map((value) => [value.id, value.column]),
-      ));
       setLoadedKey(fetchKey);
     } catch (err) {
       if (myRun !== runIdRef.current) {
