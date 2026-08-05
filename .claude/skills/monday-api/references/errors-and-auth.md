@@ -118,6 +118,15 @@ Related: `team_subscribers` can return null / unauthorized at an app's OAuth sco
   separate failure domain).
 - Backend `@mondaycom/apps-sdk` Storage: `get/set/delete`, `previousVersion` for optimistic
   locking; limits 6MB per key, 12 req/s.
+- **Keys must be short plain ASCII — free text (Hebrew) in a key gets the write REJECTED.**
+  Inferred from production behavior 2026-08-05 (discussions round360): `setItem` under a key
+  embedding a percent-encoded Hebrew name (`..._%D7%93...`) resolves
+  `{data:{success:false, error:{…}}}` while the SAME (even larger) value saves fine under a
+  short ASCII key. Undocumented — the docs state only a 256-char key cap and 6MB value cap.
+  Two corollaries: (1) never build storage keys from user-entered names — digest them
+  (e.g. FNV-1a over UTF-8 bytes) or key by a stable id; (2) `setItem` rejections resolve with
+  an OBJECT in `error`, not a string — stringify before interpolating, and always check
+  `success` (a rejected write otherwise looks exactly like a saved one).
 
 ## Seamless SDK quirks
 

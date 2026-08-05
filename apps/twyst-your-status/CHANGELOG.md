@@ -44,6 +44,15 @@ columnValue: {"$any$": true}}` מתקבל.
   `[SecureStorage]/[Storage.get] Got data for key` של apps-sdk 0.1.4 (5-8 לכל בקשה, ללא
   כיבוי דרך env, וגם דלף מפתחות storage); error/warn לא מושפעים.
 
+**עמידות SecureStorage (אותה גרסה):** הלוגים הנקיים חשפו שהכשל שנותר אינו קוד אלא תשתית —
+ה-Vault של monday-code (`…/vault-server…/auth/gcp/login`) החזיר HTML לסירוגין ב-cold start
+של קונטיינר draft, מה שהפך ל-502. `createResilientSecureStorage()`
+(helpers/secure-storage-resilient.js) עוטף את ה-SecureStorage: (א) **retry** עם backoff על
+שגיאות Vault זמניות (שגיאה לא-זמנית או המיצוי הסופי עדיין נזרקים — error-guard), (ב) **איחוד
+קריאות get בו-זמניות** לאותו מפתח ל-round-trip אחד (מסך ההגדרות יורה status+bypasses+enroll
+יחד וקורא את אותם מפתחות טוקן). מקצר חשיפה לתקלות ה-Vault; ה-cold start עצמו נפתר סופית
+בקונטיינר live החם.
+
 ## 3.15.1 — מועמד הפיתוח הבא אחרי שחרור 3.15.0 ללייב
 
 אין שינוי מוצרי. 3.15.0 שוחררה ללייב (PR #623), ולכן develop מקדם את המספר למועמד

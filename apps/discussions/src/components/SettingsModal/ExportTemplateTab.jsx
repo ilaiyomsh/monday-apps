@@ -339,7 +339,16 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
   const [sizeAlert, setSizeAlert] = useState(null);
   const exceedsBudget = (nextAssets) => {
     if (estimateAssetsBytes(nextAssets) > EXPORT_ASSETS_MAX_BYTES) {
-      setSizeAlert(`הקובץ גדול מדי — סך הנכסים חורג מ-${(EXPORT_ASSETS_MAX_BYTES / 1024 / 1024).toFixed(0)}MB ולכן לא נטען.`);
+      const msg = `הקובץ גדול מדי — סך הנכסים חורג מ-${(EXPORT_ASSETS_MAX_BYTES / 1024 / 1024).toFixed(0)}MB ולכן לא נטען.`;
+      setSizeAlert(msg);
+      // round358 — the inline alert renders at the BOTTOM of a long scrolling column,
+      // below the fold on most screens, so a rejected upload read as "nothing
+      // happened". logger.error routes to the global toast — the rejection is now
+      // impossible to miss. (A stale templateDocx from "קובץ תבנית" mode still counts
+      // against the budget even in "עיצוב כאן", which is how a small logo can trip it.)
+      // The toast text comes from record.error ?? record.data (useUiErrorSink) — a
+      // message-only call would show the generic unexpected-error text (Codex P2).
+      logger.error('ExportTemplateTab', msg, new Error(msg));
       return true;
     }
     return false;
