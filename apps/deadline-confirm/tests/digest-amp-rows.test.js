@@ -155,6 +155,23 @@ describe('renderDigestAmp — one form per row', () => {
     expect((html.match(/change:f0_9001\.submit/g) ?? []).length).toBe(2); // two options
   });
 
+  // The official validator REFUSES the document without these (CI run 766, all
+  // 5 samples): "The attribute 'role' in tag 'input' is missing or incorrect,
+  // but required by attribute 'on'" — same for tabindex. amp-form demands both
+  // on any element carrying `on`; <button> is exempt, <input> is not, which is
+  // why the trigger never needed them and the overlay always had them. They also
+  // earn their keep: the radio is visually hidden, so tabindex is what keeps the
+  // options reachable by keyboard.
+  it('gives every radio the role and tabindex amp-form requires with `on`', () => {
+    const html = render([startSection(), doneSection()]);
+    const radios = html.match(/<input type="radio"[^>]*>/g) ?? [];
+    expect(radios).toHaveLength(5); // 2 buttons × 2 tasks + 1 button × 1 task
+    for (const radio of radios) {
+      expect(radio).toContain('role="radio"');
+      expect(radio).toContain('tabindex="0"');
+    }
+  });
+
   it('carries the chosen button on a radio the form serializes itself', () => {
     const html = render([startSection()]);
     const [first] = forms(html);

@@ -528,8 +528,13 @@ function renderStatusControl({ formId, menuKey, task, buttons, palette, noteGate
       // row whose request failed is retried by picking a different status (or
       // from the board). Putting submit on tap as well would double-post every
       // first pick, since both events fire on it.
+      // role + tabindex are REQUIRED by the validator on any element carrying
+      // `on` ("required by attribute 'on'"); <button> is exempt, <input> is not,
+      // which is why the trigger has neither and the overlay has both. They are
+      // also what keeps a visually hidden radio reachable by keyboard.
       return `              <label class="dd-opt" style="background:${escapeHtml(color)}">
                 <input type="radio" class="pick" name="${escapeHtml(`item_${id}`)}" value="${escapeHtml(button.id)}"
+                       role="radio" tabindex="0"
                        on="tap:${paint};change:${formId}.submit">
                 <span>&#8207;${escapeHtml(button.label)}</span>
               </label>`;
