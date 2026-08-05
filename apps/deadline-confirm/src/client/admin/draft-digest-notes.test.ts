@@ -4,7 +4,13 @@
 // email with no error anywhere.
 
 import { describe, it, expect } from 'vitest';
-import { newDigestSection, digestFromConfig, draftToConfig, draftFromConfig } from './draft';
+import {
+  digestClusters,
+  newDigestSection,
+  digestFromConfig,
+  draftToConfig,
+  draftFromConfig,
+} from './draft';
 import type { ActionButton, AppConfig, DigestConfig } from './types';
 
 const BUTTON: ActionButton = {
@@ -57,14 +63,14 @@ describe('digestFromConfig', () => {
     const draft = digestFromConfig(
       digestConfig({ noteColumnId: 'text_note', noteColumnTitle: 'סיכום ביצוע' })
     );
-    expect(draft.sections[0].noteColumnId).toBe('text_note');
-    expect(draft.sections[0].noteColumnTitle).toBe('סיכום ביצוע');
+    expect(digestClusters(draft)[0].noteColumnId).toBe('text_note');
+    expect(digestClusters(draft)[0].noteColumnTitle).toBe('סיכום ביצוע');
   });
 
   it('backfills a config saved before the feature — null/empty, never undefined', () => {
     const draft = digestFromConfig(digestConfig());
-    expect(draft.sections[0].noteColumnId).toBeNull();
-    expect(draft.sections[0].noteColumnTitle).toBe('');
+    expect(digestClusters(draft)[0].noteColumnId).toBeNull();
+    expect(digestClusters(draft)[0].noteColumnTitle).toBe('');
   });
 });
 

@@ -35,8 +35,12 @@ const RECIPIENT = {
 const render = (recipient = RECIPIENT) => renderDigestPlain({ recipient });
 
 describe('renderDigestPlain — content', () => {
-  it("greets the recipient by name: 'שלום דנה כהן'", () => {
-    expect(render()).toContain('שלום דנה כהן');
+  // 0.15.0: the greeting is a TEXT BLOCK, not something this renderer writes —
+  // this fixture passes no blocks, so there is nothing to greet with. Greeting,
+  // ordering and the legacy reconstruction are asserted in
+  // digest-plain-blocks.test.js.
+  it('writes no greeting of its own when the digest has no text blocks', () => {
+    expect(render()).not.toContain('שלום');
   });
 
   it('renders every section title', () => {
@@ -92,8 +96,11 @@ describe('renderDigestPlain — content', () => {
     expect(noStatusLine).not.toContain('סטטוס:');
   });
 
-  it("ends with the ONE pointer line: update in monday.com ('לעדכון המשימות היכנסו ל‑monday.com')", () => {
-    expect(render()).toContain('לעדכון המשימות היכנסו ל‑monday.com');
+  // Same move: the closing pointer line is a text block the operator owns (and
+  // the legacy reconstruction supplies it to every config that predates blocks).
+  // What still MUST hold here is the negative space — see the D2/D3 block below.
+  it('appends no closing line of its own', () => {
+    expect(render()).not.toContain('לעדכון המשימות היכנסו');
   });
 
   it('renders a task with an unset date without a date value (no "null"/"undefined" text)', () => {

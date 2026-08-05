@@ -16,6 +16,7 @@
 
 import type { ConfigDraft, DigestDraft } from './draft';
 import type { AppConfig, BoardColumn } from './types';
+import logger from './utils/logger';
 
 /** Header used when the date column cannot be resolved (matches the renderers). */
 export const FALLBACK_DATE_TITLE = 'תאריך';
@@ -31,10 +32,13 @@ export function backfillDateColumnTitles(digest: DigestDraft, columns: BoardColu
   const titleById = new Map(columns.map((c) => [c.id, c.title]));
   return {
     ...digest,
-    sections: digest.sections.map((s) => {
-      if (s.dateColumnTitle.trim().length > 0) return s;
-      const resolved = s.dateColumnId ? titleById.get(s.dateColumnId) : undefined;
-      return { ...s, dateColumnTitle: resolved?.trim() || FALLBACK_DATE_TITLE };
+    // 0.15.0: clusters live in the block list, so the backfill walks the blocks
+    // and leaves text blocks untouched.
+    blocks: digest.blocks.map((b) => {
+      if (b.type !== 'cluster') return b;
+      if (b.dateColumnTitle.trim().length > 0) return b;
+      const resolved = b.dateColumnId ? titleById.get(b.dateColumnId) : undefined;
+      return { ...b, dateColumnTitle: resolved?.trim() || FALLBACK_DATE_TITLE };
     }),
   };
 }
@@ -91,7 +95,11 @@ export function parseSettingsImport(text: string): ImportResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
-  } catch {
+  } catch (err) {
+    // The user already sees the returned message; this records WHICH parse failed
+    // (error-guard: a catch must log, rethrow or display — this one displays via
+    // the return value and logs the cause, which the message cannot carry).
+    logger.error('admin', 'settings_import_parse_failed', err);
     return { ok: false, error: 'הקובץ אינו JSON תקין.' };
   }
   if (typeof parsed !== 'object' || parsed === null) {
