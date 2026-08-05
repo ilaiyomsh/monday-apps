@@ -19,7 +19,7 @@ stated ordering dependencies inside `ColumnSettings.jsx` and `PersonPicker.jsx`)
 |---|---|---|---|---|
 | 1 | comments | 9 | S | done |
 | 2 | dead files | 3 | M | done |
-| 3 | unused exports | 5 | M | approved |
+| 3 | unused exports | 5 | M | done |
 | 4 | unused deps | 1 | M | approved |
 | 5 | duplication consolidation | 10 | L | pending |
 | 6 | pattern alignment | 4 | L | approved |
@@ -183,7 +183,7 @@ dynamic/lazy import, no barrel, no string/route reference in `vite.config.js:23`
 ---
 
 ## Batch 3 — unused exports: dead public surface
-risk: M | status: approved
+risk: M | status: done
 
 ⚠ **Header corrected by the refutation pass.** The original wording ("only exports whose
 *binding* is dead are here") is false for `K-020` and `K-022`, and a literal reading of it would
