@@ -55,8 +55,13 @@ USE_LOCAL_STORAGE=true npm start
      backoff של 10 דקות בין retries, וריצה שנחתכת ב-timeout תנוסה שוב ותשלח
      מייל שני לכל מי שכבר קיבל.
    - בדיקת עשן בלי לשלוח לאף אחד: `mapps scheduler:run -a 11704868 -n digest-send`
-     **בשעה שאף טננט אינו due**, ואז `mapps code:logs -i 11704868 -t console`
-     ולחפש `cron_tick` עם `hour` ו-`tenants`.
+     **בשעה שאף טננט אינו due**, ואז לקרוא את הלוגים ולחפש `cron_tick` עם
+     `hour` ו-`tenants`. **`code:logs -i` הוא app VERSION id, לא ה-app id** —
+     קודם `mapps app-version:list -i 11704868` כדי לקבל את המזהה (ואת מי מהן
+     draft ומי live), ואז
+     `mapps code:logs -i <APP_VERSION_ID> -t console -s live`.
+     זו גם הדרך לענות על השאלה באיזו גרסה ה-cron פוגע: השורה תופיע בלוג של
+     אחת מהן בלבד.
 7. אפליקציית Google Cloud (מדריך מלא: `docs/google-setup-guide.md`): OAuth client
    + scope **`https://mail.google.com/`** (החלטת בעלים 2026-08-04, שלב בדיקות —
    מסך consent חייב להיות Internal), `GOOGLE_OAUTH_CLIENT_ID/SECRET` ב-env.
