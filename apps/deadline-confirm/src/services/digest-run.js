@@ -6,6 +6,7 @@
 
 import { MANIFEST_TIMEZONE, currentSlot } from './manifest-signature.js';
 import { buildDigest, digestTaskColumnIds, decorateRecipientSections } from './digest-service.js';
+import { applyTokens, normalizeDigestBlocks } from './digest-blocks.js';
 import { MondayApiError } from './monday-api.js';
 import { renderDigestPlain } from '../helpers/digest-plain.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
@@ -118,6 +119,10 @@ export async function runDigestForAccount({
 
   const buttonsById = new Map((config.buttons ?? []).map((b) => [b.id, b]));
   const withButtons = (recipient) => decorateRecipientSections(recipient, buttonsById);
+  // The operator-authored body. Reconstructed for a config that predates blocks,
+  // so a tenant the scheduler has been sending for months keeps getting the same
+  // mail until they edit it (services/digest-blocks.js).
+  const blocks = normalizeDigestBlocks(config.digest);
 
   // Who this slot has already been sent to. Loaded ONCE, as a snapshot: within a
   // single run the behaviour must stay exactly what it was, including D16's "the
@@ -145,12 +150,13 @@ export async function runDigestForAccount({
     }
     try {
       const decorated = withButtons(recipient);
-      const plain = renderDigestPlain({ recipient: decorated });
+      const plain = renderDigestPlain({ recipient: decorated, blocks });
       const amp = renderDigestAmp({
         baseUrl,
         secret,
         accountId,
         recipient: decorated,
+        blocks,
         sendHour,
         now: clock,
       });
@@ -161,7 +167,10 @@ export async function runDigestForAccount({
         // to authenticate as.
         accountId,
         to: recipient.email,
-        subject: config.digest.subject,
+        // The subject is the ONE header a token can reach, which is why
+        // applyTokens strips CR/LF from the value it substitutes — the sender's
+        // assertHeaderSafe is the second line of defence, not the first.
+        subject: applyTokens(config.digest.subject, { name: recipient.name }),
         plain,
         amp,
         mime,

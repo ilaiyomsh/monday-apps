@@ -506,7 +506,11 @@ describe('renderDigestAmp — strict amp4email CSS (data-css-strict)', () => {
 describe('renderDigestAmp — response + validation', () => {
   // Per ROW, not per message: amp-form looks for these blocks inside the form
   // that submitted, which is what puts the loader and the mark on that row.
-  it('provides submitting/success/error blocks per row and greets by name', () => {
+  // 0.14.0: the greeting left this renderer. It is a TEXT BLOCK now (the mail
+  // carries no pre-written text), so "greets by name" is asserted in
+  // digest-amp-blocks.test.js against the block list — not here, where this
+  // fixture deliberately passes no blocks at all.
+  it('provides submitting/success/error blocks per row', () => {
     const doc = render();
     expect((doc.match(/<div submitting>/g) ?? []).length).toBe(3);
     expect((doc.match(/<div submit-success>/g) ?? []).length).toBe(3);
@@ -514,7 +518,6 @@ describe('renderDigestAmp — response + validation', () => {
     expect(doc).toContain('{{message}}');
     expect(doc).toContain('{{#detail}}');
     expect(doc).toContain('{{detail}}');
-    expect(doc).toContain('דנה');
   });
 
   it('throws when recipient.personId is missing', () => {

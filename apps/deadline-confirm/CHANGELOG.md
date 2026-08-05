@@ -2,6 +2,70 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.14.0 — 2026-08-05 — the summary email's content is the operator's, not the code's
+
+**The problem was scope of control.** The digest settings screen could choose the
+מקבצים and nothing else: the greeting, the "לחצו על תגית הסטטוס…" paragraph, the
+note hint and the footer were literal strings inside `digest-amp.js`, and the
+text/plain part had three different literals of its own. Changing a sentence meant
+a PR.
+
+**The body is now an ordered BLOCK LIST.** `digest.blocks` holds two kinds of
+block: free TEXT with block-level formatting (direction, font, size 10–32,
+alignment, color, bold — the controls the single email's editor already had, plus
+color and bold) and a CLUSTER, which carries exactly the settings `sections[]` used
+to. The admin edits one list with ↑/↓/✕; the "מקבצי משימות" panel is gone.
+The renderers ship **no content text at all** any more — what they still emit is
+operational chrome: the column headers, `סטטוס`, the note placeholder, and
+amp-form's per-row `מעדכן…` / ✓ / error strips.
+
+**Block order is cluster priority, and now there is only one order.** Section
+order has decided priority since 2026-08-04 (first matching cluster claims the
+task). It used to live in a separate panel from the mail's layout; now the arrows
+that move a block in the mail are the same arrows that set its priority, so the two
+cannot be configured to disagree. `sections` survives in storage as a projection
+the server derives from the blocks on every save — and `digestSections()` prefers
+the blocks whenever they exist, so a stale copy (hand-edited record, old settings
+import) can no longer classify tasks in an order the mail does not render in.
+
+**One dynamic field: `{{שם}}`.** The recipient's users-board row name, insertable
+anywhere in any text block AND in the subject, which is itself a pinned block. The
+admin inserts it at the caret (a bidi-rendered `{{שם}}` is unpleasant to type). The
+subject is the one place a token value reaches a mail header, so substitution
+strips CR/LF before use — `assertHeaderSafe` in the sender is now the second line
+of defence, not the first. A row name of `דנה\r\nBcc: …` is pinned by a test.
+
+**Nothing changes for a tenant until they edit.** A config stored before today has
+no `blocks` key, and the scheduler may keep sending it for months. Reading one
+reconstructs the blocks that reproduce the 0.13.x mail verbatim — greeting, lead,
+the note hint **only when some cluster maps a note column** (exactly the old
+condition), the clusters, footer — from one function used by the send path, the
+preview and `GET /api/state` alike. An empty `blocks` ARRAY, by contrast, is
+authored: it means an empty mail and must not regrow the old text.
+
+**Two security details worth naming.** A text block's `font` reaches
+`<style amp-custom>`, so it is a server-side ALLOWLIST, not a string (a mutation
+that downgraded it to a `typeof` check is in the test log); colors are `#rrggbb`,
+sizes clamped integers, direction/alignment enumerations. Authored text and the
+substituted name are both escaped, so a block cannot inject markup — and because
+the html fallback is still derived from the plain part, a URL an operator types
+stays inert text there rather than becoming an anchor (D1/D2 intact).
+
+**Found while testing:** `hasNameToken` shared the module's `/g` regex, so
+`RegExp.test` advanced `lastIndex` and every second call on the same text answered
+false. Its own non-global pattern now, with a test that calls it twice.
+
+Caps: 20 blocks, 1–4 clusters (unchanged), 2000 chars per text block, subject 120
+(unchanged). The client's copy of the model is kept honest by
+`tests/digest-blocks-client-drift.test.js` — the error-kit drift pattern —
+because the SPA is typed and the server module is JS.
+
+**Not verified in this session:** `npm run validate:amp` could not run (the
+official validator is fetched from cdn.ampproject.org, which the cloud
+environment's network policy blocks — exit 3, "nothing was checked"). Every CSS
+property the new `.tb*` rules use already appears in the validated document, and
+two text-block samples were added to the script so the next run covers them.
+
 ## 0.13.1 — 2026-08-05 — the scheduler exists now, and cannot mail anyone twice
 
 **The digest had never been sent automatically.** `mapps scheduler:list -a

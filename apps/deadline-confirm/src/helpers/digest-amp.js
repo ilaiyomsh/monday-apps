@@ -28,6 +28,7 @@
 
 import { escapeHtml } from './html.js';
 import { buildManifest, signManifest, currentSlot } from '../services/manifest-signature.js';
+import { applyTokens, DIGEST_FONTS } from '../services/digest-blocks.js';
 
 const AMP_ENDPOINT_PATH = '/amp/confirm';
 const DEFAULT_SEND_HOUR = 8;
@@ -306,8 +307,12 @@ function noteRequiredItemIds(recipient) {
 const STYLES_BASE = `
       body { margin:0; padding:14px 10px; background:#F5F6F8; font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif; color:#323338; }
       .wrap { position:relative; max-width:720px; margin:0 auto; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; padding:18px; }
-      .hi { font-size:18px; font-weight:bold; margin:0 0 6px; }
-      .lead { font-size:14px; color:#676879; line-height:1.6; margin:0 0 18px; }
+      /* Operator-authored text block. Everything that varies per block (font,
+         size, alignment, color, weight) lands in a generated .tb<n> rule; this
+         carries only what every block shares. pre-wrap is what preserves the
+         line breaks the operator typed — it is inside the strict amp4email
+         property set (already used by .state.err). */
+      .tb { margin:0 0 12px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
       .cluster { margin:0 0 22px; }
       .cluster-title { font-size:15px; font-weight:bold; color:#323338; margin:0 0 8px; line-height:1.4; }
       /* One card per task — and each card IS its own form. The card is the BASE
@@ -375,7 +380,6 @@ const STYLES_BASE = `
       .state.ok { background:#E6F7EF; color:#00754A; }
       .state.err { background:#FDECEE; color:#B4222F; white-space:pre-wrap; word-break:break-word; }
       .err-detail { display:block; margin-top:6px; font-size:11px; opacity:0.9; font-family:ui-monospace,Menlo,Consolas,monospace; }
-      .foot { font-size:12px; color:#9699A6; line-height:1.6; border-top:1px solid #E6E9EF; padding-top:12px; margin-top:10px; }
       /* WIDE LAYOUT — additive on purpose (see the card comment above). A media
          query is the only width signal an amp4email document has: no JS, no
          viewport API, and the media attribute applies to amp-* elements only.
@@ -426,6 +430,72 @@ const STYLES_NOTES = `
         .th-act, .c-act { width:27%; }
       }
 `;
+
+// --- operator-authored text blocks ------------------------------------------
+//
+// A text block contributes TWO things: an escaped <div> and one generated CSS
+// rule. Nothing about it may reach the document unsanitized — the text is
+// escaped (so is the substituted recipient name), and every style value is
+// re-checked HERE rather than trusted from storage, because this function is
+// what writes into <style amp-custom>: a font name is a CSS token, and an
+// unvalidated one would be a stylesheet-injection point in a document that is
+// sent to a reader's mailbox.
+
+/** The document's own stack — what every pre-0.14.0 digest was rendered in. */
+const DOC_FONT_STACK = 'Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif';
+
+/**
+ * @param {string} font a DIGEST_FONTS entry ('Default' = the document stack)
+ * @returns {string} a CSS font-family value
+ */
+function fontFamilyFor(font) {
+  if (typeof font !== 'string' || font === 'Default' || !DIGEST_FONTS.includes(font)) {
+    return DOC_FONT_STACK;
+  }
+  // Allowlisted, so quoting is about CSS correctness (multi-word families), not
+  // about escaping — a name that needed escaping could not be on the list.
+  const name = /\s/.test(font) ? `"${font}"` : font;
+  return `${name},${DOC_FONT_STACK}`;
+}
+
+/** Clamp to the same 10–32 the admin offers; a bad value renders at 14. */
+function fontSizeFor(size) {
+  const n = Number(size);
+  if (!Number.isFinite(n)) return 14;
+  return Math.min(32, Math.max(10, Math.round(n)));
+}
+
+const ALIGNS = new Set(['right', 'center', 'left']);
+const DIRECTIONS = new Set(['rtl', 'ltr']);
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+/**
+ * The CSS rule for one text block.
+ * @param {number} index
+ * @param {object} block
+ * @returns {string}
+ */
+function textBlockCss(index, block) {
+  const align = ALIGNS.has(block.align) ? block.align : 'right';
+  const color = HEX_COLOR_RE.test(block.color) ? block.color : '#323338';
+  const weight = block.bold === true ? 'bold' : 'normal';
+  return `.tb${index} { font-family:${fontFamilyFor(block.font)}; font-size:${fontSizeFor(
+    block.fontSize
+  )}px; text-align:${align}; color:${color}; font-weight:${weight}; }`;
+}
+
+/**
+ * The markup for one text block. `dir` rides the element because a block may
+ * deliberately differ from the document's rtl (a quoted English paragraph).
+ * @param {number} index
+ * @param {object} block
+ * @param {string} resolvedText tokens already substituted, NOT yet escaped
+ * @returns {string}
+ */
+function renderTextBlock(index, block, resolvedText) {
+  const dir = DIRECTIONS.has(block.direction) ? block.direction : 'rtl';
+  return `      <div class="tb tb${index}" dir="${dir}">${escapeHtml(resolvedText)}</div>`;
+}
 
 /**
  * Build the signed manifest for ONE row: every (this item × this cluster's
@@ -654,13 +724,61 @@ ${renderStatusControl({ formId, menuKey, task, buttons, palette, noteGated: Bool
 }
 
 /**
+ * Resolve the ordered blocks into what this recipient's document actually
+ * contains: text blocks as authored, cluster blocks replaced by THIS
+ * recipient's matching section — dropped when the recipient has no tasks in it.
+ *
+ * Matching is by section id, never by position: buildDigest omits a section a
+ * recipient has nothing in, so the Nth block and the Nth section are not the
+ * same thing. A block naming a section that is absent renders nothing.
+ *
+ * `blocks` absent (legacy call shape, and every renderer test that predates
+ * 0.14.0) means "the clusters, in recipient order, with no text".
+ *
+ * @param {Array<object>|undefined} blocks
+ * @param {object} recipient
+ * @returns {Array<{ kind: 'text', block: object } | { kind: 'cluster', section: object }>}
+ */
+function resolveUnits(blocks, recipient) {
+  const sections = recipient.sections ?? [];
+  const hasTasks = (section) => Boolean(section?.tasks && section.tasks.length > 0);
+  if (!Array.isArray(blocks)) {
+    return sections.filter(hasTasks).map((section) => ({ kind: 'cluster', section }));
+  }
+  const byId = new Map();
+  for (const section of sections) {
+    const id = section.sectionId ?? section.id;
+    if (typeof id === 'string' && id.length > 0 && !byId.has(id)) byId.set(id, section);
+  }
+  const units = [];
+  for (const block of blocks) {
+    if (block?.type === 'text') {
+      units.push({ kind: 'text', block });
+      continue;
+    }
+    if (block?.type !== 'cluster') continue;
+    const section = byId.get(block.id);
+    if (hasTasks(section)) units.push({ kind: 'cluster', section });
+  }
+  return units;
+}
+
+/**
  * Render the dynamic-email (amp4email) part of one recipient's digest.
+ *
+ * The BODY IS THE BLOCK LIST (0.14.0). This function contributes no content
+ * text of its own — only operational chrome: the cluster column headers, the
+ * status caption, the note placeholder and amp-form's per-row
+ * submitting/✓/error strips. A greeting, an instruction line or a footer is a
+ * text block the operator wrote (a config that predates blocks is reconstructed
+ * into exactly those blocks — see services/digest-blocks.js).
  *
  * @param {object} p
  * @param {string} p.baseUrl
  * @param {string} p.secret
  * @param {string} p.accountId
  * @param {{ name: string, personId: string, sections: Array<object> }} p.recipient
+ * @param {Array<object>} [p.blocks] normalized digest blocks; absent = clusters only
  * @param {number} [p.sendHour=8]
  * @param {Date} [p.now=new Date()]
  * @returns {string}
@@ -670,6 +788,7 @@ export function renderDigestAmp({
   secret,
   accountId,
   recipient,
+  blocks,
   sendHour = DEFAULT_SEND_HOUR,
   now = new Date(),
 }) {
@@ -679,56 +798,79 @@ export function renderDigestAmp({
   }
 
   const slot = currentSlot({ sendHour, now });
-  const ddState = buildDropdownState(recipient);
-  const palette = allRecipientButtons(recipient);
-  const notesInPlay = noteRequiredItemIds(recipient).length > 0;
+  const units = resolveUnits(blocks, recipient);
+  // State, palette and the notes stylesheet describe the RENDERED clusters only:
+  // a section the block list never names must not seed dropdown state, add a
+  // color rule, or drag in the locked-trigger CSS.
+  const rendered = {
+    ...recipient,
+    sections: units.filter((u) => u.kind === 'cluster').map((u) => u.section),
+  };
+  const ddState = buildDropdownState(rendered);
+  const palette = allRecipientButtons(rendered);
+  const notesInPlay = noteRequiredItemIds(rendered).length > 0;
 
   /** Stripe rules, one per distinct cluster accent actually rendered. */
   const accentRules = new Map();
+  /** One rule per rendered text block (.tb0, .tb1, …). */
+  const textRules = [];
 
-  const clusters = (recipient.sections ?? [])
-    .filter((section) => section.tasks && section.tasks.length > 0)
-    .map((section, clusterIndex) => {
-      const buttons = resolveSectionButtons(section, recipient.statusColumnColors);
-      if (buttons.length === 0) return '';
-      const accent = buttons[0].color || NEUTRAL_STATUS;
-      const accentClass = accentToClass(accent);
-      accentRules.set(
-        accentClass,
-        `.row.${accentClass} { border-right-color:#${escapeHtml(accentClass.slice(3))}; }`
-      );
-      const rows = section.tasks
-        .map((task) =>
-          renderRowForm({
-            task,
-            section,
-            clusterIndex,
-            buttons,
-            palette,
-            baseUrl,
-            accountId,
-            personId,
-            slot,
-            secret,
-            accentClass,
-          })
-        )
-        .join('\n');
-      return `      <div class="cluster">
+  let clusterIndex = 0;
+  let textIndex = 0;
+  const bodyParts = [];
+
+  for (const unit of units) {
+    if (unit.kind === 'text') {
+      const resolved = applyTokens(unit.block.text, { name: recipient.name });
+      // An empty block is a hollow element and a stray margin — the operator
+      // deleting a block's text is not a request for vertical space.
+      if (resolved.trim().length === 0) continue;
+      textRules.push(textBlockCss(textIndex, unit.block));
+      bodyParts.push(renderTextBlock(textIndex, unit.block, resolved));
+      textIndex += 1;
+      continue;
+    }
+
+    const section = unit.section;
+    const buttons = resolveSectionButtons(section, recipient.statusColumnColors);
+    if (buttons.length === 0) continue;
+    const accent = buttons[0].color || NEUTRAL_STATUS;
+    const accentClass = accentToClass(accent);
+    accentRules.set(
+      accentClass,
+      `.row.${accentClass} { border-right-color:#${escapeHtml(accentClass.slice(3))}; }`
+    );
+    const index = clusterIndex;
+    clusterIndex += 1;
+    const rows = section.tasks
+      .map((task) =>
+        renderRowForm({
+          task,
+          section,
+          clusterIndex: index,
+          buttons,
+          palette,
+          baseUrl,
+          accountId,
+          personId,
+          slot,
+          secret,
+          accentClass,
+        })
+      )
+      .join('\n');
+    bodyParts.push(`      <div class="cluster">
         <p class="cluster-title">&#8207;${escapeHtml(section.title)}</p>
 ${renderColumnHeader(section)}
 ${rows}
-      </div>`;
-    })
-    .filter((html) => html.length > 0)
-    .join('\n');
+      </div>`);
+  }
 
-  const colorCss = buildColorClassCss(collectColors(recipient));
-  const styles = `${STYLES_BASE}${notesInPlay ? STYLES_NOTES : ''}\n      ${colorCss}\n      ${[...accentRules.values()].join('\n      ')}`;
-
-  const noteHint = notesInPlay
-    ? '<p class="lead">&#8207;בשורות שיש בהן שדה טקסט — קודם ממלאים את השדה. לא ניתן לבחור סטטוס לפני שיש בו טקסט: התגית נעולה, ומשתחררת ברגע שהשדה מולא.</p>'
-    : '';
+  const colorCss = buildColorClassCss(collectColors(rendered));
+  const styles = `${STYLES_BASE}${notesInPlay ? STYLES_NOTES : ''}\n      ${colorCss}\n      ${[
+    ...accentRules.values(),
+    ...textRules,
+  ].join('\n      ')}`;
 
   return `<!doctype html>
 <html amp4email data-css-strict lang="he">
@@ -746,11 +888,7 @@ ${rows}
     <div class="wrap">
       <div class="dd-overlay" hidden [hidden]="dd.o == ''" role="button" tabindex="0"
            on="tap:AMP.setState({dd:{o:''}})"></div>
-      <p class="hi">&#8207;שלום ${escapeHtml(recipient.name)},</p>
-      <p class="lead">&#8207;בכל משימה: לחצו על תגית הסטטוס ובחרו מהתפריט. העדכון נשמר בלוח מיד — בלי כפתור שליחה ובלי לצאת מהמייל — וליד המשימה יופיע סימון אישור.</p>
-      ${noteHint}
-${clusters}
-      <p class="foot">&#8207;מייל אוטומטי · משימות שלא בחרתם בהן סטטוס לא משתנות · כל משימה מופיעה פעם אחת, במקבץ בעל העדיפות הגבוהה · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
+${bodyParts.join('\n')}
     </div>
   </body>
 </html>`;

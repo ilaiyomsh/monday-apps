@@ -671,3 +671,98 @@ granted for the **testing phase** by owner decision 2026-08-04 (D12 suspension �
 `docs/v6-amp-only-decisions.md`). The production channel is still an open owner
 decision. `gmail-sender.js` is kept for reference/rollback only.
 
+
+# 0.14.0 — the summary email is a BLOCK LIST (owner decisions, 2026-08-05)
+
+Supersedes the parts of the V4 amendment above that describe the digest body as
+"sections + fixed wrapper text". The clusters (מקבצים) and their rules are
+unchanged; what changed is that the body is now AUTHORED.
+
+## Product behavior
+
+- **The mail contains ONLY what the operator wrote.** The renderers ship no
+  content text of their own: the greeting, the instruction paragraph, the note
+  hint and the footer that 0.13.x hard-coded are gone from the code. They are
+  text blocks now.
+- **The body is an ORDERED list of blocks**, edited in one list in the admin
+  ("תוכן המייל — בלוקים"). Two kinds:
+  - **text block** — free text with block-level formatting: direction (rtl/ltr),
+    font (a closed list; `Default` = the email's own stack), size 10–32,
+    alignment, color, bold. Line breaks are preserved. Same controls as the
+    single (non-digest) email's template editor, plus color and bold.
+  - **cluster block** — one מקבץ, carrying exactly the settings `sections[]`
+    used to: date column, action buttons, status condition, optional
+    required-note column.
+- **Block order is also cluster PRIORITY** (it replaces the old separate
+  "מקבצי משימות" ordering): a task matching several clusters appears only in the
+  first one, exactly as before — but now the arrows that move the mail are the
+  same arrows that set priority, so the two cannot disagree.
+- **Subject is its own block**, pinned first and outside the body list.
+- **ONE dynamic field: `{{שם}}`** (ASCII alias `{{name}}` also resolves), the
+  recipient's name as it appears on their users-board row. Insertable anywhere in
+  any text block and in the subject; the admin's button inserts it at the caret.
+  A "+ הוסף שם משתמש" button exists because a bidi-rendered `{{שם}}` is awkward
+  to type by hand.
+- **An empty cluster is dropped; text blocks always render.** A recipient with no
+  tasks in a cluster does not get its title or its column headers — but the text
+  around it is unconditional (owner decision: no per-block visibility rule).
+- **What is still not authorable** — the operational chrome inside a cluster:
+  the column headers (task name / the board's date-column title / סטטוס / the
+  note column's title), the note placeholder, and amp-form's per-row
+  "מעדכן…" / ✓ / error strips. They are part of the control, not the copy.
+- **Caps:** 20 blocks total, 1–4 cluster blocks (unchanged), 2000 chars per text
+  block, subject 120 (unchanged).
+
+## Storage & config schema (extends §4 and the V4 amendment)
+
+`config.digest` gains `blocks`; `sections` stays as a DERIVED projection:
+
+```
+digest: {
+  usersBoardId, usersPeopleColumnId, usersEmailColumnId,   // unchanged
+  subject: "המשימות של {{שם}}",                            // 1..120, may carry the token
+  sendHour: 8,                                             // unchanged
+  blocks: [                                                // 1..20, >=1 cluster, <=4 clusters
+    { type: "text", id: "x_xxxxxxxx", text: "…",           // 1..2000 chars
+      direction: "rtl"|"ltr", font: <DIGEST_FONTS entry>,
+      fontSize: 10..32, align: "right"|"center"|"left",
+      color: "#rrggbb", bold: false },
+    { type: "cluster", id: "s_xxxxxxxx", …the section fields… }
+  ],
+  sections: [ …cluster blocks, in block order, without `type`… ]
+}
+```
+
+- **`blocks` is the source of truth. `sections` is derived from it** by the
+  server on every save, and `digest-service.digestSections()` prefers the blocks
+  whenever they exist — so a stale `sections` copy (a hand-edited record, an old
+  settings import) can never classify tasks in an order the mail does not render
+  in. `sections` keeps being written so a rolled-back server still works.
+- **A config with no `blocks` key is pre-0.14.0** and is reconstructed on read
+  into the blocks that reproduce the 0.13.x email — greeting, lead, the note hint
+  (only when some cluster maps a note column), the clusters, footer. That
+  reconstruction is one function (`services/digest-blocks.js`
+  `legacyBlocksFromSections`), used by the send path, the preview and
+  `GET /api/state`, so a tenant the scheduler has been mailing for months keeps
+  getting the same mail until the operator edits it.
+- `GET /api/state` always answers with `blocks` populated (normalizing on the way
+  out); the admin SPA therefore has no migration logic of its own.
+- `PUT /api/config` accepts either shape: a body with `blocks` (validated
+  field-by-field, `400 invalid_config` + `field: 'digest.blocks'`) or a legacy
+  body with `sections` only (`field: 'digest.sections'`, unchanged).
+
+## Security notes specific to this change
+
+- **`font` is a server-side ALLOWLIST.** A text block's font name is written into
+  the amp document's `<style amp-custom>`; an arbitrary string there is
+  stylesheet injection. Both the admin and `PUT /api/config` check it against the
+  same list (`DIGEST_FONTS`), and the renderer falls back to the document stack
+  for anything else. Colors are `#rrggbb`, sizes are clamped integers, alignment
+  and direction are enumerations.
+- **Authored text is escaped, and so is the substituted name** — a block cannot
+  introduce markup into the AMP part, and the text/plain part carries the text
+  verbatim, which keeps a typed URL inert in the derived html fallback (still no
+  anchors, per D1/D2).
+- **The subject is the one place a token value reaches a mail header**, so
+  substitution strips CR/LF before the value is used (`applyTokens`); the
+  sender's `assertHeaderSafe` remains the second line of defence.

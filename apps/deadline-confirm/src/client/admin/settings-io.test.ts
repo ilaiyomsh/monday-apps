@@ -17,7 +17,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { backfillDateColumnTitles, buildSettingsExport, parseSettingsImport } from './settings-io';
-import type { DigestDraft } from './draft';
+import type { DigestClusterDraft, DigestDraft } from './draft';
+import { digestClusters, newDigestCluster, newDigestTextBlock } from './draft';
 import type { BoardColumn } from './types';
 
 const COLUMNS: BoardColumn[] = [
@@ -26,9 +27,11 @@ const COLUMNS: BoardColumn[] = [
   { id: 'status', title: 'סטטוס', type: 'status', labels: [] },
 ];
 
-const section = (over: Partial<DigestDraft['sections'][number]> = {}) => ({
+// 0.14.0: clusters are blocks, so the backfill walks the block list. A text
+// block is added to every fixture on purpose — the backfill must step over it.
+const section = (over: Partial<DigestClusterDraft> = {}): DigestClusterDraft => ({
+  ...newDigestCluster('משימות שנדרש להתחיל'),
   id: 's_aaaaaaaa',
-  title: 'משימות שנדרש להתחיל',
   dateColumnId: 'date4',
   dateColumnTitle: 'תאריך התחלה',
   noteColumnId: null,
@@ -39,42 +42,42 @@ const section = (over: Partial<DigestDraft['sections'][number]> = {}) => ({
   ...over,
 });
 
-const digest = (sections: DigestDraft['sections']): DigestDraft => ({
+const digest = (clusters: DigestClusterDraft[]): DigestDraft => ({
   enabled: true,
   usersBoardId: '18422783851',
   usersPeopleColumnId: 'person',
   usersEmailColumnId: 'email_mm5d3357',
   subject: 'המשימות שלך — נדרש עדכון סטטוס',
   sendHour: 8,
-  sections,
+  blocks: [newDigestTextBlock('שלום {{שם}},'), ...clusters],
 });
 
 describe('backfillDateColumnTitles', () => {
   it('fills an empty title from the selected column — the legacy-config case that blocked saving', () => {
     const out = backfillDateColumnTitles(digest([section({ dateColumnTitle: '' })]), COLUMNS);
-    expect(out.sections[0].dateColumnTitle).toBe('תאריך התחלה');
+    expect(digestClusters(out)[0].dateColumnTitle).toBe('תאריך התחלה');
   });
 
   it('fills a whitespace-only title too (still rejected by the server)', () => {
     const out = backfillDateColumnTitles(digest([section({ dateColumnTitle: '   ' })]), COLUMNS);
-    expect(out.sections[0].dateColumnTitle).toBe('תאריך התחלה');
+    expect(digestClusters(out)[0].dateColumnTitle).toBe('תאריך התחלה');
   });
 
   it('falls back to a generic header when the column is unknown, so saving is never blocked', () => {
     // columns may not have loaded yet, or the column was deleted from the board
     const out = backfillDateColumnTitles(digest([section({ dateColumnTitle: '', dateColumnId: 'gone' })]), COLUMNS);
-    expect(out.sections[0].dateColumnTitle).toBe('תאריך');
+    expect(digestClusters(out)[0].dateColumnTitle).toBe('תאריך');
   });
 
   it('leaves a title the operator actually chose untouched', () => {
     const out = backfillDateColumnTitles(digest([section({ dateColumnTitle: 'דדליין' })]), COLUMNS);
-    expect(out.sections[0].dateColumnTitle).toBe('דדליין');
+    expect(digestClusters(out)[0].dateColumnTitle).toBe('דדליין');
   });
 
   it('does not mutate the input digest', () => {
     const input = digest([section({ dateColumnTitle: '' })]);
     backfillDateColumnTitles(input, COLUMNS);
-    expect(input.sections[0].dateColumnTitle).toBe('');
+    expect(digestClusters(input)[0].dateColumnTitle).toBe('');
   });
 
   it('leaves every other field of the digest alone', () => {
@@ -82,8 +85,8 @@ describe('backfillDateColumnTitles', () => {
     const out = backfillDateColumnTitles(input, COLUMNS);
     expect(out.subject).toBe(input.subject);
     expect(out.usersBoardId).toBe(input.usersBoardId);
-    expect(out.sections[0].includeStatusLabelIds).toEqual([3]);
-    expect(out.sections[0].buttonId).toBe('b_start001');
+    expect(digestClusters(out)[0].includeStatusLabelIds).toEqual([3]);
+    expect(digestClusters(out)[0].buttonId).toBe('b_start001');
   });
 });
 
