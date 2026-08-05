@@ -788,6 +788,22 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   // their order, and their labels come from the template's meta section.
   const metaPara = (label, value) =>
     new Paragraph({ ...RTL, children: [run(`${label}: `, { bold: true }), run(value)] });
+  /*
+   * round357 (Codex P2 on the release PR) — the SINGLE-ROW people form, built from the
+   * same segments as the per-line form so the separator stays BOLD here too. Flattening
+   * to one string lost the bold in the DEFAULT mode (perLine off), which is where most
+   * documents live: the dash came out short but thin, only half the owner's request.
+   * People are joined by a plain ", " — that comma separates records, not parts, and is
+   * deliberately NOT bold.
+   */
+  const metaSegsPara = (label, rows) => {
+    const kids = [run(`${label}: `, { bold: true })];
+    rows.forEach((segs, i) => {
+      if (i) kids.push(run(', '));
+      segs.forEach((s) => kids.push(run(s.text, s.sep ? { bold: true } : undefined)));
+    });
+    return new Paragraph({ ...RTL, children: kids });
+  };
   // round315 — the label of a per-line block stands alone ("משתתפים:"), with the
   // people underneath. No trailing space: nothing follows it on that line.
   const metaLabelPara = (label) =>
@@ -808,14 +824,14 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   // line per person. `labels` are already composed strings.
   const peopleBlock = (label, rows, perLine, marker = 'none') => {
     if (!rows.length) return [];
-    // The single joined row has no records, so a marker is meaningless there.
-    if (!perLine) return [metaPara(label, rows.map(segsToText).join(', '))];
+    // The single joined row has no records, so a marker is meaningless there — but the
+    // part separators inside each person still render bold (Codex P2).
+    if (!perLine) return [metaSegsPara(label, rows)];
     return [
       metaLabelPara(label),
       ...rows.map((segs, i) => metaLinePara(segs, recordMarker(marker, i))),
     ];
   };
-  const segsToText = (segs) => segs.map((s) => s.text).join('');
   // A free-text name (external participant) has no profile parts to compose.
   const plainSegs = (value) => [{ text: value, sep: false }];
   const buildMeta = (section) => {
