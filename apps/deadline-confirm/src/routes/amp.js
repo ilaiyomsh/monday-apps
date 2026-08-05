@@ -135,6 +135,26 @@ function phrase(count, singular, plural) {
 }
 
 /**
+ * The outcome line for a submission that carried ONE task — which, since the
+ * digest became one form per row (2026-08-04), is what essentially every real
+ * POST looks like. It is read next to that single task, so it names no count,
+ * and it agrees in number: the batch wording produced "משימה אחת היו מעודכנות
+ * כבר" for a single already-done row.
+ *
+ * Returns null when the body carried several tasks, so a hand-crafted bulk POST
+ * keeps the counting reply.
+ *
+ * @param {{ total: number, updated: number, already: number }} counts
+ * @returns {string|null}
+ */
+function singleRowLine({ total, updated, already }) {
+  if (total !== 1) return null;
+  if (updated === 1) return 'עודכן';
+  if (already === 1) return 'היה מעודכן כבר';
+  return null; // a failure — the caller's own failure branch owns the wording
+}
+
+/**
  * Extract the selection fields from a parsed body. Only names matching
  * ^item_<digits>$ participate; anything else is ignored. Returns
  * { selections: Array<{ itemId, btnId }> } (identical duplicates collapsed)
@@ -365,9 +385,16 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       }
 
       const parts = [];
-      if (updated > 0) parts.push(updated === 1 ? 'עודכנה משימה אחת' : `עודכנו ${updated} משימות`);
-      if (already > 0) parts.push(`${phrase(already, 'משימה אחת', 'משימות')} היו מעודכנות כבר`);
-      if (failed > 0) parts.push(`${phrase(failed, 'משימה אחת', 'משימות')} לא עודכנו`);
+      // A one-task submission gets the row wording INSTEAD of the counts, not in
+      // addition to them: appending both produced "עודכן · משימה אחת היו…".
+      const single = singleRowLine({ total: selections.length, updated, already });
+      if (single) {
+        parts.push(single);
+      } else {
+        if (updated > 0) parts.push(updated === 1 ? 'עודכנה משימה אחת' : `עודכנו ${updated} משימות`);
+        if (already > 0) parts.push(`${phrase(already, 'משימה אחת', 'משימות')} היו מעודכנות כבר`);
+        if (failed > 0) parts.push(`${phrase(failed, 'משימה אחת', 'משימות')} לא עודכנו`);
+      }
       // "1 task was not updated" alone reads like a platform failure. Name the
       // fixable cause so the reader knows to type something and press again.
       for (const problem of noteProblems) parts.push(MESSAGES[problem]);

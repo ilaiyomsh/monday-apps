@@ -2,6 +2,111 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.13.0 — 2026-08-04 — the email updates the board as you go: no send button, a form per row, two layouts
+
+Three changes in one round, all to the body of the digest mail.
+
+**1. A text field must be filled before its row's status can be picked.** In a
+cluster that maps a text column, the status tag now ships `disabled` and carries
+`[disabled]="dd.n<id> == ''"`, so the dropdown does not open at all until the
+field holds text. The empty note used to be caught one step later, at the submit
+gate; locking the control makes the order of operations impossible to get wrong.
+The static attribute is not redundant with the binding — **amp-bind does not
+evaluate bindings on load**, so a trigger carrying only `[disabled]` would be
+tappable until the reader's first state change, which is exactly the window this
+closes. `pointer-events` is outside the strict amp4email CSS set, so `disabled`
+is the only lever available.
+
+**2. The single send button is gone. Picking a status writes that task
+immediately, with a loader and a ✓ on that row.**
+
+**Why the table had to become a card per row.** amp-form looks for its
+`submitting` / `submit-success` / `submit-error` blocks among the form's own
+children. One form per message can therefore only ever show ONE loader, and a
+`<form>` cannot span two `<td>`s — so per-row feedback forces one form per row,
+and one form per row forces the row out of the table. Cards also stack on a
+phone, which the fixed-width table never did.
+
+**The two mechanics that look like details and are not.**
+- **The selection rides a radio, not an amp-bind-bound hidden input.**
+  `AMP.setState(...)` followed by `form.submit` in one action chain is a race:
+  amp-bind applies DOM mutations on the next vsync frame and the submit does not
+  wait, so the POST would carry the PREVIOUS value. A checked radio is
+  serialized by the form itself. The `setState` still in that chain is cosmetic
+  — close the menu, repaint the trigger — and cannot lose a selection.
+- **`change` on the radio submits; `tap` only repaints and closes the menu.**
+  `change:<formId>.submit` is the supported AMP-for-Email pattern for a form
+  control, and it fires after the radio is checked. The split is required rather
+  than tidy: both events fire on a first pick, so submitting from each would post
+  twice and the duplicate would answer `already_done` — replacing the ✓ of a
+  write that had just succeeded. Accepted cost: re-tapping the same option fires
+  no `change` and does not resubmit, so a failed row is retried by picking a
+  different status.
+
+**3. Two layouts in one document: cards on a phone, columns on a desktop.**
+
+The card layout is the BASE and `@media (min-width: 601px)` ADDS the wide one.
+That direction is the whole decision. A media query is the only width signal an
+amp4email document has — no JS, no viewport API, and the `media` attribute
+applies to amp-* elements only — so the fallback for a client that strips queries
+must be the layout that works at any width. Card-first gives that; a table base
+with a `max-width` query would hand the same client a squashed table on a phone.
+
+On a wide screen each cluster gains a header strip and the in-card field captions
+switch off; on a narrow one the captions come back and every field stacks. Both
+column partitions (three columns, or four when a note column is mapped) use the
+SAME breakpoint, or the header strip and the rows would switch at different
+widths.
+
+The wide layout is a **visual** table, not a `<table>` — a `<form>` cannot span
+two `<td>`s, and per-row forms are the whole point. Columns align because every
+row is the same width and shares the same percentages, and those percentages stop
+short of 100% on purpose: inline-blocks carry a whitespace gap between them, and
+a full 100% wraps the status column onto its own line. The one visible difference
+from the old table is that there are no vertical grid lines.
+
+Card chrome follows the monday mobile app: rounded bordered card with a 4px
+stripe on the inline-start edge, the name on top, the date as a chip. The stripe
+takes the CLUSTER's primary color rather than the row's current status — the pill
+already shows the status, so the stripe groups the cards that belong together,
+and being per-cluster it needs no binding.
+
+A test asserts that **nothing interactive is styled inside the media query**. A
+layout bug must not be able to hide the trigger, the menu, the radio or the note
+field: at that point the email stops being able to do its job.
+
+**Signed per row.** Each form carries a manifest covering its own task only, so
+a leaked form authorizes one item, and the document is smaller than it would be
+repeating the message-wide manifest N times. `/amp/confirm` needed no change: it
+verifies whatever manifest arrives and checks every pair against it.
+
+**What the new request shape forced on the server.** Same tasks, same writes,
+same monday complexity budget — but one POST per task instead of one per
+message. Bucket B (per `accountId:ip`) was 30/min, which would have started
+answering `[E9]` partway down a large digest with the earlier rows already
+written; it is now 120, matching bucket A, and both capacities are named
+constants next to the limiter instead of numbers buried in `index.js`. The reply
+also stopped being phrased for a batch: a one-task submission answers "עודכן" /
+"היה מעודכן כבר" instead of counting, which also kills "משימה אחת היו מעודכנות
+כבר" — plural verb on a singular subject, which a per-row digest would have
+shown on every already-done row. A body that really carries several items keeps
+counting, mixed outcomes included.
+
+**Dropped with the bulk form:** the hidden `item_<id>` inputs, the `dd.v<id>`
+state, the ORed `[disabled]` submit gate, the marked-but-empty note highlight
+(the trigger lock makes that state unreachable) and the cross-cluster de-dup —
+each form submits alone, so each carries its own named note field.
+
+⚠️ **One amp4email behaviour is still unverified in Gmail:** `change` on a TEXT
+input, which the note lock's state mirror depends on (`input-throttled` was
+already measured dead there). Without it a mapped row's trigger stays locked;
+clusters with no mapped text column are unaffected. The write path itself is not
+at risk — `change:<form>.submit` on a form control is confirmed supported, which
+is why the submit hangs off `change` and not off `tap`. Also still open from
+0.12.0: `npm run validate:amp` could not run in the cloud session
+(`cdn.ampproject.org` is not reachable from it), so the new markup — label-wrapped
+radios, a form inside each card — has not been through the official validator.
+
 ## 0.12.0 — 2026-08-03 — a required text field per task, mapped to a board text column
 
 *(0.12.0 addendum, 2026-08-04 — the same version also shipped, in one round:

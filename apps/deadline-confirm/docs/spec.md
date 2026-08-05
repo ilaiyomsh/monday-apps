@@ -635,9 +635,12 @@ Full semantics: `CLAUDE.md` ("Per-task required note") and
 
 - `config.digest.sections[]` gains optional `noteColumnId` + `noteColumnTitle`
   (a TEXT column on the tasks board), validated by `PUT /api/config`.
-- Wire: `note_<itemId>` — ONE per item even across clusters, cap 500 chars.
-  `routes/amp.js` refuses per item (`note_required` / `note_too_long`) and
-  `performAction` guards again; the AMP `[disabled]` gate is UX only.
+- Wire: `note_<itemId>` — one named field inside that row's own form (since
+  0.13.0 each row IS a form), cap 500 chars. `routes/amp.js` refuses per item
+  (`note_required` / `note_too_long`) and `performAction` guards again; the AMP
+  gate is UX only. Since 0.13.0 that gate is `disabled` + `[disabled]` on the
+  row's STATUS TRIGGER (no text → the dropdown does not open), not `[disabled]`
+  on a bulk submit button, which no longer exists.
 - `POST /api/digest/send-raw` (AMP debug lane, extends §9): sends the
   operator's edited amp4email document byte-for-byte through the real MIME +
   send funnel — guards and error codes in `CLAUDE.md`.

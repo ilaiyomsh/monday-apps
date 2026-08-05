@@ -74,17 +74,17 @@ const recipient = (sections) => ({ name: 'דנה כהן', personId: '501', secti
  */
 const SAMPLES = [
   {
-    name: 'single cluster, no note column (the pre-0.12.0 shape)',
+    name: 'single cluster, no note column — one form per row, radio options',
     recipient: recipient([cluster()]),
   },
   {
-    name: 'note column mapped — text input, bound [class], bound submit [disabled]',
+    name: 'note column mapped — text input + trigger locked on [disabled]',
     recipient: recipient([
       cluster({ noteColumnId: 'text_note', noteColumnTitle: 'סיכום ביצוע' }),
     ]),
   },
   {
-    name: 'multi-button dropdown + note column (two bound option buttons per row)',
+    name: 'multi-button dropdown + note column (two option radios per row)',
     recipient: recipient([
       cluster({
         noteColumnId: 'text_note',
@@ -96,7 +96,7 @@ const SAMPLES = [
     ]),
   },
   {
-    name: 'two clusters, one mapped one not (mixed table widths, partial gate)',
+    name: 'two clusters, one mapped one not (both column partitions, partial lock)',
     recipient: recipient([
       cluster({ noteColumnId: 'text_note', noteColumnTitle: 'סיכום ביצוע' }),
       cluster({
@@ -108,7 +108,7 @@ const SAMPLES = [
     ]),
   },
   {
-    name: 'same task in TWO mapped clusters (one hidden note field, deduped state)',
+    name: 'same task in TWO mapped clusters (two independent forms, shared note state)',
     recipient: recipient([
       cluster({ noteColumnId: 'text_note', noteColumnTitle: 'הערה א' }),
       cluster({

@@ -1,10 +1,19 @@
-// AMP digest: one table per cluster (מקבץ), cluster date column,
-// amp-bind dropdown (closed colored trigger → popup options), one global submit.
-// Wire: a/p/m/s/sig + hidden name=item_<id> [value]=btnId ("" = no change).
+// AMP digest: one CARD PER ROW, and each card IS its own form (owner
+// 2026-08-04) — cluster title outside, name/date/status inside, and the loader +
+// confirmation come from amp-form's own state blocks, which must be children of
+// the form. Picking a status submits THAT row immediately; there is no global
+// submit button any more.
+// Wire per row: a/p/m/s/sig (manifest covers that row only) + a checked radio
+// name=item_<id> value=btnId. The old bound hidden input raced the submit.
 
 import { describe, it, expect } from 'vitest';
 import { renderDigestAmp } from '../src/helpers/digest-amp.js';
-import { buildManifest, signManifest, currentSlot } from '../src/services/manifest-signature.js';
+import {
+  buildManifest,
+  signManifest,
+  verifyManifest,
+  currentSlot,
+} from '../src/services/manifest-signature.js';
 import settingsFixture from './fixtures/board-columns-settings.probe.json';
 
 const BASE = 'https://app.example';
@@ -160,13 +169,13 @@ describe('renderDigestAmp — amp4email document validity', () => {
   });
 });
 
-describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
-  it('renders exactly one form, one submit, and one board table per populated section', () => {
+describe('renderDigestAmp — one card per row with amp-bind dropdown', () => {
+  it('renders one form per populated task, no bulk submit, one title per cluster', () => {
     const doc = render();
-    expect((doc.match(/<form /g) ?? []).length).toBe(1);
-    expect((doc.match(/type="submit"/g) ?? []).length).toBe(1);
-    expect(doc).toMatch(/type="submit"[^>]*value="אשר את המסומנות"/);
-    expect((doc.match(/class="board"/g) ?? []).length).toBe(2);
+    expect((doc.match(/<form /g) ?? []).length).toBe(3);
+    expect(doc).not.toContain('type="submit"');
+    expect(doc).not.toContain('אשר את המסומנות');
+    expect((doc.match(/class="cluster-title"/g) ?? []).length).toBe(2);
     expect(doc).toContain('משימות שנדרש להתחיל וטרם התחילו:');
     expect(doc).toContain('משימות שנדרש לסיים וטרם בוצעו:');
     expect(doc).not.toContain('קבוצה ריקה');
@@ -180,7 +189,7 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).toContain('AMP.setState');
     expect(doc).toContain("[class]=\"'dd-trig ' + dd.c");
     expect(doc).not.toContain('[style]');
-    expect(doc).toMatch(/<th class="status-h">[^<]*סטטוס/);
+    expect(doc).toMatch(/<span class="row-cap">[^<]*סטטוס/);
     expect(doc).not.toContain('סטטוס חדש');
     expect(doc).not.toContain('בחרו סטטוס');
     expect(doc).toContain('טרם החל'); // current status on item 9001
@@ -192,7 +201,11 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).not.toContain('dd.ol9001');
     expect(doc).not.toContain('<select');
     expect(doc).not.toContain('label-dd');
-    expect(doc).not.toContain('type="radio"');
+    // Radios ARE the wire now (a bound hidden input raced the immediate submit),
+    // but they sit INSIDE the hidden menu — still a closed dropdown, not the
+    // always-open radio stack rejected on 2026-07-27.
+    expect(doc).toContain('type="radio"');
+    expect(doc.indexOf('class="dd-menu"')).toBeLessThan(doc.indexOf('type="radio"'));
     expect(doc).not.toContain('class="picker"');
     expect(doc).not.toContain('amp-accordion');
   });
@@ -244,18 +257,21 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).not.toContain('ללא שינוי');
   });
 
-  it('wires one hidden item_<id> per task bound to dd.v<id> (multi-button options in setState)', () => {
+  it('wires one radio per (task × that cluster\u2019s buttons), no bound wire value', () => {
     const doc = render();
-    expect((doc.match(/name="item_9001"/g) ?? []).length).toBe(1);
-    expect((doc.match(/name="item_9002"/g) ?? []).length).toBe(1);
+    // Cluster 0 offers two buttons, cluster 1 offers one.
+    expect((doc.match(/name="item_9001"/g) ?? []).length).toBe(2);
+    expect((doc.match(/name="item_9002"/g) ?? []).length).toBe(2);
     expect((doc.match(/name="item_9004"/g) ?? []).length).toBe(1);
-    expect(doc).toContain('name="item_9001" value="" [value]="dd.v9001"');
-    expect(doc).toContain('name="item_9002" value="" [value]="dd.v9002"');
-    expect(doc).toContain('name="item_9004" value="" [value]="dd.v9004"');
-    expect(doc).toContain(`v9001:'${BTN_START.id}'`);
-    expect(doc).toContain(`v9001:'${BTN_STUCK.id}'`);
-    expect(doc).toContain(`v9004:'${BTN_DONE.id}'`);
-    expect(doc).not.toContain(`v9004:'${BTN_START.id}'`);
+    expect(doc).toContain(`name="item_9001" value="${BTN_START.id}"`);
+    expect(doc).toContain(`name="item_9001" value="${BTN_STUCK.id}"`);
+    expect(doc).toContain(`name="item_9004" value="${BTN_DONE.id}"`);
+    // A row may only offer its own cluster's buttons.
+    expect(doc).not.toContain(`name="item_9004" value="${BTN_START.id}"`);
+    // The bound hidden input (and the state key behind it) is the race this
+    // design removed — amp-bind mutates on the next frame, submit does not wait.
+    expect(doc).not.toContain('dd.v9001');
+    expect(doc).not.toContain('[value]=');
     expect((doc.match(/class="dd-trig /g) ?? []).length).toBe(3);
   });
 
@@ -281,17 +297,20 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
       ],
     };
     const doc = render(legacy);
-    expect((doc.match(/class="board"/g) ?? []).length).toBe(1);
+    expect((doc.match(/<form /g) ?? []).length).toBe(1);
     expect(doc).toContain('מקבץ ישן');
-    expect(doc).toContain('name="item_9010" value="" [value]="dd.v9010"');
-    expect(doc).toContain(`v9010:'${BTN_DONE.id}'`);
+    expect(doc).toContain(`name="item_9010" value="${BTN_DONE.id}"`);
+    expect(doc).toContain("l9010:'בוצע'");
     expect((doc.match(/class="dd-trig /g) ?? []).length).toBe(1);
   });
 
   // Since the section-priority dedup (2026-08-04) buildDigest no longer emits
-  // the same item into two sections — this recipient is hand-built to keep the
-  // renderer's defence-in-depth (shared state key + single hidden field) pinned.
-  it('shares one hidden wire field when the same item appears in two clusters', () => {
+  // the same item into two sections — this recipient is hand-built. With one
+  // form per row the two rows are fully INDEPENDENT: two ids, two signatures,
+  // two separate POSTs. The old "one shared hidden field" invariant died with
+  // the bulk form; what still ties them together is the display state (l/c) and,
+  // for a mapped cluster, the note key — by design, since it is one task.
+  it('renders two independent forms when the same item appears in two clusters', () => {
     const dual = {
       ...RECIPIENT,
       sections: [
@@ -314,10 +333,13 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
       ],
     };
     const doc = render(dual);
-    expect((doc.match(/name="item_9001"/g) ?? []).length).toBe(1);
+    expect((doc.match(/<form /g) ?? []).length).toBe(2);
+    expect(doc).toContain('id="f0_9001"');
+    expect(doc).toContain('id="f1_9001"');
+    expect((doc.match(/name="item_9001"/g) ?? []).length).toBe(2); // one per form
+    expect(doc).toContain('f0_9001.submit');
+    expect(doc).toContain('f1_9001.submit');
     expect((doc.match(/class="dd-trig /g) ?? []).length).toBe(2);
-    expect(doc).toContain(`v9001:'${BTN_START.id}'`);
-    expect(doc).toContain(`v9001:'${BTN_DONE.id}'`);
   });
 
   // Real monday status label colors (owner decision 2026-08-04): buildDigest
@@ -377,13 +399,36 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(render()).toContain('הקמת פורום &lt;נציגים&gt;');
   });
 
-  it('signs a manifest covering every (item × section button) pair', () => {
+  // Each row is signed over ITS OWN pairs: least privilege (a leaked form
+  // authorizes one item) and smaller than repeating the message-wide manifest
+  // in every form. The message-wide manifest + signature must NOT appear.
+  it('signs each row over its own pairs, and every signature verifies', () => {
     const doc = render();
-    expect((doc.match(new RegExp(`name="m" value="${MANIFEST}"`, 'g')) ?? []).length).toBe(1);
-    expect((doc.match(new RegExp(`name="sig" value="${SIG}"`, 'g')) ?? []).length).toBe(1);
+    const manifests = [...doc.matchAll(/name="m" value="([^"]*)"/g)].map((hit) => hit[1]);
+    const sigs = [...doc.matchAll(/name="sig" value="([^"]*)"/g)].map((hit) => hit[1]);
+    expect(manifests).toEqual([
+      `9001:${BTN_START.id},${BTN_STUCK.id}`,
+      `9002:${BTN_START.id},${BTN_STUCK.id}`,
+      `9004:${BTN_DONE.id}`,
+    ]);
+    expect(new Set(sigs).size).toBe(3);
+    manifests.forEach((manifest, i) => {
+      expect(
+        verifyManifest({
+          secret: SECRET,
+          accountId: ACCOUNT,
+          personId: PERSON_ID,
+          slot: SLOT,
+          manifest,
+          signature: sigs[i],
+        })
+      ).toBe(true);
+    });
+    expect(doc).not.toContain(`name="m" value="${MANIFEST}"`);
+    expect(doc).not.toContain(`value="${SIG}"`);
     expect(doc).not.toContain('name="k"');
     expect(doc).not.toContain(`value="${SECRET}"`);
-    expect(doc).toContain(`action-xhr="${BASE}/amp/confirm"`);
+    expect((doc.match(new RegExp(`action-xhr="${BASE}/amp/confirm"`, 'g')) ?? []).length).toBe(3);
   });
 });
 
@@ -409,12 +454,11 @@ describe('renderDigestAmp — strict amp4email CSS (data-css-strict)', () => {
 
   it('pins the physical replacements for the old logical properties', () => {
     const doc = render();
-    // th/td cell separators: inline-end under dir=rtl is the LEFT edge.
-    expect(doc).toContain('border-left:1px solid #D0D4E4');
-    expect(doc).toMatch(/th:last-child \{ border-left:none; \}/);
-    expect(doc).toMatch(/td:last-child \{ border-left:none; \}/);
-    // td.name padding-inline-start under dir=rtl is padding-RIGHT.
-    expect(doc).toMatch(/td\.name \{[^}]*padding-right:12px/);
+    // The cards replaced the table (2026-08-04). What still needs a physical
+    // stand-in is the text direction of the card and the menu's inline-end edge.
+    expect(doc).toMatch(/form\.row \{[^}]*text-align:right/);
+    expect(doc).toMatch(/\.dd-wrap \{[^}]*text-align:right/);
+    expect(doc).not.toMatch(/text-align:(start|end)/);
     // .dd-menu inset-inline-end under dir=rtl is left:0.
     expect(doc).toMatch(/\.dd-menu \{[^}]*left:0/);
     // transition may only animate none|offset-distance|opacity|transform|
@@ -435,15 +479,18 @@ describe('renderDigestAmp — strict amp4email CSS (data-css-strict)', () => {
     expect(doc.indexOf('class="wrap"')).toBeLessThan(doc.indexOf('class="dd-overlay"'));
   });
 
-  it('keeps the in-flight and disabled affordances inside the strict set', () => {
+  it('keeps the in-flight and locked affordances inside the strict set', () => {
     const doc = render();
-    expect(doc).toMatch(/form\.amp-form-submitting \.send \{ opacity:0\.55; box-shadow:none; \}/);
-    // The dropdown freeze (pointer-events) is gone by decision; the dim stays.
+    // amp-form stamps the class on the FORM that is submitting — one row — so
+    // the dim is scoped to that row with no binding to keep in sync.
     expect(doc).toMatch(
       /form\.amp-form-submitting \.dd-trig, form\.amp-form-submitting \.dd-opt \{ opacity:0\.75; \}/
     );
-    // Disabled submit (note gate): opacity greys the inline background — a bg
-    // class cannot beat an inline style without !important, which AMP forbids.
+    // The bulk submit is gone, and so are its rules.
+    expect(doc).not.toContain('.send');
+    // The note lock greys the trigger: opacity is what works, because a class
+    // cannot beat the inline/class background without !important, which AMP
+    // forbids.
     const noted = {
       ...RECIPIENT,
       sections: [
@@ -451,16 +498,19 @@ describe('renderDigestAmp — strict amp4email CSS (data-css-strict)', () => {
       ],
     };
     const withNotes = render(noted);
-    expect(withNotes).toMatch(/\.send\[disabled\] \{ opacity:0\.45; box-shadow:none; \}/);
+    expect(withNotes).toMatch(/\.dd-trig\[disabled\] \{ opacity:0\.45; box-shadow:none; \}/);
     expect(withNotes).not.toContain('grayscale');
   });
 });
 
 describe('renderDigestAmp — response + validation', () => {
-  it('provides success/error mustache templates once and greets by name', () => {
+  // Per ROW, not per message: amp-form looks for these blocks inside the form
+  // that submitted, which is what puts the loader and the mark on that row.
+  it('provides submitting/success/error blocks per row and greets by name', () => {
     const doc = render();
-    expect((doc.match(/<div submit-success>/g) ?? []).length).toBe(1);
-    expect((doc.match(/<div submit-error>/g) ?? []).length).toBe(1);
+    expect((doc.match(/<div submitting>/g) ?? []).length).toBe(3);
+    expect((doc.match(/<div submit-success>/g) ?? []).length).toBe(3);
+    expect((doc.match(/<div submit-error>/g) ?? []).length).toBe(3);
     expect(doc).toContain('{{message}}');
     expect(doc).toContain('{{#detail}}');
     expect(doc).toContain('{{detail}}');
