@@ -934,12 +934,35 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       }
       await mondayService.setColumnConfig(boardId, columnId, next);
 
-      // round322: best-effort guard enrollment — registers the server watchdog's
-      // webhook on this column. Fire-and-forget BY CONTRACT: enrollColumnGuard
-      // returns a status and never throws, and the save must not wait on it.
-      void enrollColumnGuard({ boardId, columnId });
+      /*
+       * round322: guard enrollment — registers the server watchdog's webhook on
+       * this column. round329: AWAITED, and its outcome is reported.
+       *
+       * It was fire-and-forget, which never worked in production: the call must
+       * first ask monday for a sessionToken (a postMessage round trip), and
+       * dismiss() below closes this surface — destroying the iframe, and with it
+       * a request that had not been sent yet. No column was ever enrolled, and
+       * the save still said "נשמרו". enrollColumnGuard is total (a status for
+       * every outcome, never a throw) and bounded, so awaiting it can neither
+       * fail the save nor hang the screen.
+       */
+      const enrollment = await enrollColumnGuard({ boardId, columnId });
 
+      // The settings ARE saved — that stays true whatever the guard answered.
       mondayService.showNotice('ההגדרות נשמרו');
+      // But a column the guard does not watch is not protected, and this screen's
+      // switch says it is. Say so rather than let the owner assume.
+      if (enrollment === 'not_activated') {
+        mondayService.showNotice(
+          'ההגדרות נשמרו, אך השומר אינו מחובר לחשבון — ביטול אוטומטי לא יפעל עד לחיבור.',
+          'error',
+        );
+      } else if (enrollment === 'failed') {
+        mondayService.showNotice(
+          'ההגדרות נשמרו, אך רישום השומר על העמודה נכשל — נסו לשמור שוב.',
+          'error',
+        );
+      }
       await dismiss({ saved: true });
     } catch (err) {
       logger.error('ColumnSettings', 'Failed to save column settings', err);
