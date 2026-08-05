@@ -389,10 +389,13 @@
   gap: 4px;
   /* round302 — GROW to fill when there is room (so a short agenda looks exactly
      as before), but never SHRINK past a readable floor: past that the track
-     scrolls instead of crushing every name into an ellipsis. */
+     scrolls instead of crushing every name into an ellipsis.
+     round353 §2 (owner, screenshot) — NO max-width: the old 260px cap left a dead
+     white gap at the strip's end whenever the discussion screen was wide (monday's
+     side menu collapsed) and the agenda short. Few topics = wide tiles filling the
+     whole strip; many topics still hit the min-width floor and scroll as before. */
   flex: 1 0 auto;
   min-width: var(--ribbon-tile-min, 104px);
-  max-width: 260px;
   padding: 0 16px;
   font-size: 13px;
   font-family: var(--font-family);

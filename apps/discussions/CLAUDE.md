@@ -157,6 +157,14 @@ both views; the discussions-only modals (Settings/Templates/Create) stay inside 
   `useStatusOptions('tasks', alias)` is parameterized to read either status column's labels/order.
   `priorityID`'s provisioned label IDs are chosen for their COLOURS — `create_column` ignores
   `labels_colors` and binds colour to the label id (see `PRIORITY_DEFAULTS`).
+  **The GRAY DEFAULT label (stable id 5) is the empty state (round353 §3):** provisioning writes
+  "טרם החל"/"טרם נבחרה" onto label 5 itself (no extra labels), and `useStatusOptions` exposes its
+  text as `emptyLabel` — ONLY when label 5 is FIRST in display order (round354: old-scheme
+  priority columns carry "נמוכה" on id 5, last; the position gate keeps unset ≠ Low there) —
+  and every tasks status/priority surface renders that for an EMPTY value
+  (falling back to the old "ללא סטאטוס"/"בחר סטאטוס" strings when label 5 has no text). monday
+  never auto-assigns id 5, so the app-side rendering is what makes the gray label read as the
+  default. Decision-board surfaces were deliberately left on the old strings.
 
 ### "Previous tasks" tab — three resolution modes
 `PreviousTasksTab` resolves the tasks it shows in one of three modes, chosen by the owner in Settings
@@ -234,6 +242,14 @@ round346 therefore makes the failure loud: `ensureProvisionFolder` returns
 a Hebrew toast and ships to Axiom — naming `workspaces:write` when the platform answer looks
 like an authorization refusal. The scope itself is a Developer Center setting; agents never
 touch it.
+
+**Adding the scope in the Developer Center is NOT enough (round352, fourth report).** Scope
+edits land on the **draft version** only; they take effect when that version is **promoted to
+live**, and then every installed account must **re-approve** the permissions (in-app banner /
+reinstall) — official docs, confirmed 2026-08-05. The owner added the scope and the next
+install still had loose boards precisely because of this. The failure toast now spells out the
+whole path (scope → promote → re-approve). Promotion also consumes the draft: create a new
+draft version right after (manifest export→import), or the next `deploy-draft` run fails.
 
 There is **no settings button** for this any more (round345 removed the round342 one) — if you are
 tempted to add one, make provisioning do it instead.
