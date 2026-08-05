@@ -60,7 +60,7 @@ describe('buildDigestSummaryCsv — bytes Excel can open', () => {
 
   it('quotes סה"כ as "סה""כ" — a raw quote would shift every later column', () => {
     const csv = buildDigestSummaryCsv({ sections: SECTIONS, rows: [DANA] });
-    expect(csvLines(csv)[0]).toBe('עובד,אימייל,להתחיל:,לסיים:,"סה""כ",שגיאה');
+    expect(csvLines(csv)[0]).toBe('עובד,אימייל,להתחיל:,לסיים:,"סה""כ",סטטוס,שגיאה');
   });
 });
 
@@ -74,9 +74,9 @@ describe('buildDigestSummaryCsv — columns follow the configured clusters', () 
       rows: [{ ...DANA, counts: { a: 5, b: 7 }, total: 12 }],
     });
     const [header, row] = csvLines(csv);
-    expect(header).toBe('עובד,אימייל,שני,ראשון,"סה""כ",שגיאה');
+    expect(header).toBe('עובד,אימייל,שני,ראשון,"סה""כ",סטטוס,שגיאה');
     // 7 belongs under 'שני' because section b is listed first — not 5.
-    expect(row).toBe('דנה,dana@example.com,7,5,12,');
+    expect(row).toBe('דנה,dana@example.com,7,5,12,נשלח,');
   });
 
   it('writes 0 for a cluster the employee has no task in', () => {
@@ -84,7 +84,7 @@ describe('buildDigestSummaryCsv — columns follow the configured clusters', () 
       sections: SECTIONS,
       rows: [{ ...DANA, counts: { s_finish: 4 }, total: 4 }],
     });
-    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,0,4,4,');
+    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,0,4,4,נשלח,');
   });
 
   it('carries no cluster columns at all when no section is configured', () => {
@@ -92,8 +92,8 @@ describe('buildDigestSummaryCsv — columns follow the configured clusters', () 
       sections: [],
       rows: [{ ...DANA, counts: {}, total: 0 }],
     });
-    expect(csvLines(csv)[0]).toBe('עובד,אימייל,"סה""כ",שגיאה');
-    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,0,');
+    expect(csvLines(csv)[0]).toBe('עובד,אימייל,"סה""כ",סטטוס,שגיאה');
+    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,0,נשלח,');
   });
 
   it('keeps two clusters that share a title as two separate columns', () => {
@@ -104,15 +104,15 @@ describe('buildDigestSummaryCsv — columns follow the configured clusters', () 
       ],
       rows: [{ ...DANA, counts: { x: 1, y: 2 }, total: 3 }],
     });
-    expect(csvLines(csv)[0]).toBe('עובד,אימייל,לטפל:,לטפל:,"סה""כ",שגיאה');
-    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,1,2,3,');
+    expect(csvLines(csv)[0]).toBe('עובד,אימייל,לטפל:,לטפל:,"סה""כ",סטטוס,שגיאה');
+    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,1,2,3,נשלח,');
   });
 });
 
 describe('buildDigestSummaryCsv — a row for every employee', () => {
   it('leaves the last column empty for a successful send', () => {
     const csv = buildDigestSummaryCsv({ sections: SECTIONS, rows: [DANA] });
-    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,2,1,3,');
+    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,2,1,3,נשלח,');
   });
 
   it('reports a failed send with the transport’s own message', () => {
@@ -120,7 +120,7 @@ describe('buildDigestSummaryCsv — a row for every employee', () => {
       sections: SECTIONS,
       rows: [{ ...DANA, kind: 'failed', error: 'smtp auth failed: 535' }],
     });
-    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,2,1,3,smtp auth failed: 535');
+    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,2,1,3,נכשל,smtp auth failed: 535');
   });
 
   it('names an already-sent slot instead of dropping the row', () => {
@@ -128,7 +128,7 @@ describe('buildDigestSummaryCsv — a row for every employee', () => {
       sections: SECTIONS,
       rows: [{ ...DANA, kind: 'already_sent' }],
     });
-    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,2,1,3,כבר נשלח בסלוט הזה');
+    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,2,1,3,דולג,כבר נשלח בסלוט הזה');
   });
 
   it('keeps an employee with zero pending tasks, with a stated reason', () => {
@@ -136,7 +136,7 @@ describe('buildDigestSummaryCsv — a row for every employee', () => {
       sections: SECTIONS,
       rows: [{ name: 'רון', email: 'ron@example.com', kind: 'no_tasks', counts: {}, total: 0 }],
     });
-    expect(csvLines(csv)[1]).toBe('רון,ron@example.com,0,0,0,אין משימות פתוחות');
+    expect(csvLines(csv)[1]).toBe('רון,ron@example.com,0,0,0,דולג,אין משימות פתוחות');
   });
 
   it('states each users-board skip reason in Hebrew, one row each', () => {
@@ -146,12 +146,16 @@ describe('buildDigestSummaryCsv — a row for every employee', () => {
         { name: 'א', email: '', kind: 'skipped', reason: 'no_email', counts: {}, total: 0 },
         { name: 'ב', email: '', kind: 'skipped', reason: 'no_person', counts: {}, total: 0 },
         { name: 'ג', email: '', kind: 'skipped', reason: 'multi_person', counts: {}, total: 0 },
+        { name: 'ד', email: 'd@example.com', kind: 'skipped', reason: 'not_labeled', counts: {}, total: 0 },
       ],
     });
     const rows = csvLines(csv);
-    expect(rows[1]).toBe('א,,0,0,0,דולג: אין אימייל בשורה');
-    expect(rows[2]).toBe('ב,,0,0,0,דולג: אין עובד משויך');
-    expect(rows[3]).toBe('ג,,0,0,0,דולג: יותר מעובד אחד בשורה');
+    expect(rows[1]).toBe('א,,0,0,0,דולג,דולג: אין אימייל בשורה');
+    expect(rows[2]).toBe('ב,,0,0,0,דולג,דולג: אין עובד משויך');
+    expect(rows[3]).toBe('ג,,0,0,0,דולג,דולג: יותר מעובד אחד בשורה');
+    // round348 §E: the recipient label gate — the one skip reason that is a
+    // deliberate opt-out, not a data problem.
+    expect(rows[4]).toBe('ד,d@example.com,0,0,0,דולג,דולג: לא מסומן לקבלת מייל');
   });
 
   it('names an unknown skip reason rather than emitting a blank cell', () => {
@@ -159,7 +163,7 @@ describe('buildDigestSummaryCsv — a row for every employee', () => {
       sections: [],
       rows: [{ name: 'א', email: '', kind: 'skipped', reason: 'brand_new', counts: {}, total: 0 }],
     });
-    expect(csvLines(csv)[1]).toBe('א,,0,דולג: brand_new');
+    expect(csvLines(csv)[1]).toBe('א,,0,דולג,דולג: brand_new');
   });
 
   it('refuses a row whose kind it does not recognize — silent 0s would read as fine', () => {
@@ -175,7 +179,7 @@ describe('buildDigestSummaryCsv — a row for every employee', () => {
 
   it('emits a header-only file when nobody is on the users board', () => {
     const csv = buildDigestSummaryCsv({ sections: SECTIONS, rows: [] });
-    expect(csvLines(csv)).toEqual(['עובד,אימייל,להתחיל:,לסיים:,"סה""כ",שגיאה', '']);
+    expect(csvLines(csv)).toEqual(['עובד,אימייל,להתחיל:,לסיים:,"סה""כ",סטטוס,שגיאה', '']);
   });
 });
 
@@ -195,8 +199,8 @@ describe('buildDigestSummaryCsv — field escaping', () => {
       ],
     });
     const [header, row] = csvLines(csv);
-    expect(header).toBe('עובד,אימייל,"עם, פסיק","סה""כ",שגיאה');
-    expect(row).toBe('"כהן, דנה",d@example.com,1,1,"said ""no"""');
+    expect(header).toBe('עובד,אימייל,"עם, פסיק","סה""כ",סטטוס,שגיאה');
+    expect(row).toBe('"כהן, דנה",d@example.com,1,1,נכשל,"said ""no"""');
   });
 
   it('keeps a CRLF inside a value inside its quoted field', () => {
@@ -228,7 +232,7 @@ describe('buildDigestSummaryCsv — field escaping', () => {
 
   it('leaves an ordinary name untouched — the guard must not tax normal rows', () => {
     const csv = buildDigestSummaryCsv({ sections: [], rows: [{ ...DANA, counts: {}, total: 3 }] });
-    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,3,');
+    expect(csvLines(csv)[1]).toBe('דנה,dana@example.com,3,נשלח,');
   });
 
   it('renders a missing name or email as an empty field, never "undefined"', () => {
@@ -236,7 +240,7 @@ describe('buildDigestSummaryCsv — field escaping', () => {
       sections: [],
       rows: [{ kind: 'no_tasks', counts: {}, total: 0 }],
     });
-    expect(csvLines(csv)[1]).toBe(',,0,אין משימות פתוחות');
+    expect(csvLines(csv)[1]).toBe(',,0,דולג,אין משימות פתוחות');
   });
 });
 
