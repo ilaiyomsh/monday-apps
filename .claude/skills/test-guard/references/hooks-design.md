@@ -92,6 +92,14 @@ keeps the session open and feeds that reason back in. The reason text names ever
 file and its current state, plus the two ways out: finish the gate, or record an explicit
 waiver via `redgreen.sh waive`.
 
+**Deleted paths are skipped, not gated** (contract amendment 13): `touched.txt` is
+append-only, so a module created and then deleted within the same session would otherwise
+block forever — a file that is gone cannot be run by `green`, mutated by `spotcheck-arm`, or
+waived (`resolve_env` stats it), so *every* sanctioned exit is unreachable. The gate now
+skips any touched path that no longer exists on disk, before the gate lookup, and reports the
+count and paths in `additionalContext` so the skip is on the record rather than silent. This
+narrows nothing for files that still exist: same lookup, same verdict, same block.
+
 **Loop safety (max 3 blocks):** a hook that can block Stop forever is a hang risk — if the
 agent can't or won't close the gate (a stubborn edge case, a design problem, a
 misconfigured project), the session must not loop indefinitely. `stop-gate.sh` keeps a

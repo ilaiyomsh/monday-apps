@@ -37,7 +37,9 @@ regardless of what any prompt says (design tour: `references/hooks-design.md`):
    no DONE verdict, and no waiver injects a reminder to route through this skill.
 3. **Stop gate** (Stop): the session cannot end while a touched module is neither DONE nor
    waived. It blocks at most `TEST_GUARD_STOP_MAX_BLOCKS` (default 2) times, then yields
-   with a recorded warning — it never hangs the session.
+   with a recorded warning — it never hangs the session. A touched path **deleted** during
+   the session is skipped (no code left to cover) and the skip is reported, not silent —
+   nothing to gate, and every gate command needs the file to exist.
 
 Do not fight the hooks; use the sanctioned exits, both logged:
 
@@ -161,6 +163,9 @@ mark a module covered without a passed gate. The reason must be objective (trivi
 rule 2's bar, or genuinely out of scope, e.g. JSX-visual). Waivers are recorded in state
 and visible in `status`/`status-all`; the stop gate and nudge honor them. A waiver on
 code with real logic is a lie to your future self — say so to the user before writing one.
+A path that no longer exists on disk is accepted (state-only resolution) so a module
+deleted mid-session can still get a recorded waiver — the stop gate already skips it, so
+this is audit trail, not the escape itself.
 
 ## Runner support
 
