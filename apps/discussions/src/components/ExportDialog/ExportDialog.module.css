@@ -119,3 +119,14 @@
   border-top: 1px solid var(--ui-border-color, #c3c6d4);
   flex-shrink: 0;
 }
+
+/* round356 — the notes strip between the editor and the footer: the ephemeral-edits
+   reminder, plus the loud warning when the header mode expects a template file that
+   no tier actually provides. */
+.exNotes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px var(--spacing-medium, 16px) 0;
+  text-align: start;
+}

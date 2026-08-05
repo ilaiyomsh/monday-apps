@@ -39,7 +39,7 @@ import { loadBackgroundUpdateId } from './backgroundStore.js';
 import { getItemUpdate } from './mondayApi/updates.js';
 import { isSummaryHtmlEmpty } from './summaryHtml.js';
 import { parseExternalParticipants } from './externalParticipants.js';
-import { formatParticipantLabels, resolvePeopleFormat } from './participantFormat.js';
+import { formatParticipantSegments, resolvePeopleFormat, recordMarker, resolveRecordMarker } from './participantFormat.js';
 import { fetchUserProfiles } from './mondayApi/userProfiles.js';
 import { uploadFileToColumnSeamless, clearFileColumn } from './mondayApi/fileUpload.js';
 import { spliceBodyIntoTemplate, templateTextWidthDxa } from './docxTemplateMerge.js';
@@ -788,19 +788,52 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   // their order, and their labels come from the template's meta section.
   const metaPara = (label, value) =>
     new Paragraph({ ...RTL, children: [run(`${label}: `, { bold: true }), run(value)] });
+  /*
+   * round357 (Codex P2 on the release PR) — the SINGLE-ROW people form, built from the
+   * same segments as the per-line form so the separator stays BOLD here too. Flattening
+   * to one string lost the bold in the DEFAULT mode (perLine off), which is where most
+   * documents live: the dash came out short but thin, only half the owner's request.
+   * People are joined by a plain ", " — that comma separates records, not parts, and is
+   * deliberately NOT bold.
+   */
+  const metaSegsPara = (label, rows) => {
+    const kids = [run(`${label}: `, { bold: true })];
+    rows.forEach((segs, i) => {
+      if (i) kids.push(run(', '));
+      segs.forEach((s) => kids.push(run(s.text, s.sep ? { bold: true } : undefined)));
+    });
+    return new Paragraph({ ...RTL, children: kids });
+  };
   // round315 — the label of a per-line block stands alone ("משתתפים:"), with the
   // people underneath. No trailing space: nothing follows it on that line.
   const metaLabelPara = (label) =>
     new Paragraph({ ...RTL, children: [run(`${label}:`, { bold: true })] });
-  const metaLinePara = (value) =>
-    new Paragraph({ ...RTL, indent: { start: 360 }, children: [run(value)] });
+  /*
+   * round357 — one person's line. The separator between the parts is written as its
+   * OWN BOLD run (the owner's "קצר ועבה"): bold is a run property, so a single
+   * composed string could never carry it. `marker` (numbering / bullet / nothing) is
+   * written FIRST, which in this RTL paragraph puts it to the RIGHT of the record.
+   */
+  const metaLinePara = (segments, marker = '') => {
+    const kids = [];
+    if (marker) kids.push(run(`${marker} `));
+    segments.forEach((s) => kids.push(run(s.text, s.sep ? { bold: true } : undefined)));
+    return new Paragraph({ ...RTL, indent: { start: 360 }, children: kids });
+  };
   // One people block: either the classic single row, or a label line plus a
   // line per person. `labels` are already composed strings.
-  const peopleBlock = (label, labels, perLine) => {
-    if (!labels.length) return [];
-    if (!perLine) return [metaPara(label, labels.join(', '))];
-    return [metaLabelPara(label), ...labels.map(metaLinePara)];
+  const peopleBlock = (label, rows, perLine, marker = 'none') => {
+    if (!rows.length) return [];
+    // The single joined row has no records, so a marker is meaningless there — but the
+    // part separators inside each person still render bold (Codex P2).
+    if (!perLine) return [metaSegsPara(label, rows)];
+    return [
+      metaLabelPara(label),
+      ...rows.map((segs, i) => metaLinePara(segs, recordMarker(marker, i))),
+    ];
   };
+  // A free-text name (external participant) has no profile parts to compose.
+  const plainSegs = (value) => [{ text: value, sep: false }];
   const buildMeta = (section) => {
     const out = [];
     const fields = Array.isArray(section?.fields) ? section.fields : [];
@@ -826,33 +859,36 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
          * composed from) and fall back to the flat text for a model built before
          * round315 / without profiles, so an old caller renders exactly as it did.
          */
-        const labels = Array.isArray(people) && people.length
-          ? formatParticipantLabels(people, parts)
-          : (value ? [value] : []);
+        const rows = Array.isArray(people) && people.length
+          ? people.map((person) => formatParticipantSegments(person, parts)).filter((s) => s.length)
+          : (value ? [plainSegs(value)] : []);
+        // round357 — the marker is the FIELD's own setting, so מוביל דיון can be
+        // bulleted while משתתפים is numbered and מרכז דיון carries nothing.
+        const marker = resolveRecordMarker(f);
         const ext = f.key === 'participantsText' ? model.externalParticipantsText : '';
         // External participants are free text (no monday profile), so the PARTS
         // never apply to them — inventing a Title for a name typed by hand would
         // put somebody else's title on them.
         const extNames = Array.isArray(model.externalParticipants) && model.externalParticipants.length
-          ? model.externalParticipants
-          : (ext ? [ext] : []);
+          ? model.externalParticipants.map(plainSegs)
+          : (ext ? [plainSegs(ext)] : []);
         /*
          * round319 — the externals either JOIN the participants list or keep
          * round211's separate row. Merged, the row is not re-labelled "פנימיים"
          * either: there is no second group left to tell it apart from.
          */
         if (ext && includeExternal) {
-          out.push(...peopleBlock(f.label || '', [...labels, ...extNames], perLine));
+          out.push(...peopleBlock(f.label || '', [...rows, ...extNames], perLine, marker));
           continue;
         }
         const label = ext && (!f.label || f.label === 'משתתפים')
           ? 'משתתפים פנימיים'
           : (f.label || '');
-        out.push(...peopleBlock(label, labels, perLine));
+        out.push(...peopleBlock(label, rows, perLine, marker));
         if (ext) {
           // The per-line choice DOES apply to them, or the block would read half
           // one way and half the other.
-          out.push(...peopleBlock('משתתפים חיצוניים', perLine ? extNames : [ext], perLine));
+          out.push(...peopleBlock('משתתפים חיצוניים', perLine ? extNames : [plainSegs(ext)], perLine, marker));
         }
         continue;
       }

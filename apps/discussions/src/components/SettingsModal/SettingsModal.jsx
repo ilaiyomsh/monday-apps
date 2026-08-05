@@ -332,7 +332,17 @@ export function resolveMultiColView(typedOptions, selectedIds, colTitles = {}) {
  * alias→real-column-id mapping that the SDK reads, then persist via
  * SettingsContext.updateSettings (monday.storage, per instance).
  */
-export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false, contained = false }) {
+// round355 — the templates tab's index in the tab strip below. Named because the
+// pending-type-edit request has to select it programmatically.
+const TEMPLATES_TAB = 2;
+
+/*
+ * round355 — `pendingTypeEdit` ({ type, nonce }) and `onTypeTemplateSaved` are a
+ * pass-through pipe to TemplatesPanel: they let the create-discussion card's pencil
+ * land the user on one type's template editor and be handed back after the save.
+ * This modal's only own job for it is selecting the templates tab.
+ */
+export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false, contained = false, pendingTypeEdit = null, onTypeTemplateSaved = null }) {
   const { settings, updateSettings, isConfigured } = useSettings();
   const { context } = useMondayContext();
   // settings is null until a mapping is stored; seed the editable draft from an
@@ -356,6 +366,13 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   const [selectedRoleKey, setSelectedRoleKey] = useState(null);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(0); // 0 = מיפוי, 1 = העדפות, 2 = תבניות, 3 = תבנית ייצוא, 4 = הרשאות, 5 = מדדי שימוש
+  // round355 — a type-template edit request arrives for the templates tab, so select
+  // it. TemplatesPanel then opens the type's editor itself (it owns the load/nonce
+  // guards). templatesOnly has no tab strip — the panel is the whole surface there.
+  useEffect(() => {
+    if (!isOpen || templatesOnly || !pendingTypeEdit?.type) return;
+    setActiveTab(TEMPLATES_TAB);
+  }, [isOpen, templatesOnly, pendingTypeEdit]);
   // round307 — logo upload row (העדפות): transient UI state only; the value itself
   // lives on `preferences.logoUrl` and is persisted by the modal's שמור.
   const [logoBusy, setLogoBusy] = useState(false);
@@ -1034,7 +1051,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
           </div>
           <div className={styles.content}>
             <div className={styles.body}>
-              <TemplatesPanel ref={templatesRef} />
+              <TemplatesPanel ref={templatesRef} pendingTypeEdit={pendingTypeEdit} onTypeSaved={onTypeTemplateSaved} />
             </div>
           </div>
         </div>
@@ -1640,7 +1657,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                     (TemplateManagerModal), NOT a wrapper div: the round247
                     wrapper broke the flex-height chain so the editor list could
                     not scroll. TemplatesPanel is a direct flex child again. */}
-                <TemplatesPanel ref={templatesRef} onExportWide={setTemplatesExportWide} />
+                <TemplatesPanel ref={templatesRef} onExportWide={setTemplatesExportWide} pendingTypeEdit={pendingTypeEdit} onTypeSaved={onTypeTemplateSaved} />
               </TabPanel>
 
               <TabPanel className={styles.tabPanelFill}>
