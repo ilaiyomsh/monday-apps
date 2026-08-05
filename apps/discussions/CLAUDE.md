@@ -157,6 +157,22 @@ both views; the discussions-only modals (Settings/Templates/Create) stay inside 
   `useStatusOptions('tasks', alias)` is parameterized to read either status column's labels/order.
   `priorityID`'s provisioned label IDs are chosen for their COLOURS — `create_column` ignores
   `labels_colors` and binds colour to the label id (see `PRIORITY_DEFAULTS`).
+  **Export template — the CASCADE and what is EPHEMERAL (round356, owner spec):** the
+  system template is the default; a discussion TYPE's template overrides it for its
+  discussions; the edits made inside the per-discussion export dialog override both **for
+  that one export only** and are never persisted (no per-discussion store is read, written
+  or reset — pre-round356 stored overrides are deliberately ignored, not deleted). The
+  CONFIG merges per field via `resolveExportTemplate`; the ASSETS merge per field via
+  `resolveExportAssets` — picking one asset tier whole is the bug that silently dropped an
+  uploaded header/footer `.docx` whenever a higher tier happened to carry a logo.
+  **People lines (round357):** the separator between a person's parts is written as its OWN
+  BOLD run (`formatParticipantSegments`) — bold is a run property, so a single composed
+  string could never carry it; `formatParticipantLabel` is derived from the same segments.
+  The 'מקף' option is the SHORT dash, and the retired long dash is mapped forward. Each
+  people meta FIELD carries its own `marker` (`none` | `number` | `bullet`), written first
+  in the RTL paragraph so it lands to the right of the record; it only shows in
+  line-per-person mode, which stays a single global setting.
+
   **The GRAY DEFAULT label (stable id 5) is the empty state (round353 §3):** provisioning writes
   "טרם החל"/"טרם נבחרה" onto label 5 itself (no extra labels), and `useStatusOptions` exposes its
   text as `emptyLabel` — ONLY when label 5 is FIRST in display order (round354: old-scheme
