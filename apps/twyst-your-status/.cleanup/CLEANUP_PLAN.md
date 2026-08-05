@@ -21,9 +21,9 @@ stated ordering dependencies inside `ColumnSettings.jsx` and `PersonPicker.jsx`)
 | 2 | dead files | 3 | M | done |
 | 3 | unused exports | 5 | M | done |
 | 4 | unused deps | 1 | M | done |
-| 5 | duplication consolidation | 10 | L | pending |
+| 5 | duplication consolidation | 10 | L | approved |
 | 6 | pattern alignment | 4 | L | done |
-| 7 | structure | 13 | L | pending |
+| 7 | structure | 13 | L | approved |
 
 **Approval record.** Batches 1, 2, 3, 4 and 6 were approved by the repo owner (ilai@twyst.co.il)
 by explicit in-session instruction ("אני רוצה שתתחיל ליישם", 2026-08-05), after being shown the
@@ -32,6 +32,18 @@ into this file; it did not make it. Batches **5 and 7 remain `pending`** — 7 c
 struck as unexecutable and depends on a gate that cannot detect a `ReferenceError` in this
 workspace (`no-undef` is off), and 5 shares `ColumnSettings.jsx` with 7. They stay available for a
 second round after this one lands.
+
+**Approval record — round 2 (supersedes the last sentence above).** Batches **5 and 7** were
+selected by name by the repo owner (ilai@twyst.co.il) on 2026-08-05, in these words:
+*"ליישם ממצאים ולהמשיך בתוכנית את שלבי 5,7"* — implement the findings and continue the plan with
+stages 5, 7. Unlike round 1, the batch numbers are the owner's own, not an agent's
+recommendation: the owner named `5,7` explicitly and no agent proposed that pair. The
+instruction was recorded verbatim in `.cleanup/HANDOFF.md` §3 (committed at `f8fd039`) by the
+session that received it, and the session that transcribed it here was pointed at that handoff
+by the owner with the instruction to follow it. The agent transcribed the decision; it did not
+make it, and it widened nothing — batches 1,2,3,4,6 stay `done` and no other batch was touched.
+`A-structure-02` and `A-structure-08` remain `⛔ STRUCK` and are **not** covered by this
+approval: batch 7 executes 11 of its 13 findings.
 
 ## Pre-approval refutation pass — READ BEFORE APPROVING ANYTHING
 
@@ -243,7 +255,7 @@ are pre-declared in the appendix so no batch reopens them.
 ---
 
 ## Batch 5 — duplication consolidation: one owner per duplicated rule
-risk: L | status: pending
+risk: L | status: approved
 
 Covers all four actionable jscpd clones (clones 1, 4, 5, 6) plus the sub-threshold copies only
 a human reader finds; clones 2 and 3 are in the appendix with reasons. Several findings touch
@@ -348,7 +360,7 @@ are here; six that cannot are recorded in the appendix.
 ---
 
 ## Batch 7 — structure: oversized modules split along existing seams
-risk: L | status: pending
+risk: L | status: approved
 
 Thresholds: component > 250 lines, file > 400, function > 60. Every split is verbatim
 movement; where a symbol's import path would change for a **locked** test, a re-export in the
@@ -430,7 +442,7 @@ the human prefers a smaller blast radius, strike findings rather than reordering
 - source: auditor:structure
 
 ### A-structure-10 — ⚠ AMENDED BY THE REFUTATION PASS
-- **amendment (mandatory, or the build gate fails):** batch 5's `A-patterns-04` adds the FIRST relative import to `stores.js` — `../../../src/domain/columnConfigKey.js`. This finding then moves `createRulesStore` one directory deeper, where that specifier resolves to `apps/twyst-your-status/server/src/domain/`, which does not exist; `server/build.mjs` bundles the `../src/domain` imports with esbuild, so a *verbatim* move (this batch's stated premise) fails `CLEANUP_BUILD_CMD`. Either rewrite the moved specifier to `../../../../src/domain/columnConfigKey.js`, or execute this finding BEFORE `A-patterns-04`. Second amendment: `REFRESH_CUSHION_MS` is filed into `unwrapStoredValue.js` only because it sits at :41 — its sole use is :72 inside `createTokenStore`, so it belongs in `tokenStore.js`.
+- **amendment (mandatory, or the build gate fails):** batch 5's `A-patterns-04` adds the FIRST relative import to `stores.js` — `../../../src/domain/columnConfigKey.js`. This finding then moves `createRulesStore` one directory deeper, where that specifier resolves to `apps/twyst-your-status/server/src/domain/`, which does not exist; `server/build.mjs` bundles the `../src/domain` imports with esbuild, so a *verbatim* move (this batch's stated premise) fails `CLEANUP_BUILD_CMD`. Either rewrite the moved specifier to `../../../../src/domain/columnConfigKey.js`, or execute this finding BEFORE `A-patterns-04`. **Round-2 resolution of that either/or — the execution order settles it, no judgement involved:** batch 5 runs before batch 7 (this plan's batch-5 header requires it), so `A-patterns-04` has ALREADY landed when this finding runs. The second option is therefore unavailable and the **specifier rewrite to `../../../../src/domain/columnConfigKey.js` is mandatory**. Confirm it by running `CLEANUP_BUILD_CMD`, not by reading the path — esbuild resolves it, so a wrong depth is a hard build failure and it is one of the few errors in this batch the gate genuinely catches. Second amendment: `REFRESH_CUSHION_MS` is filed into `unwrapStoredValue.js` only because it sits at :41 — its sole use is :72 inside `createTokenStore`, so it belongs in `tokenStore.js`.
 - files: server/src/services/stores.js:1-266 → new server/src/services/stores/{unwrapStoredValue,tokenStore,rulesStore,bypassLog,enrollmentStore}.js
 - action: create `server/src/services/stores/` with `unwrapStoredValue.js` (:26-38 + `REFRESH_CUSHION_MS`), `tokenStore.js`, `rulesStore.js`, `bypassLog.js`, `enrollmentStore.js`, and keep `server/src/services/stores.js` as a re-export barrel. The barrel is **mandatory**: `server/tests/services.test.js:2-7` imports `unwrapStoredValue, createTokenStore, createRulesStore, createEnrollmentStore` and `server/tests/bypassLog.test.js:10` imports `createBypassLog`, both from `'../src/services/stores.js'`, and tests are locked; `server/src/index.js:44` keeps working through the barrel too. Move the module docblock (:1-23) to the barrel and each per-factory docblock with its factory — the round322 identity model and the apps-sdk 0.1.4 wrapping incident note (:20-22) are load-bearing. Coordinate with batch 1 `A-comments-05` and batch 5 `A-patterns-04`, which also edit this file.
 - evidence: `wc -l` = 266 with four unrelated factories plus two shared helpers — `createTokenStore` 61-159 (the OAuth refresh state machine), `createRulesStore` 164-182, `createBypassLog` 194-250, `createEnrollmentStore` 256-266 over `unwrapStoredValue` 26-32 / `validToken` 34-38 — so any consumer of one store loads all four.
