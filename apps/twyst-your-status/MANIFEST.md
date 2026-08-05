@@ -2,9 +2,25 @@
 
 ## Existing Status Column contract
 
-- App ID: `11775054`
-- Column feature type: `AppFeatureStatusColumn`
-- Settings feature type: column settings placement
+- App ID: `11775054` · slug `yomsheni-il_twystyourstatus`
+- **Three features, verified against the live manifest 2026-08-05** (re-check with
+  `mapps manifest:export -a 11775054 -p ./out` — that writes a DIRECTORY holding
+  `manifest.json`, and validates the app server-side before exporting):
+
+  | key | type | schemaVersion | build |
+  |---|---|---|---|
+  | `status_column_feature` | `AppFeatureStatusColumn` | `7` | none — see relations |
+  | `dialog_feature` ("On-Click") | `AppFeatureDialog` | `1` | `/picker`, kind `monday-code`, custom 200×250 |
+  | `settings-dialog` ("Settings") | `AppFeatureDialog` | `1` | `/settings`, kind `monday-code`, custom 1200×800 |
+
+- **The column does not carry a build — it HOSTS the two dialogs** through a `relations`
+  array, each entry `{ type: "hosting", target: { slug: <feature key> }, name: <slot> }`:
+  `dialog_feature` fills the `click` slot and `settings-dialog` fills `settingsPicker`.
+  So a URL change is edited on the DIALOG, never on the column, and re-pointing a slot is
+  a relations edit. Both dialogs are `kind: monday-code` — the same-origin unification
+  below, visible in the manifest.
+- OAuth redirect URI is the monday-code service origin:
+  `<BASE_URL>/oauth/callback` (live: `https://acca6-service-14334098-c3055738.us.monday.app`).
 - Since round324 (same-origin unification) the SPA is served BY the app's
   monday-code server (`server/public`), so every feature URL is on `<BASE_URL>`
   (the monday-code URL from `mapps code:status`), not the CDN. One deploy, one
@@ -370,13 +386,27 @@ The decision is one pure function, `src/domain/boardOwnerAccess.js`, fed by
 ## Required scopes
 
 Configure on the **draft** app version (Developer Center → Version → Permissions),
-then reinstall / reauthorize existing installs:
+then reinstall / reauthorize existing installs.
 
-- `boards:read`
-- `boards:write`
-- `users:read`
-- `teams:read` — required for team allowlists, actor team membership, and the board's
-  own TEAM owners (the settings gate above)
+The live app version grants **eight** scopes. Verified against the live manifest
+(`mapps manifest:export -a 11775054`) on 2026-08-05 — this list previously named only
+the first four, which predated the round322 guard server:
+
+| Scope | What needs it |
+|---|---|
+| `boards:read` | labels, item values, board owners |
+| `boards:write` | the status write and `update_status_column`; the guard's revert |
+| `users:read` | user allowlists, actor identity |
+| `teams:read` | team allowlists, actor team membership, and the board's own TEAM owners (the settings gate above) |
+| `me:read` | the acting user behind an OAuth grant — the primary owner's revert identity |
+| `account:read` | account context for the account-level reader pointer (`:token:default`) |
+| `notifications:write` | the revert notice to the acting user (`השינוי שבוצע בוטל …`) |
+| `webhooks:write` | registering the per-column `change_status_column_value` webhook at enroll time |
+
+The last four are the **guard server's** scopes (see Limits): without them the picker
+and settings still work, but enrollment cannot register its webhook and a revert cannot
+notify. Treat the exported manifest as ground truth — the Developer Center UI is the
+only place these are edited, so this table can drift.
 
 Without `teams:read`, settings still loads (users-only) and shows a warning; team
 pickers stay disabled until the scope is granted, and the owner gate recognises user
