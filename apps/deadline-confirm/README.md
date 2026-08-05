@@ -44,9 +44,19 @@ USE_LOCAL_STORAGE=true npm start
 3. Env אופציונלי: `OPERATOR_EMAIL` (סיכום אחרי ריצת scheduler).
 4. Dev Center: Administration View → `<BASE_URL>/admin`; OAuth scopes + callback.
 5. במסך האדמין: חיבור OAuth, לוח, כפתורים, הפעלת מייל מסכם, שעת שליחה, מפתח.
-6. Scheduler (אחרי פריסה):  
-   `mapps scheduler:create -a 11704868 -n digest-send -s "0 * * * *" -e "/digest-send"`  
-   (שעתי UTC; האפליקציה מסננת לפי `sendHour` בירושלים).
+6. Scheduler (אחרי פריסה — **שלב ידני; ב-2026-08-05 נמצא שהוא לא בוצע מעולם,
+   כלומר לא הייתה שליחה אוטומטית**):
+   `mapps scheduler:create -a 11704868 -n digest-send -s "0 * * * *" -e "digest-send" -r 0 -t 300`
+   - שעתי UTC **חובה** — האפליקציה מסננת לפי `sendHour` (ירושלים), כך שביטוי
+     שאינו שעתי משמעו שטננטים בשעות אחרות לא יקבלו דבר לעולם.
+   - הדגל הוא `-e` ולא `-u` (התיעוד הפומבי מיושן), והיעד בדוגמאות של ה-CLI
+     **בלי לוכסן מוביל**. תמיד לאמת מה נשמר בפועל: `mapps scheduler:list -a 11704868`.
+   - **`-r 0` עד שיהיה סימון per-slot בקוד:** ברירת המחדל של הפלטפורמה היא
+     backoff של 10 דקות בין retries, וריצה שנחתכת ב-timeout תנוסה שוב ותשלח
+     מייל שני לכל מי שכבר קיבל.
+   - בדיקת עשן בלי לשלוח לאף אחד: `mapps scheduler:run -a 11704868 -n digest-send`
+     **בשעה שאף טננט אינו due**, ואז `mapps code:logs -i 11704868 -t console`
+     ולחפש `cron_tick` עם `hour` ו-`tenants`.
 7. אפליקציית Google Cloud (מדריך מלא: `docs/google-setup-guide.md`): OAuth client
    + scope **`https://mail.google.com/`** (החלטת בעלים 2026-08-04, שלב בדיקות —
    מסך consent חייב להיות Internal), `GOOGLE_OAUTH_CLIENT_ID/SECRET` ב-env.
