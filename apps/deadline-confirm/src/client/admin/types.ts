@@ -175,6 +175,20 @@ export interface DigestSendResponse {
   truncated: boolean;
 }
 
+/**
+ * POST /api/digest/run-scheduled — the same per-tenant run the cron performs
+ * by hand, plus the per-employee CSV report (round348). `durationMs` covers the
+ * digest run only (the report send is excluded) — what §7.3 compares against the
+ * platform's 300s cron timeout. `reportSent` is false when the tenant has no
+ * connected mailbox or the report send itself failed; the digest send above is
+ * unaffected either way.
+ */
+export interface DigestRunScheduledResponse extends DigestSendResponse {
+  slot: string;
+  durationMs: number;
+  reportSent: boolean;
+}
+
 export type OauthStatus = 'connected' | 'disconnected' | 'broken';
 
 /** T9b Gmail sending identity, as reported by GET /api/state. */

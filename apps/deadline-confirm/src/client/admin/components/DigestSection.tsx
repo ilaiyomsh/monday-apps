@@ -15,6 +15,7 @@ import type {
   Board,
   DigestPreviewResponse,
   DigestRawSendResponse,
+  DigestRunScheduledResponse,
   DigestSendResponse,
 } from '../types';
 import type { DigestDraft } from '../draft';
@@ -72,6 +73,12 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const [sendPhase, setSendPhase] = useState<'idle' | 'confirm' | 'sending'>('idle');
   const [sendResult, setSendResult] = useState<DigestSendResponse | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+
+  // Round348 — run the scheduled action by hand: same send as above, plus the
+  // per-employee CSV report (§5.2) that only the cron produced until now.
+  const [runPhase, setRunPhase] = useState<'idle' | 'confirm' | 'sending'>('idle');
+  const [runResult, setRunResult] = useState<DigestRunScheduledResponse | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
 
   // AMP debug lane: the preview's amp4email document, editable, sent as typed.
   const [ampDraft, setAmpDraft] = useState('');
@@ -214,6 +221,23 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
     }
   };
 
+  const doRunScheduled = async () => {
+    setRunPhase('sending');
+    setRunError(null);
+    setRunResult(null);
+    try {
+      const res = await apiFetch<DigestRunScheduledResponse>('/api/digest/run-scheduled', {
+        method: 'POST',
+      });
+      setRunResult(res);
+    } catch (err) {
+      logger.error('admin', 'digest_run_scheduled_failed', err);
+      setRunError(guardMessage(err));
+    } finally {
+      setRunPhase('idle');
+    }
+  };
+
   return (
     <>
       <section className="dc-section">
@@ -321,6 +345,11 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
             יש שינויים שלא נשמרו — התצוגה המקדימה והשליחה משקפות את ההגדרות השמורות בלבד.
           </div>
         )}
+        <div className="dc-hint">
+          <b>שליחה עכשיו</b> שולחת את המייל המסכם לכל הנמענים, מיד.{' '}
+          <b>הרצת הפעולה המתוזמנת</b> עושה את אותו הדבר <b>וגם</b> מפיקה ושולחת את דוח ה-CSV
+          לתיבת השולח — בדיוק כמו הרצה אוטומטית של הקרון.
+        </div>
         <div className="dc-row">
           <Button
             kind={Button.kinds.SECONDARY}
@@ -347,9 +376,29 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
               </Button>
             </>
           )}
+          {runPhase !== 'confirm' ? (
+            <Button
+              kind={Button.kinds.SECONDARY}
+              onClick={() => setRunPhase('confirm')}
+              loading={runPhase === 'sending'}
+              disabled={runPhase === 'sending'}
+            >
+              הרצת הפעולה המתוזמנת
+            </Button>
+          ) : (
+            <>
+              <Button color={Button.colors.NEGATIVE} onClick={() => void doRunScheduled()}>
+                לאשר הרצה לכל הנמענים + דוח
+              </Button>
+              <Button kind={Button.kinds.TERTIARY} onClick={() => setRunPhase('idle')}>
+                ביטול
+              </Button>
+            </>
+          )}
         </div>
         {previewError && <div className="dc-error">{previewError}</div>}
         {sendError && <div className="dc-error">{sendError}</div>}
+        {runError && <div className="dc-error">{runError}</div>}
 
         {sendResult && (
           <div className="dc-field">
@@ -368,6 +417,30 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                 {sendResult.skippedUsers.map((s) => s.name).join(', ')}
               </div>
             )}
+          </div>
+        )}
+
+        {runResult && (
+          <div className="dc-field">
+            <label>{runResult.ok ? 'ההרצה הסתיימה בהצלחה ✓' : 'ההרצה הסתיימה עם שגיאות'}</label>
+            <ul style={{ margin: 0, paddingInlineStart: 18 }}>
+              {runResult.results.map((r) => (
+                <li key={r.email} className={r.ok ? 'dc-success' : 'dc-error'}>
+                  {r.name} ({r.email}) — {r.ok ? `נשלחו ${r.taskCount} משימות ✓` : `נכשל: ${r.error ?? ''}`}
+                </li>
+              ))}
+              {runResult.results.length === 0 && <li className="dc-hint">אין נמענים עם משימות ממתינות — לא נשלח דבר.</li>}
+            </ul>
+            {runResult.skippedUsers.length > 0 && (
+              <div className="dc-hint">
+                דולגו {runResult.skippedUsers.length} שורות בלוח המשתמשים (חסר אימייל או איש):{' '}
+                {runResult.skippedUsers.map((s) => s.name).join(', ')}
+              </div>
+            )}
+            <div className="dc-hint">
+              משך ריצה: {runResult.durationMs.toLocaleString('en-US')} מ״ש · דוח ה-CSV{' '}
+              {runResult.reportSent ? 'נשלח לתיבת השולח שלכם ✓' : 'לא נשלח (אין תיבה מחוברת, או שהשליחה נכשלה)'}
+            </div>
           </div>
         )}
 
