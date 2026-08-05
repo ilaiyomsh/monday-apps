@@ -226,6 +226,11 @@ describe('PUT /api/config with digest', () => {
     ['sendHour out of range (24)', { sendHour: 24 }, 'digest.sendHour'],
     ['sendHour not an integer', { sendHour: 8.5 }, 'digest.sendHour'],
     ['sendHour negative', { sendHour: -1 }, 'digest.sendHour'],
+    // Recipient label gate (round348 §E) — both fields optional, independently.
+    ['recipientGateColumnId empty string', { recipientGateColumnId: '' }, 'digest.recipientGateColumnId'],
+    ['recipientGateColumnId not a string', { recipientGateColumnId: 5 }, 'digest.recipientGateColumnId'],
+    ['recipientGateLabelId not an integer', { recipientGateLabelId: 1.5 }, 'digest.recipientGateLabelId'],
+    ['recipientGateLabelId not a number', { recipientGateLabelId: 'x' }, 'digest.recipientGateLabelId'],
   ])('invalid digest — %s → 400 naming the field', async (_name, patch, field) => {
     const { app } = makeHarness();
     const res = await request(app)
@@ -234,6 +239,41 @@ describe('PUT /api/config with digest', () => {
       .send(fullConfig({ digest: digestBlock(patch) }));
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'invalid_config', field });
+  });
+
+  it('recipientGateColumnId + recipientGateLabelId round-trip through save (round348 §E)', async () => {
+    const { app, backend } = makeHarness();
+    const payload = fullConfig({
+      digest: digestBlock({ recipientGateColumnId: 'status_gate', recipientGateLabelId: 0 }),
+    });
+    const res = await request(app).put('/api/config').set('Authorization', authHeader()).send(payload);
+    expect(res.status).toBe(200);
+    // 0 is a valid label id — must round-trip as 0, never dropped as falsy.
+    expect(res.body.config.digest.recipientGateColumnId).toBe('status_gate');
+    expect(res.body.config.digest.recipientGateLabelId).toBe(0);
+    expect((await backend.get(scoped('config'))).digest.recipientGateLabelId).toBe(0);
+  });
+
+  it('recipientGateColumnId/recipientGateLabelId default to null when never configured', async () => {
+    const { app } = makeHarness();
+    const res = await request(app)
+      .put('/api/config')
+      .set('Authorization', authHeader())
+      .send(fullConfig());
+    expect(res.status).toBe(200);
+    expect(res.body.config.digest.recipientGateColumnId).toBeNull();
+    expect(res.body.config.digest.recipientGateLabelId).toBeNull();
+  });
+
+  it('either field alone is accepted — the gate only activates once BOTH are set (digest-service.js)', async () => {
+    const { app } = makeHarness();
+    const res = await request(app)
+      .put('/api/config')
+      .set('Authorization', authHeader())
+      .send(fullConfig({ digest: digestBlock({ recipientGateColumnId: 'status_gate' }) }));
+    expect(res.status).toBe(200);
+    expect(res.body.config.digest.recipientGateColumnId).toBe('status_gate');
+    expect(res.body.config.digest.recipientGateLabelId).toBeNull();
   });
 
   it('digest present but peopleColumnId null → 400 (matching column is required)', async () => {
@@ -291,6 +331,19 @@ describe('GET /api/digest/preview', () => {
     expect(res.body).not.toHaveProperty('html');
     const calledBoards = api.getBoardItems.mock.calls.map(([p]) => p.boardId).sort();
     expect(calledBoards).toEqual(['111', '222']);
+  });
+
+  it('requests the recipient label gate column on the users-board read when configured (round348 §E)', async () => {
+    // Regression guard: forgetting to add the gate column to columnIds makes
+    // digest-service.js read it as unset on every row, silently excluding
+    // everyone — a bug the existing double (which ignores columnIds and
+    // returns full rows regardless) would NOT otherwise catch.
+    const { app, api } = seededHarness({
+      config: { digest: digestBlock({ recipientGateColumnId: 'status_gate', recipientGateLabelId: 1 }) },
+    });
+    await request(app).get('/api/digest/preview').set('Authorization', authHeader());
+    const usersCall = api.getBoardItems.mock.calls.find(([p]) => p.boardId === '222');
+    expect(usersCall[0].columnIds).toContain('status_gate');
   });
 
   it('?recipient=<email> returns THAT recipient plain text', async () => {

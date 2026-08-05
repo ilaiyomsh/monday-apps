@@ -15,7 +15,11 @@
 // crashing or silently inventing a condition.
 
 import { describe, it, expect } from 'vitest';
-import { digestFromConfig, digestIsComplete } from './draft';
+import { digestClusters, digestFromConfig, digestIsComplete } from './draft';
+
+// 0.15.0: a config this old has no `blocks` key either, so reading it also
+// reconstructs the 0.13.x text blocks around these clusters — asserted at the
+// bottom. The clusters themselves are read through digestClusters().
 
 /** A digest block exactly as v0.5.x persisted it — no 0.6.0 fields. */
 const LEGACY_DIGEST = {
@@ -45,19 +49,19 @@ describe('digestFromConfig — pre-0.6.0 stored config', () => {
 
   it('defaults a missing status condition to an empty list', () => {
     const draft = digestFromConfig(LEGACY_DIGEST);
-    expect(draft.sections.map((s) => s.includeStatusLabelIds)).toEqual([[], []]);
+    expect(digestClusters(draft).map((s) => s.includeStatusLabelIds)).toEqual([[], []]);
   });
 
   it('defaults a missing date-column title to an empty string', () => {
     const draft = digestFromConfig(LEGACY_DIGEST);
-    expect(draft.sections.map((s) => s.dateColumnTitle)).toEqual(['', '']);
+    expect(digestClusters(draft).map((s) => s.dateColumnTitle)).toEqual(['', '']);
   });
 
   it('keeps every field the legacy config did carry', () => {
     const draft = digestFromConfig(LEGACY_DIGEST);
     expect(draft.enabled).toBe(true);
     expect(draft.subject).toBe('המשימות שלך');
-    expect(draft.sections[0]).toMatchObject({
+    expect(digestClusters(draft)[0]).toMatchObject({
       id: 's_start001',
       title: 'להתחיל:',
       dateColumnId: 'date_start',
@@ -73,15 +77,25 @@ describe('digestFromConfig — pre-0.6.0 stored config', () => {
 describe('digestFromConfig — a current config is unaffected', () => {
   it('carries the status condition through verbatim', () => {
     const draft = digestFromConfig({ ...(LEGACY_DIGEST as object), sections: [MODERN_SECTION] } as never);
-    expect(draft.sections[0].includeStatusLabelIds).toEqual([0, 2]);
-    expect(draft.sections[0].dateColumnTitle).toBe('תאריך התחלה');
+    expect(digestClusters(draft)[0].includeStatusLabelIds).toEqual([0, 2]);
+    expect(digestClusters(draft)[0].dateColumnTitle).toBe('תאריך התחלה');
     expect(digestIsComplete(draft)).toBe(true);
   });
 
   it('copies the array instead of aliasing the stored one', () => {
     const source = { ...(LEGACY_DIGEST as object), sections: [MODERN_SECTION] } as never;
     const draft = digestFromConfig(source);
-    draft.sections[0].includeStatusLabelIds.push(99);
+    digestClusters(draft)[0].includeStatusLabelIds.push(99);
     expect(MODERN_SECTION.includeStatusLabelIds).toEqual([0, 2]);
+  });
+});
+
+describe('digestFromConfig — a config with no blocks key (0.15.0 migration)', () => {
+  it('rebuilds the greeting/lead/footer text blocks around the clusters', () => {
+    const draft = digestFromConfig(LEGACY_DIGEST);
+    expect(draft.blocks.map((b) => b.type)).toEqual(['text', 'text', 'cluster', 'cluster', 'text']);
+    const texts = draft.blocks.filter((b) => b.type === 'text').map((b) => b.text);
+    expect(texts[0]).toContain('{{שם}}');
+    expect(texts[texts.length - 1]).toContain('מייל אוטומטי');
   });
 });

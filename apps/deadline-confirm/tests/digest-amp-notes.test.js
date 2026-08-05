@@ -223,8 +223,13 @@ describe('renderDigestAmp — the status dropdown is gated on the note', () => {
     expect(html).not.toContain('.dd-trig[disabled]');
   });
 
-  it('tells the reader in the lead text that the field comes first', () => {
+  // 0.15.0 moved that sentence OUT of the renderer: the mail carries no
+  // pre-written text, so the note hint is a text block. A tenant whose config
+  // predates blocks still gets it — legacyBlocksFromSections re-creates it when
+  // (and only when) some cluster maps a note column, asserted in
+  // digest-blocks.test.js and end-to-end in digest-amp-blocks.test.js.
+  it('does not bake the note instruction into the document itself', () => {
     const html = render([noteSection()]);
-    expect(html).toContain('לא ניתן לבחור סטטוס');
+    expect(html).not.toContain('לא ניתן לבחור סטטוס');
   });
 });

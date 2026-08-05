@@ -75,13 +75,58 @@ export interface DigestSectionConfig {
   includeStatusLabelIds: number[];
 }
 
+/**
+ * A free-text block of the summary email (0.15.0). Block-level formatting only —
+ * the same controls the single email's template editor offers, plus a color and
+ * a bold flag. `font` must be one of DIGEST_FONTS: the value reaches the amp
+ * document's stylesheet, and the server re-validates it against the same list.
+ */
+export interface DigestTextBlock {
+  type: 'text';
+  id: string; // x_XXXXXXXX
+  text: string; // may contain NAME_TOKEN
+  direction: Direction;
+  font: string; // DIGEST_FONTS entry ('Default' = the email's own font stack)
+  fontSize: number; // 10..32
+  align: TextAlign;
+  color: string; // #rrggbb
+  bold: boolean;
+}
+
+/** A task cluster (מקבץ) as a block — carries the settings `sections[]` used to. */
+export interface DigestClusterBlock extends DigestSectionConfig {
+  type: 'cluster';
+}
+
+export type DigestBlock = DigestTextBlock | DigestClusterBlock;
+
 export interface DigestConfig {
   usersBoardId: string;
   usersPeopleColumnId: string;
   usersEmailColumnId: string;
+  /**
+   * Recipient label gate (round348): a status column on the USERS board.
+   * EITHER this or recipientGateLabelId absent -> the gate is off and every
+   * row qualifies, same as every digest before this feature.
+   */
+  recipientGateColumnId?: string | null;
+  /** The label id that must match on recipientGateColumnId. 0 is valid. */
+  recipientGateLabelId?: number | null;
+  /** May contain NAME_TOKEN — resolved per recipient at send time. */
   subject: string;
   /** Hour (0–23, Asia/Jerusalem) when the daily digest is scheduled. Default 8. */
   sendHour?: number;
+  /**
+   * The email BODY, in order (0.15.0). Source of truth for both the content and
+   * the cluster priority. GET /api/state always answers with this array —
+   * reconstructed server-side for a config saved before blocks existed.
+   */
+  blocks?: DigestBlock[];
+  /**
+   * Cluster projection the server derives from `blocks` and keeps storing.
+   * Pre-0.15.0 configs have ONLY this. Never edit it directly — a stale copy is
+   * ignored wherever blocks exist.
+   */
   sections: DigestSectionConfig[];
 }
 
@@ -102,7 +147,8 @@ export interface DigestRecipientSummary {
 export interface DigestSkippedUser {
   itemId: string;
   name: string;
-  reason: 'no_email' | 'no_person' | 'multi_person';
+  /** not_labeled: the recipient label gate blocked this row (round348 §E). */
+  reason: 'no_email' | 'no_person' | 'multi_person' | 'not_labeled';
 }
 
 export interface DigestPreviewResponse {
@@ -136,6 +182,20 @@ export interface DigestSendResponse {
   results: DigestSendResult[];
   skippedUsers: DigestSkippedUser[];
   truncated: boolean;
+}
+
+/**
+ * POST /api/digest/run-scheduled — the same per-tenant run the cron performs
+ * by hand, plus the per-employee CSV report (round348). `durationMs` covers the
+ * digest run only (the report send is excluded) — what §7.3 compares against the
+ * platform's 300s cron timeout. `reportSent` is false when the tenant has no
+ * connected mailbox or the report send itself failed; the digest send above is
+ * unaffected either way.
+ */
+export interface DigestRunScheduledResponse extends DigestSendResponse {
+  slot: string;
+  durationMs: number;
+  reportSent: boolean;
 }
 
 export type OauthStatus = 'connected' | 'disconnected' | 'broken';
@@ -197,6 +257,23 @@ export const EMAIL_FONTS = [
   'Georgia',
   'Times New Roman',
   'Courier New',
+] as const;
+
+/**
+ * Fonts a digest text block may use. MIRRORS DIGEST_FONTS in
+ * src/services/digest-blocks.js — the server rejects anything else, and
+ * tests/digest-blocks-client-drift.test.js fails if the two lists diverge.
+ * 'Default' means the email's own stack (what every pre-0.15.0 digest used).
+ */
+export const DIGEST_FONTS = ['Default', ...EMAIL_FONTS] as const;
+
+export const DIGEST_TEXT_COLOR_PRESETS = [
+  '#323338', // הטקסט הרגיל של המייל
+  '#676879', // אפור משני
+  '#9699A6', // אפור בהיר (פוטר)
+  '#0073ea', // כחול
+  '#00854d', // ירוק
+  '#e2445c', // אדום
 ] as const;
 
 export const BUTTON_COLOR_PRESETS = [

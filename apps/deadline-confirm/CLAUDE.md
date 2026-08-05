@@ -74,6 +74,8 @@ src/
 │   └── admin-api.js          # /api/state|config|secret/rotate + /api/digest/preview|send
 ├── middlewares/session-token.js  # JWT (client secret) + optional allowlist → 401/403
 ├── services/
+│   ├── digest-blocks.js      # THE block model of the summary mail (pure): normalize,
+│   │                         # cluster projection, {{שם}} substitution, legacy rebuild
 │   ├── monday-api.js         # THE GraphQL funnel; API-Version pinned; soft errors thrown
 │   ├── confirm-service.js    # performAction (v2 outcomes + D11 assignee check)
 │   ├── digest-service.js     # users-board matching + pending classification (single personId per recipient)
@@ -93,7 +95,10 @@ src/
 ├── storage/                  # secure-storage-backend (prod) / memory-backend (dev+tests)
 └── client/admin/             # React 19 + Vite 7 + @vibe/core SPA → public/admin/
                               # amp-debug.ts — pure rules behind the AMP editor (size/guards)
-                              # two tabs — "הגדרות" + "מייל מסכם" (DigestSection)
+                              # two tabs — "הגדרות" + "מייל מסכם" (DigestSection
+                              #   + DigestBlocksSection: the body block editor)
+                              # digest-blocks.ts — MIRROR of services/digest-blocks.js
+                              #   (drift-tested); digest-block-ops.ts — block list rules
 ```
 
 ## Non-obvious semantics (bugs waiting to happen)
@@ -115,12 +120,58 @@ src/
   email on two rows → two messages); rows with ≠1 person skipped as
   `multi_person`. Pending = date ≤ today (Asia/Jerusalem) AND status in
   section's `includeStatusLabelIds`.
-- **Section order = priority (owner decision 2026-08-04):** a task matching
-  several sections' conditions appears ONLY in the first section in config
-  order (per recipient — `claimed` set in `digest-service.js`). The admin ↑/↓
-  arrows are the whole priority UI; no priority field exists. A rendered email
-  can therefore never produce `conflict_item` — that guard remains for
-  hand-crafted POSTs only.
+- **Recipient label gate (round348 §E, both optional).** `digest.recipientGateColumnId`
+  (a status column on the USERS board) + `digest.recipientGateLabelId` let an
+  operator opt individual people OUT of the digest without touching anything
+  else. **EITHER field absent → the gate is off and every row qualifies**,
+  exactly like every digest before this feature — a reversed default would
+  silently mute mail for every existing tenant the moment they upgrade, with
+  nobody having touched the setting (owner decision). Label id 0 is valid;
+  compared with `!==`, never a truthy check (`digest-service.js`'s `buildDigest`).
+  A row the gate blocks is skipped with reason `not_labeled` — the SAME
+  `skippedUsers` pipeline `no_email`/`no_person`/`multi_person` already use, so
+  it needed no new wiring to reach the CSV report below. The users-board read
+  must include the gate column (`digestUsersColumnIds()` in `digest-service.js`,
+  used by both `digest-run.js` and `admin-api.js`'s preview) — omitting it makes
+  every row read as unlabeled and silently excludes everyone.
+- **THE DIGEST BODY IS AN OPERATOR-AUTHORED BLOCK LIST (0.15.0, owner decisions
+  2026-08-05).** `digest.blocks` is an ordered array of `{type:'text'}` (free text
+  + block-level formatting) and `{type:'cluster'}` (a מקבץ, carrying the settings
+  `sections[]` used to). Three things follow, and all three are load-bearing:
+  1. **The renderers carry NO content text.** No greeting, no instruction line, no
+     footer — every sentence comes from a block. What they still emit is
+     operational chrome only (column headers, `סטטוס`, the note placeholder,
+     amp-form's `מעדכן…`/✓/error strips). Do not "restore" a default sentence in
+     `digest-amp.js` / `digest-plain.js`.
+  2. **`blocks` is the source of truth; `sections` is a DERIVED projection** the
+     server re-computes on every save (`sectionsFromBlocks`, block order) and
+     keeps storing for rollback. `digest-service.digestSections()` prefers blocks
+     whenever they exist — never read `digest.sections` directly in new code.
+  3. **A digest with NO `blocks` key is pre-0.15.0** and is reconstructed on read
+     into the blocks that reproduce the 0.13.x mail (greeting, lead, note hint
+     only if a cluster maps a note column, clusters, footer) —
+     `legacyBlocksFromSections`, used by the send path, the preview and
+     `GET /api/state` alike. An empty `blocks` ARRAY is authored, not legacy: it
+     means an empty mail and must not regrow the old text.
+  Caps: 20 blocks, 1–4 clusters, 2000 chars/text block. `font` is a server-side
+  ALLOWLIST (`DIGEST_FONTS`) because the value lands in `<style amp-custom>`.
+  The client mirror `src/client/admin/digest-blocks.ts` exists because the SPA is
+  typed and the server module is JS — `tests/digest-blocks-client-drift.test.js`
+  is what keeps them identical (error-kit pattern).
+- **ONE dynamic field: `{{שם}}`** (alias `{{name}}`) → the recipient's
+  users-board ROW name. Valid in any text block and in the SUBJECT — which is why
+  `applyTokens` strips CR/LF: the subject is a mail header. Substituted once (no
+  re-scan), escaped by the renderer.
+- **Section order = priority (owner decision 2026-08-04, now BLOCK order):** a
+  task matching several clusters' conditions appears ONLY in the first cluster in
+  block order (per recipient — `claimed` set in `digest-service.js`). Since 0.15.0
+  the ↑/↓ arrows that reorder the mail ARE the priority UI — one list, so the two
+  cannot disagree. A rendered email can therefore never produce `conflict_item` —
+  that guard remains for hand-crafted POSTs only.
+- **A cluster with no tasks for a recipient is dropped; text blocks around it
+  still render** (owner decision 2026-08-05 — no per-block visibility rule). The
+  drop removes the whole cluster, not just its rows: a bare title with an empty
+  header strip is the bug that guard exists to prevent.
 - **ONE FORM PER ROW — a status pick writes that item immediately (0.13.0, owner
   decision 2026-08-04).** There is NO global submit button. Every task is a card
   that is its own `<form>`; the loader, the ✓ and any error come from that form's
@@ -202,7 +253,11 @@ src/
   chars. `already_done` still short-circuits: no mark, so no note write.
   **`required=` is deliberately NOT used** — one bulk form per message means it
   would block rows the reader never marked.
-- **V6 preview:** `GET /api/digest/preview` → `{ plain, amp }` (no `html`).
+- **V6 preview:** `GET /api/digest/preview` → `{ plain, amp }` (no `html`),
+  rendered THROUGH the same normalized blocks the send path uses (a legacy tenant
+  must not preview a textless mail and receive one with text).
+- **`GET /api/state` normalizes on the way OUT:** the digest it returns always
+  carries `blocks`. Storage is untouched until the operator saves.
 - **AMP debug lane:** `POST /api/digest/send-raw` `{ amp, to, subject?, plain? }`
   sends the operator's **edited** amp4email document **byte for byte** (no
   re-render) through the same `buildMultipartAlternative` + Gmail funnel. Needs
@@ -216,12 +271,13 @@ src/
   only — full secret never leaves the server).
 - **V6 scheduler — full account in `docs/scheduling.md`** (registered 2026-08-05;
   before that date NOTHING was sent automatically): `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`)
-  walks `ALLOWED_ACCOUNT_IDS`, runs tenants whose `digest.sendHour` matches the
-  current Asia/Jerusalem hour; then optional operator summary to
-  `OPERATOR_EMAIL`. The platform cron must be **hourly** (`0 * * * *` UTC) — the
-  hour filter lives in the app, so a non-hourly expression means tenants on other
-  hours never send at all. Job as stored: `retryConfig { maxRetries: 3,
-  minBackoffDuration: 60 }`, `timeout: 300`, `targetUrl /digest-send`.
+  walks `ALLOWED_ACCOUNT_IDS`, runs tenants whose `digest.sendHour` has
+  arrived-or-passed the current Asia/Jerusalem hour (§7.4 catch-up below); then
+  optional operator summary to `OPERATOR_EMAIL`. The platform cron must be
+  **hourly** (`0 * * * *` UTC) — the hour filter lives in the app, so a
+  non-hourly expression means tenants on other hours never send at all. Job as
+  stored: `retryConfig { maxRetries: 3, minBackoffDuration: 60 }`, `timeout: 300`,
+  `targetUrl /digest-send`.
   - **`-r 0` is NOT reachable from the CLI** — it treats 0 as "not supplied",
     prompts, and stores the default 3. So retries are a fact of life, and the
     handler carries the guard: the cron passes **`skipAlreadySent: true`**, which
@@ -237,6 +293,20 @@ src/
     old filter tested a `wrong_hour` skip reason no code produces, so an account
     that had merely never configured a digest counted as due on every tick — an
     hourly summary mail, measured.
+  - **§7.4 catch-up (round348).** An hour that has already passed today is a
+    catch-up candidate, not a skip — a tick that never fired for a tenant's exact
+    hour (or died mid-run) used to cost that tenant the whole day; now every
+    later tick re-attempts them, and the per-slot marker above is what makes that
+    safe (nobody already sent gets mailed twice). `due` for this purpose is NOT
+    "passed the hour gate": at the tenant's own scheduled hour it is always true
+    (even zero recipients is the expected reporting moment); on a later catch-up
+    hour it is true only when the tick actually sent or failed something —
+    otherwise every remaining hour of the day would re-report "nothing new" to
+    the operator summary AND the §5.2 CSV file, reintroducing the hourly-noise
+    bug above for a different reason. Cost: a tenant already fully sent today is
+    still re-checked against the boards every remaining hour (same board-read
+    overhead §7.3 measures for a tick that sends nobody anything) — accepted,
+    since there is no cheaper way to know "nothing left to do" without asking.
   - **Per-employee summary CSV (0.14.0, owner decision 2026-08-05 —
     `docs/scheduling.md` §5.2).** After a tick, each tenant that RAN gets a
     `multipart/mixed` mail — plain body + `digest-summary-<slot>.csv` — sent to
@@ -258,6 +328,13 @@ src/
     as "fine". Attachments need `helpers/mime-mixed.js`, which nests a
     `multipart/alternative` body **byte-for-byte** with no CTE of its own — a
     re-wrap is exactly what strips the AMP part (findings §2).
+    **A dedicated `סטטוס` (outcome) column (round348)** sits before `שגיאה`:
+    `sent`→`נשלח`, `failed`→`נכשל`, everything else (`already_sent`/`no_tasks`/
+    `skipped`)→`דולג`. `שגיאה` is unchanged (still free text, still last) — the
+    fix is filterability (a real SMTP failure vs. a benign skip used to need the
+    same free-text column), not a new reason. Both columns come from the ONE
+    lookup (`KIND_META` in `digest-summary-report.js`) so a new `kind` cannot
+    update one column and leave the other stale.
   - **`durationMs` per tenant (0.14.0)** — `tenant run finished` in the log AND
     in the tick response, so `scheduler:run` answers "does 300s suffice?" (§7.3)
     without log spelunking. It is measured with two `now()` reads around the run;
