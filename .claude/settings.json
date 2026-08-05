@@ -1,4 +1,32 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(pnpm dlx knip:*)",
+      "Bash(pnpm dlx jscpd:*)",
+      "Bash(pnpm install --frozen-lockfile)",
+      "Bash(pnpm --filter:*)",
+      "Bash(pnpm remove --filter:*)",
+      "Bash(node scripts/error-wiring-audit.mjs)",
+      "Bash(node scripts/lib/eager-graph.mjs)",
+      "Bash(bash scripts/cleanup/baseline.sh:*)",
+      "Bash(bash scripts/cleanup/guard-protected-paths.test.sh)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git restore:*)",
+      "Bash(git clean -fd -- apps/twyst-your-status)",
+      "Bash(jq:*)",
+      "Bash(du:*)",
+      "Bash(wc:*)",
+      "Bash(mkdir -p apps/twyst-your-status/.cleanup:*)",
+      "Bash(date -Iseconds)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
