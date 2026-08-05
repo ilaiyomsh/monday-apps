@@ -69,3 +69,51 @@ X's). The width/height we ask for also include that chrome — hence
 on the reading-start side has to own the whole chrome — i.e. draw its own header
 with its own X (as twyst's settings overlay does) and treat monday's frame X as
 a second, unavoidable exit.
+
+## 2026-08-05 — `manifest:import` refuses a LIVE version; OAuth config IS per-version
+
+**Ask:** point twyst-your-status' OAuth Redirect URI at the stable `live1-…`
+host instead of the version-pinned `acca6-…` hash, on the LIVE version.
+
+**Findings, all CLI-verified against app 11775054:**
+
+- **`mapps manifest:import -a <APP_ID> -i <LIVE_VERSION_ID>` fails** with
+  `FAILED: Could not find app version to update`. It succeeds on a DRAFT version
+  id. So the platform accepts manifest writes to drafts only — **a live version's
+  manifest (OAuth redirect URIs, scopes, feature builds) is Developer-Center-UI
+  only.** The failure is clean: re-exporting the live manifest afterwards showed
+  it byte-identical, feature ids unchanged, version list unchanged. Do not reach
+  for `app:deploy -f` as a workaround on production — it is the same manifest
+  path with a wider blast radius.
+- **A draft import is non-destructive and does not fork a version.** Importing an
+  export-then-patched manifest onto the draft left the version list at three rows
+  and the three app-feature ids untouched; the re-export matched the intended file
+  exactly. Safe to rehearse a manifest change on the draft before asking a human
+  to repeat it in the UI.
+- **OAuth config is per app VERSION, not per app.** `manifest:export` for the
+  draft and for the live version returned byte-identical files, which reads as
+  app-level — it is not. After importing three redirect URIs onto the draft, the
+  draft exported three and the live still exported one. The earlier identity was
+  two versions happening to hold the same value.
+
+**Trap this creates:** `BASE_URL` is one value per app, and the guard server
+derives `redirectUri = ${BASE_URL}/oauth/callback`. Moving `BASE_URL` to the
+`live1-…` host BEFORE that exact URI is registered on the live version leaves
+OAuth broken — monday rejects an authorize request whose `redirect_uri` is not
+registered on the version. Register the URI first, then move `BASE_URL`.
+
+## 2026-08-05 — every version shows the SAME "static url (latest deployment)"
+
+**Symptom:** a live push and a draft push appear to print the same address, which
+looks like both landed on one code project.
+
+**Finding:** `mapps app-version:builds -i <VERSION_ID>` reports, for EVERY version
+of the app, an identical `static url (latest deployment)` —
+`https://service-<account>-<app>.us.monday.app`. That column is a code-project-wide
+alias, not a per-version address. The per-version addresses are the `url` column
+(a per-version hash, e.g. `acca6-…` for live vs `af0df-…` for draft) and, on the
+live version only, `live url` (`live1-…`).
+
+**How to actually prove which version a push hit:** read the deploy job log. The
+CLI polls `https://monday-apps-ms.monday.com/api/code/<VERSION_ID>/deployments`
+while it waits — that path carries the version id it is really deploying to.
