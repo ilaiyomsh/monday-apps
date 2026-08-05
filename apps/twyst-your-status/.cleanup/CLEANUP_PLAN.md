@@ -17,7 +17,7 @@ stated ordering dependencies inside `ColumnSettings.jsx` and `PersonPicker.jsx`)
 ## Summary
 | batch | category | findings | risk | status |
 |---|---|---|---|---|
-| 1 | comments | 9 | S | approved |
+| 1 | comments | 9 | S | done |
 | 2 | dead files | 3 | M | approved |
 | 3 | unused exports | 5 | M | approved |
 | 4 | unused deps | 1 | M | approved |
@@ -90,7 +90,7 @@ positives + 11 auditor/scanner entries that are guard-blocked, superseded or own
 ---
 
 ## Batch 1 — comments: stale factual claims in comments only
-risk: S | status: approved
+risk: S | status: done
 
 Comment text only — zero behaviour change, no code line touched. This app has **no**
 commented-out code and **no** TODO/FIXME markers (see appendix `A-comments-10`), so this batch
