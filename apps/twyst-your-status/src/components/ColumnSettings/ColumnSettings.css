@@ -157,6 +157,17 @@
 }
 .twyst-guard-conn--ok { color: var(--tw-text-mute); background: rgba(0, 200, 117, 0.10); }
 .twyst-guard-conn--need { color: var(--tw-text); background: rgba(253, 171, 61, 0.14); }
+/* round330 — the column's webhook-registration state. Same shape as the OAuth
+   connection line above it, plus a neutral variant: "the guard did not answer"
+   must not be dressed as a problem with the column. */
+.twyst-guard-hook {
+  margin-top: 8px; padding: 8px 10px; margin-right: 30px;
+  font-size: 12px; line-height: 1.5; border-radius: 6px;
+}
+.twyst-guard-hook--ok { color: var(--tw-text-mute); background: rgba(0, 200, 117, 0.10); }
+.twyst-guard-hook--need { color: var(--tw-text); background: rgba(226, 68, 92, 0.12); }
+.twyst-guard-hook--unknown { color: var(--tw-text-mute); background: rgba(120, 130, 145, 0.12); }
+
 .twyst-linkish {
   background: none; border: none; padding: 0; cursor: pointer;
   color: var(--tw-primary, #0073ea); font: inherit; font-weight: 600; text-decoration: underline;
