@@ -49,6 +49,7 @@ import {
   sectionsFromBlocks,
 } from '../services/digest-blocks.js';
 import { runDigestForAccount, todayInJerusalem as todayInJerusalemFromRun } from '../services/digest-run.js';
+import { runScheduledForAccount } from '../services/scheduled-run.js';
 import { MondayApiError } from '../services/monday-api.js';
 import { logError, logInfo } from '../helpers/logger.js';
 
@@ -599,6 +600,44 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
   // T12 / D8 — resend today for ALL recipients using the current slot
   // (same pipeline as send; currentSlot is derived from live `now`).
   router.post('/api/digest/resend-today', guarded(handleDigestSend));
+
+  // Round348 — run the scheduled action by hand, for THIS tenant.
+  // Distinct from /api/digest/send in exactly one way that matters: it also
+  // produces the per-employee CSV report (§5.2), which until now only the cron
+  // could make. `skipAlreadySent` stays FALSE (owner decision 2026-08-05): the
+  // button re-sends to everyone every time, and therefore also leaves no
+  // per-slot marker — see services/scheduled-run.js for why both follow.
+  async function handleRunScheduled(req, res) {
+    if (!emailSender) {
+      res.status(409).json({ error: 'email_not_configured' });
+      return;
+    }
+    const out = await runScheduledForAccount({
+      accountId: req.session.accountId,
+      storage,
+      api,
+      baseUrl: env.baseUrl,
+      emailSender,
+      todayIso,
+      now,
+      tag: 'admin_api',
+    });
+    if (out.skip) {
+      res.status(out.skip === 'monday_api_failed' ? 502 : 409).json({ error: out.skip });
+      return;
+    }
+    res.json({
+      ok: out.failed === 0,
+      slot: out.slot,
+      results: out.results,
+      skippedUsers: out.skippedUsers,
+      truncated: out.truncated,
+      durationMs: out.durationMs,
+      reportSent: out.reportSent,
+    });
+  }
+
+  router.post('/api/digest/run-scheduled', guarded(handleRunScheduled));
 
 
   function guarded(handler) {
