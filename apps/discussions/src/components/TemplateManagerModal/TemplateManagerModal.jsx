@@ -17,6 +17,7 @@ import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { countPoints } from '@generated/utils/templates.js';
 import { shouldApplyTypeEdit } from './typeEditRequest.js';
 import { missingStoredTemplateDocx } from '@generated/utils/exportAssets.js';
+import { canSaveType, cleanTypeTopics } from './typeSaveGuard.js';
 import {
   useDropdownOptions,
   addDropdownLabel,
@@ -555,8 +556,23 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
       ? !!draft && draft.name.trim() && draft.topics.some((t) => t.name.trim())
       : kind === 'participants'
       ? !!pDraft && pDraft.name.trim() && (pDraft.participants || []).length > 0
-      // types: the type is fixed; require at least one topic or any person.
-      : !!draft && (draft.topics.some((t) => t.name.trim()) || typeLead.length > 0 || typeCoordinator.length > 0 || typeParticipants.length > 0);
+      // types: content (a topic / any person) OR an actual edit to one of the
+      // template-independent facets. round362 — the old content-only gate silently
+      // discarded an export-.docx upload (or a color / decider change) on a
+      // template-less type: it opens with one blank seeded topic, so canSave stayed
+      // false and the שמור button did nothing, with no error anywhere.
+      : canSaveType({
+          draft,
+          lead: typeLead,
+          coordinator: typeCoordinator,
+          participants: typeParticipants,
+          exportDirty: typeExportDirty,
+          colorDraft: typeColorDraft,
+          storedColor: draft ? typeColorName(draft.discussionType) : null,
+          deciderIsLead: typeDeciderIsLead,
+          storedDeciderIsLead:
+            typeTemplates.find((t) => t.discussionType === draft?.discussionType)?.deciderIsLead === true,
+        });
 
   const handleSave = async () => {
     if (!canSave || saving) return;
@@ -610,7 +626,9 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
         await upsertTypeTemplate({
           id: draft.id,
           discussionType: draft.discussionType,
-          topics: draft.topics.map((t) => ({ name: t.name, points: t.points.map((p) => p.text) })),
+          // round362 — blank rows (incl. the seeded one) are dropped, so an
+          // export-only save does not mint an empty agenda item.
+          topics: cleanTypeTopics(draft.topics),
           lead: typeLead,
           coordinator: typeCoordinator,
           participants: typeParticipants,
