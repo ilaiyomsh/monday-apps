@@ -50,6 +50,16 @@ describe('round358 — a rejected setItem is a FAILURE, not a save', () => {
     await expect(saveExportAssets(CTX, ASSETS)).rejects.toThrow();
   });
 
+  it('an OBJECT rejection reason surfaces its content — never "[object Object]" (round359)', async () => {
+    // Exactly what production returned on the owner's first guarded save: monday put
+    // an object in `error`, and naive interpolation hid the reason it was built to show.
+    storage.setItem.mockResolvedValue({ data: { success: false, error: { message: 'ITEM_TOO_LARGE', maxSize: 1048576 } } });
+    const err = await saveTypeExportAssets(CTX, 'סבב', ASSETS).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).not.toContain('[object Object]');
+    expect(err.message).toContain('ITEM_TOO_LARGE');
+  });
+
   it('local dev (no instance context) keeps tolerating an unavailable storage', async () => {
     storage.setItem.mockResolvedValue({ data: { success: false } });
     await expect(saveTypeExportAssets({}, 'סבב', ASSETS)).resolves.toBeTruthy();
