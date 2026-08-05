@@ -66,10 +66,18 @@ reordered by the bidi algorithm at RTL/LTR boundaries. Classic symptoms:
 side of a mixed Hebrew/English label, JSX apostrophes breaking the string.
 
 **Fix:**
-- Date ranges: never render raw `start - end` text into an RTL context — use
-  the bundled `DateRangeDisplay` (a `dir="ltr"` span, ported from
-  Axis/Day-off's `Rng`). Do not fix with invisible RLM/LRM characters pasted
-  into strings; they get lost in copy/edit.
+- Date ranges: never render raw `start - end` text into an RTL context. In an RTL
+  document `13.7 - 15.7` renders in reversed reading order, because bidi reorders the
+  neutral `-` between the numbers. **The fix is a dedicated `dir="ltr"` span** so the
+  earlier date always reads first, identically in Hebrew and English. Do **not** fix it
+  with invisible RLM/LRM characters inside the string — **that was tried and it broke on
+  copy-paste**; the `dir` attribute is the stable fix. (This used to say "use the bundled
+  `DateRangeDisplay`", but that component was deleted from `twyst-your-status` as dead code
+  in 2026-08, so the knowledge is written out here instead of pointing at a file that no
+  longer exists. `apps/axis/day-off`'s `Rng.tsx` is the surviving implementation.)
+- While rendering a date range, parse the ISO string as a LOCAL date:
+  `new Date('YYYY-MM-DD')` is parsed as **UTC** and shifts by a day in positive-offset
+  timezones like Asia/Jerusalem. Split on `-` and use `new Date(y, m - 1, d)`.
 - Mixed-direction labels: wrap the LTR fragment in `<span dir="ltr">` or use
   `unicode-bidi: isolate` — isolation, not override.
 - In JSX, prefer explicit escapes (`&quot;`, `&#39;`) or template literals for

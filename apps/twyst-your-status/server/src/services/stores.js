@@ -222,6 +222,9 @@ export function createBypassLog({ secureStorage, maxEvents = 1000, logger }) {
       const run = prior.then(async () => {
         const list = await readList(key);
         list.push(record);
+        // Keep the NEWEST maxEvents and drop the oldest overflow — the direction matters
+        // and is not obvious from `slice`: a bypass log read by an owner is only useful if
+        // it shows the most recent events. (Restored after a cleanup batch removed it.)
         const trimmed = list.length > maxEvents ? list.slice(list.length - maxEvents) : list;
         await secureStorage.set(key, trimmed);
       });

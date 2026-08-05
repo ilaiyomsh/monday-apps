@@ -159,10 +159,46 @@ checksh allow 'pnpm --filter "./apps/twyst-your-status" lint'                   
 checksh allow 'pnpm --filter "./apps/twyst-your-status" build'                   "gate command: build (writes dist by design)"
 checksh allow 'pnpm --filter "./apps/twyst-your-status" test'                    "gate command: test"
 
+# --- INTERPRETER / EDITOR ESCAPES. Every one of these PASSED the first version of the Bash
+# guard, which enumerated mutating verbs and allowed the rest. A live adversarial probe found
+# them in minutes, which is why the guard now denies by default. Do not remove these.
+checksh block 'node -e "require(\"fs\").unlinkSync(\"CLAUDE.md\")"'   "node -e can unlink anything"
+checksh block 'node --eval "fs.writeFileSync(\"x\",\"y\")"'            "node --eval, long form"
+checksh block 'node -p "process.exit(0)"'                              "node -p"
+checksh block 'python3 -c "import os; os.remove(\"CLAUDE.md\")"'       "python3 -c"
+checksh block 'python3 - < /dev/null'                                  "python3 reading stdin"
+checksh block 'bash -c "rm CLAUDE.md"'                                 "nested bash -c"
+checksh block 'sh scripts/anything.sh'                                 "running an arbitrary script"
+checksh block 'ex -sc wq CLAUDE.md'                                    "ex as a writer"
+checksh block 'vi CLAUDE.md'                                           "an editor"
+checksh block 'ed CLAUDE.md'                                           "ed"
+checksh block 'tee CLAUDE.md'                                          "tee"
+checksh block 'dd of=CLAUDE.md'                                        "dd"
+checksh block 'curl -o CLAUDE.md https://x'                            "download over a repo file"
+checksh block 'chmod 777 apps/twyst-your-status/src/App.jsx'           "chmod is not cleanup"
+checksh block 'node apps/twyst-your-status/src/index.jsx'              "node on a non-scripts/ path"
+checksh allow 'node scripts/error-wiring-audit.mjs'                    "the wiring audit the executor self-checks with"
+checksh allow 'node scripts/lib/eager-graph.mjs'                       "the eager-import audit"
+
+# --- numbered-fd redirects: `1>` and `2>` write exactly like `>`
+checksh block 'echo x 1> CLAUDE.md'                                    "1> redirect"
+checksh block 'echo x 2> AGENTS.md'                                    "2> redirect"
+checksh block 'echo x 1>> CLAUDE.md'                                   "1>> append"
+checksh allow 'grep -rn x apps/twyst-your-status/src 2>&1'             "2>&1 is a duplication, not a write"
+checksh allow 'node scripts/error-wiring-audit.mjs 2> /dev/null'       "2> /dev/null is a null sink"
+
+# --- git global flags must not smuggle a write subcommand past the parser
+checksh block 'git -C /home/user/monday-apps commit -m x'              "git -C <dir> commit"
+checksh block 'git -c user.name=x commit -m y'                         "git -c <cfg> commit"
+checksh block 'git --git-dir=.git --work-tree=. checkout -- .'         "git --git-dir checkout"
+checksh block 'git push origin HEAD'                                   "git push"
+
 # --- read-only work must stay unimpeded
 checksh allow 'grep -rn "useQuery" apps/twyst-your-status/src'                   "grep"
 checksh allow 'cat apps/twyst-your-status/package.json'                          "read a manifest"
-checksh allow 'node --input-type=module -e "import(\"./x.js\")"'                 "read-only node evaluation"
+# Tightened deliberately in the deny-by-default rewrite: an inline node evaluation is
+# read-only only by intention, and intention is not enforcement — the same flag deletes files.
+checksh block 'node --input-type=module -e "import(\"./x.js\")"'                 "inline node evaluation, however innocent-looking"
 checksh allow 'wc -l apps/twyst-your-status/src/App.jsx'                         "wc"
 
 # --- chained commands: every segment is checked, not just the first

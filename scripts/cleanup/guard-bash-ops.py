@@ -2,19 +2,26 @@
 """PreToolUse hook (Bash) for the cleanup-executor subagent.
 
 WHY THIS EXISTS. The Edit/Write guard cannot see a shell command, and a dead-file batch
-deletes files with `rm` — so until this hook was added, the single most destructive
-operation in the whole cleanup workflow was the one operation the scope guard never
-inspected. Found by a pre-approval refutation pass, not by a test, which is exactly the
-class of hole that looks identical to a guard that passed.
+deletes files with `rm` — so without this hook the single most destructive operation in the
+cleanup workflow is the one the scope guard never inspects.
 
-WHAT IT DOES. Parses the command, finds every file-MUTATING operation, and runs each target
-path through the same decision function the Edit guard uses
-(scripts/cleanup/lib-path-verdict.sh — one source of truth, no drift). Read-only commands
-are untouched: this hook polices writes, not curiosity.
+DENY BY DEFAULT — and that is the second version of this file. The first enumerated
+*mutating* verbs and allowed everything else, which a live adversarial probe took apart in
+minutes: `node -e "fs.unlinkSync(...)"`, `python3 -c`, `python3 - <<EOF`, `node --eval`,
+`git -C <dir> commit` (the dir was parsed as the subcommand), `1> file` and `2> file` (the
+redirect regex skipped numbered fds on purpose, to let `2>&1` through), `bash -c "rm ..."`,
+`sh script.sh`, `ex -sc wq file`. Enumerating ways to write to a disk is a game you lose.
+So: a command runs only if every segment's verb is on the read-only allowlist or matches a
+sanctioned pattern below. Anything unrecognized is refused with an explanation, and the
+refusal names what to do instead.
 
-Fails closed on anything it cannot resolve statically (globs, variables, command
-substitution, xargs, find -exec/-delete): a cleanup deletes a known list of files, one
-explicit path at a time, so an unresolvable destructive target is never legitimate here.
+Sanctioned writes, each path-checked through the SAME decision function the Edit guard uses
+(scripts/cleanup/lib-path-verdict.sh — one rule set, two surfaces):
+  rm / mv / cp / touch / mkdir / sed -i   → every operand checked
+  any redirection, including 1> and 2>    → target checked
+  pnpm remove --filter <twyst workspace>  → the one dependency path
+  pnpm lint|test|build|exec|install|dlx   → the gate itself, never policed
+  node scripts/<repo tooling>             → the two audits the executor self-checks with
 
 exit 0 = allow, exit 2 = block with the reason on stderr (agent-facing).
 Self-test: bash scripts/cleanup/guard-protected-paths.test.sh
@@ -31,33 +38,36 @@ ROOT = os.environ.get("CLAUDE_PROJECT_DIR") or subprocess.run(
     ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
 ).stdout.strip()
 
-# Verbs that change files on disk. `mkdir`/`touch`/`chmod` are here not because they are
-# dangerous but because a cleanup has no business creating or re-permissioning anything
-# outside the app it is scoped to.
-MUTATING = {
-    "rm", "unlink", "rmdir", "mv", "cp", "ln", "touch", "mkdir", "truncate",
-    "shred", "tee", "dd", "install", "chmod", "chown", "rename",
+# Verbs that only read. A cleanup executor investigates with these and nothing else.
+READ_ONLY = {
+    "grep", "rg", "egrep", "fgrep", "cat", "head", "tail", "ls", "wc", "sort", "uniq",
+    "cut", "paste", "join", "comm", "diff", "file", "stat", "basename", "dirname",
+    "echo", "printf", "jq", "tr", "nl", "od", "xxd", "strings", "md5sum", "sha1sum",
+    "sha256sum", "shasum", "cksum", "du", "df", "realpath", "readlink", "pwd", "cd",
+    "test", "true", "false", "which", "type", "date", "seq", "expr", "tee_disabled",
+    "column", "fold", "rev", "less", "more", "awk", "sed", "node", "pnpm", "git", "find",
 }
-# In-place editors: only mutating with an in-place flag.
-INPLACE = {"sed": ("-i", "--in-place"), "perl": ("-i",), "ruby": ("-i",), "python": ("-i",)}
-# git subcommands that write to the working tree or history. The executor never commits or
-# reverts — the workflow's finalize step does, as a different agent with different hooks.
-GIT_WRITE = {
-    "rm", "mv", "checkout", "restore", "clean", "reset", "stash", "apply", "commit",
-    "revert", "merge", "rebase", "cherry-pick", "switch", "push", "am",
+# Writers whose operands get path-checked.
+CHECKED_MUTATORS = {"rm", "unlink", "rmdir", "mv", "cp", "ln", "touch", "mkdir", "rename"}
+# git subcommands that only read.
+GIT_READ = {
+    "status", "log", "diff", "show", "ls-files", "ls-tree", "rev-parse", "cat-file",
+    "blame", "describe", "shortlog", "grep", "config", "remote", "tag", "for-each-ref",
+    "merge-base", "name-rev", "symbolic-ref", "count-objects", "verify-pack", "branch",
 }
-UNRESOLVABLE = re.compile(r"[*?\[]|\$\(|`|\$\{|\$[A-Za-z_]")
-SAFE_REDIRECT_TARGETS = {"/dev/null", "/dev/stderr", "/dev/stdout", "/dev/tty"}
 SANCTIONED_PNPM_FILTERS = {"./apps/twyst-your-status", "./apps/twyst-your-status/server"}
+PNPM_OK = {"lint", "test", "build", "exec", "install", "dlx", "run", "--filter", "-r"}
+EVAL_FLAGS = {"-e", "--eval", "-p", "--print", "-c", "-"}
+UNRESOLVABLE = re.compile(r"[*?\[]|\$\(|`|\$\{|\$[A-Za-z_]")
+SAFE_REDIRECT = {"/dev/null", "/dev/stderr", "/dev/stdout", "/dev/tty"}
 
 
-def block(reason: str) -> "None":
+def block(reason: str) -> None:
     print(f"Blocked by the cleanup guard: {reason}", file=sys.stderr)
     sys.exit(2)
 
 
 def verdict(path: str) -> str:
-    """Delegate to the shared bash decision function — one rule set, two hook surfaces."""
     out = subprocess.run(
         ["bash", "-c",
          '. "$1/scripts/cleanup/cleanup-env.sh"; . "$1/scripts/cleanup/lib-path-verdict.sh"; '
@@ -68,121 +78,137 @@ def verdict(path: str) -> str:
     return out.stdout.strip() or "BLOCK|the path decision function produced no verdict"
 
 
-def check_path(path: str, op: str) -> "None":
+def check_path(path: str, op: str) -> None:
     if UNRESOLVABLE.search(path):
-        block(
-            f"`{op}` targets '{path}', which this guard cannot resolve statically (glob, "
-            f"variable or command substitution). A cleanup batch deletes a KNOWN list of "
-            f"files — pass one explicit path per command instead."
-        )
+        block(f"`{op}` targets '{path}', which cannot be resolved statically (glob, variable "
+              f"or command substitution). A cleanup batch acts on a KNOWN list of files — "
+              f"pass one explicit path per command.")
     v = verdict(path)
     if v != "ALLOW":
         block(f"`{op}` would touch a protected path. {v.split('|', 1)[-1]}")
 
 
 def segments(command: str):
-    """Split on shell operators. Deliberately crude: over-splitting only costs extra
-    checks, while missing a separator would hide a mutating verb."""
-    return [s for s in re.split(r"\|\||&&|;|\||\n|&(?!>)", command) if s.strip()]
+    # Deliberately NOT splitting on a lone `&`: an earlier version did, and it cut `2>&1`
+    # in half, leaving a segment that was just `1` — which then looked like an unknown
+    # command and got refused. Background execution is not something a cleanup batch needs,
+    # and a trailing `&` leaves the verb intact, so the checks below still see it.
+    return [s for s in re.split(r"\|\||&&|;|\||\n", command) if s.strip()]
 
 
-def main() -> "None":
+def main() -> None:
     try:
         payload = json.load(sys.stdin)
     except Exception:
-        sys.exit(0)  # not our business to fail on a malformed payload
+        sys.exit(0)
     command = (payload.get("tool_input") or {}).get("command") or ""
     if not command.strip():
         sys.exit(0)
 
     for seg in segments(command):
-        # --- redirections anywhere in the segment (echo x > file, cmd >> file)
-        for target in re.findall(r"(?<![0-9&])>{1,2}\s*([^\s;|&]+)", seg):
-            t = target.strip("\"'")
-            if t.startswith("&") or t in SAFE_REDIRECT_TARGETS:
+        # --- Redirections FIRST, including numbered fds. `1> file` and `2> file` write just
+        # as well as `> file`; only fd-duplications (>&1) and the null sinks are exempt.
+        for m in re.finditer(r"(\d*)>{1,2}\s*(&?[^\s;|&]+)", seg):
+            target = m.group(2).strip("\"'")
+            if target.startswith("&") or target in SAFE_REDIRECT:
                 continue
-            check_path(t, "shell redirection")
+            check_path(target, "shell redirection")
 
         try:
             words = shlex.split(seg, comments=True)
         except ValueError:
-            # Unbalanced quotes — cannot reason about it. Only fail closed if a mutating
-            # verb is even plausibly present; otherwise a stray quote in a grep pattern
-            # would break ordinary work.
-            if any(v in seg.split() for v in MUTATING) or "git " in seg:
-                block("the command could not be parsed (unbalanced quotes) and mentions a "
-                      "file-mutating verb. Re-issue it as a simple, quoted command.")
-            continue
+            block("the command could not be parsed (unbalanced quotes). Re-issue it as a "
+                  "simple, quoted command — this guard refuses what it cannot read.")
         if not words:
             continue
 
-        # skip leading env assignments and common wrappers
         i = 0
-        while i < len(words) and ("=" in words[i] and not words[i].startswith("-")):
-            i += 1
-        while i < len(words) and words[i] in ("sudo", "command", "env", "time", "nohup"):
+        while i < len(words) and "=" in words[i] and not words[i].startswith("-"):
             i += 1
         if i >= len(words):
             continue
         verb = os.path.basename(words[i])
         rest = words[i + 1:]
 
-        if verb in ("xargs", "find") or "-delete" in rest or "-exec" in rest:
-            if verb == "xargs" or "-delete" in rest or ("-exec" in rest and any(
-                    os.path.basename(w) in MUTATING for w in rest)):
-                block(
-                    "`find -delete` / `-exec <mutating>` / `xargs` cannot be checked path by "
-                    "path, so it is refused during cleanup. Delete or move the files the "
-                    "batch names, one explicit command per path."
-                )
-
-        if verb == "git":
-            sub = next((w for w in rest if not w.startswith("-")), "")
-            if sub in GIT_WRITE:
-                block(
-                    f"`git {sub}` is refused for a cleanup executor. Committing, reverting and "
-                    f"cleaning the tree belong to the workflow's finalize step, not to a batch: "
-                    f"the batch's job is to leave exactly its own edits in the working tree. "
-                    f"Use plain `rm <path>` to delete a file the batch names."
-                )
+        # --- Deny by default. Everything below is a narrowing of an already-allowed verb.
+        if verb in CHECKED_MUTATORS:
+            for t in [w for w in rest if not w.startswith("-")]:
+                check_path(t, verb)
             continue
 
-        if verb in ("npm", "yarn"):
-            block("this repo is pnpm-only (tracker's postinstall needs pnpm, and CI runs "
-                  "--frozen-lockfile). Never npm/yarn.")
+        if verb not in READ_ONLY:
+            block(f"`{verb}` is not on the cleanup executor's allowlist. This guard denies by "
+                  f"default: a shell that can reach an interpreter (`node -e`, `python3 -c`, "
+                  f"`bash -c`), an editor (`ex`, `vi`, `ed`), or a byte mover (`tee`, `dd`) can "
+                  f"write anywhere, which would make the scope guard decorative. Use Read/Edit "
+                  f"for file work, `rm <explicit path>` to delete, and the gate commands to "
+                  f"verify. If you genuinely need this command, stop and report it.")
 
-        if verb == "pnpm":
-            if "remove" in rest or "uninstall" in rest or "add" in rest:
-                if "--filter" not in rest:
-                    block("a dependency change must name its workspace: "
-                          "`pnpm remove --filter \"./apps/twyst-your-status\" <pkg>` (or the "
-                          "server workspace). An unfiltered pnpm remove hits the root workspace.")
-                f = rest[rest.index("--filter") + 1] if rest.index("--filter") + 1 < len(rest) else ""
-                if f.strip("\"'") not in SANCTIONED_PNPM_FILTERS:
-                    block(f"`--filter {f}` is outside this cleanup's scope. Only "
-                          f"./apps/twyst-your-status and ./apps/twyst-your-status/server may be "
-                          f"changed.")
-            continue  # lint/test/build/exec are the gate itself — never policed
-
-        if verb in INPLACE:
-            if any(a in rest for a in INPLACE[verb]) or any(
-                    a.startswith("-i") and len(a) > 2 for a in rest):
-                # The FIRST non-flag argument is the script/expression, not a path —
-                # `sed -i 's/a/b/' file` would otherwise have its own substitution command
-                # checked as a path and blocked with a nonsensical reason. Drop it, check
-                # the rest. Extra expressions (multiple -e) fall through as paths and fail
-                # closed, which is the correct direction for an in-place editor.
+        # --- Narrowings for the powerful verbs that ARE on the allowlist.
+        if verb in ("sed", "awk", "perl", "ruby"):
+            inplace = [a for a in rest if a == "-i" or a.startswith("-i") and len(a) > 2
+                       or a == "--in-place"]
+            if inplace:
+                # First non-flag operand is the script/expression, not a path.
                 operands = [w for w in rest if not w.startswith("-")]
                 for w in operands[1:]:
                     check_path(w, f"{verb} in-place edit")
             continue
 
-        if verb in MUTATING:
-            targets = [w for w in rest if not w.startswith("-")]
-            if not targets:
+        if verb == "node":
+            if any(a in EVAL_FLAGS for a in rest) or not rest:
+                block("`node` with an inline script (-e/--eval/-p/--print) or reading stdin can "
+                      "write any file on disk, so it is refused. The executor's self-check runs "
+                      "`node scripts/error-wiring-audit.mjs` and `node scripts/lib/eager-graph.mjs`.")
+            script = next((w for w in rest if not w.startswith("-")), "")
+            if not script.startswith("scripts/"):
+                block(f"`node {script}` is refused — only repo tooling under scripts/ may be run "
+                      f"(the wiring audit and the eager-import audit). An arbitrary script can "
+                      f"write anywhere.")
+            continue
+
+        if verb == "git":
+            # Find the subcommand properly: skip global flags AND their values, so
+            # `git -C <dir> commit` cannot smuggle a write past a naive first-word check.
+            sub, j = "", 0
+            while j < len(rest):
+                w = rest[j]
+                if w in ("-C", "-c", "--git-dir", "--work-tree", "--namespace",
+                         "--exec-path", "--config-env"):
+                    j += 2
+                    continue
+                if w.startswith("-"):
+                    j += 1
+                    continue
+                sub = w
+                break
+            if sub not in GIT_READ:
+                block(f"`git {sub or '(no subcommand found)'}` is refused for a cleanup executor. "
+                      f"Only read subcommands are allowed ({', '.join(sorted(GIT_READ))[:80]}…). "
+                      f"Committing, reverting and cleaning the tree belong to the workflow's "
+                      f"finalize step, which is a different agent. Use `rm <path>` to delete.")
+            continue
+
+        if verb == "pnpm":
+            if any(a in ("remove", "uninstall", "add") for a in rest):
+                if "--filter" not in rest:
+                    block("a dependency change must name its workspace: "
+                          "`pnpm remove --filter \"./apps/twyst-your-status\" <pkg>`.")
+                f = rest[rest.index("--filter") + 1] if rest.index("--filter") + 1 < len(rest) else ""
+                if f.strip("\"'") not in SANCTIONED_PNPM_FILTERS:
+                    block(f"`--filter {f}` is outside this cleanup's scope. Only "
+                          f"./apps/twyst-your-status and ./apps/twyst-your-status/server.")
                 continue
-            for t in targets:
-                check_path(t, verb)
+            if not any(a in PNPM_OK for a in rest):
+                block(f"`pnpm {' '.join(rest[:2])}` is not one of the sanctioned forms "
+                      f"(lint/test/build/exec/install/dlx/run, or remove --filter).")
+            continue
+
+        if verb == "find":
+            if "-delete" in rest or "-exec" in rest or "-execdir" in rest or "-ok" in rest:
+                block("`find -delete` / `-exec` cannot be checked path by path, so it is refused. "
+                      "Delete the files the batch names, one explicit `rm <path>` each.")
+            continue
 
     sys.exit(0)
 
