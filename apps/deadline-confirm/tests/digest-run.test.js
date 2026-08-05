@@ -104,6 +104,35 @@ describe('hourInJerusalem', () => {
 });
 
 describe('runDigestForAccount', () => {
+  it('requests the recipient label gate column on the users-board read when configured (round348 §E)', async () => {
+    // Regression guard: forgetting to add the gate column to columnIds makes
+    // digest-service.js read it as unset on every row, silently excluding
+    // everyone — a bug this file's own double (which ignores columnIds and
+    // returns full rows regardless of what was asked for) would not otherwise
+    // catch, since the double answers the same rows either way.
+    const send = vi.fn().mockResolvedValue({ id: 'em' });
+    const inner = boardItemsDouble();
+    const getBoardItems = vi.fn((args) => inner(args));
+    // fullConfig's outer `...overrides` spread replaces `digest` wholesale, so a
+    // partial `{ digest: {...} }` override would drop usersBoardId etc. — set the
+    // gate fields directly on the default digest instead.
+    const gatedConfig = fullConfig();
+    gatedConfig.digest.recipientGateColumnId = 'status_gate';
+    gatedConfig.digest.recipientGateLabelId = 1;
+    const { storage } = await seeded({ emailSender: { send }, getBoardItems, config: gatedConfig });
+    await runDigestForAccount({
+      accountId: ACCOUNT_ID,
+      storage,
+      api: { getBoardItems },
+      baseUrl: 'https://app.example',
+      emailSender: { send },
+      todayIso: TODAY,
+      now: () => FIXED_NOW,
+    });
+    const usersCall = getBoardItems.mock.calls.map(([p]) => p).find((p) => p.boardId === '222');
+    expect(usersCall.columnIds).toContain('status_gate');
+  });
+
   it('returns skip email_not_configured when no sender is wired', async () => {
     const { storage, api } = await seeded({ emailSender: undefined });
     const out = await runDigestForAccount({

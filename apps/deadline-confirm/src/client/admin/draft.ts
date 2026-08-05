@@ -60,6 +60,14 @@ export interface DigestDraft {
   usersBoardId: string | null;
   usersPeopleColumnId: string | null;
   usersEmailColumnId: string | null;
+  /**
+   * Recipient label gate (round348): a status column on the USERS board.
+   * EITHER this or recipientGateLabelId null -> the gate is off and every
+   * row qualifies, same as every digest before this feature.
+   */
+  recipientGateColumnId: string | null;
+  /** The label id that must match on recipientGateColumnId. 0 is valid. */
+  recipientGateLabelId: number | null;
   /** The subject block. May carry the name token. */
   subject: string;
   /** Hour (0–23, Asia/Jerusalem) for scheduled send + slot math. Default 8. */
@@ -166,6 +174,8 @@ export function defaultDigestDraft(): DigestDraft {
     usersBoardId: null,
     usersPeopleColumnId: null,
     usersEmailColumnId: null,
+    recipientGateColumnId: null,
+    recipientGateLabelId: null,
     subject: DEFAULT_DIGEST_SUBJECT,
     sendHour: 8,
     blocks: [
@@ -220,6 +230,10 @@ export function digestFromConfig(digest: DigestConfig | null | undefined): Diges
     usersBoardId: digest.usersBoardId,
     usersPeopleColumnId: digest.usersPeopleColumnId,
     usersEmailColumnId: digest.usersEmailColumnId,
+    // ?? not ||: label id 0 is valid and must survive a config saved before
+    // this feature (where the key is absent, not merely falsy).
+    recipientGateColumnId: digest.recipientGateColumnId ?? null,
+    recipientGateLabelId: digest.recipientGateLabelId ?? null,
     subject: digest.subject,
     sendHour: digest.sendHour ?? 8,
     // Tolerate configs saved before 0.6.0 introduced two of the section fields
@@ -290,6 +304,8 @@ function digestToConfig(digest: DigestDraft): DigestConfig | null {
     usersBoardId: digest.usersBoardId as string,
     usersPeopleColumnId: digest.usersPeopleColumnId as string,
     usersEmailColumnId: digest.usersEmailColumnId as string,
+    recipientGateColumnId: digest.recipientGateColumnId,
+    recipientGateLabelId: digest.recipientGateLabelId,
     subject: digest.subject,
     sendHour: digest.sendHour,
     blocks,

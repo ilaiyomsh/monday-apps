@@ -120,6 +120,16 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const boardOptions = boards.map((b) => toOption(b.id, b.name));
   const peopleOptions = usersColumns.filter((c) => c.type === 'people').map((c) => toOption(c.id, c.title));
   const emailOptions = usersColumns.filter((c) => c.type === 'email').map((c) => toOption(c.id, c.title));
+  // Recipient label gate (round348 §E) — a status column on the SAME users
+  // board, plus one of its labels. Both optional; see the hint below the row.
+  const gateColumnOptions = usersColumns.filter((c) => c.type === 'status').map((c) => toOption(c.id, c.title));
+  const gateLabelOptions: Option[] = (
+    usersColumns.find((c) => c.id === digest.recipientGateColumnId)?.labels ?? []
+  ).map((l) => toOption(String(l.id), l.label));
+  const gateLabelValue =
+    digest.recipientGateLabelId !== null
+      ? (gateLabelOptions.find((o) => o.value === String(digest.recipientGateLabelId)) ?? null)
+      : null;
 
   const loadPreview = async (recipient: string | null) => {
     setPreviewLoading(true);
@@ -272,6 +282,8 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                       usersBoardId: opt?.value ?? null,
                       usersPeopleColumnId: null,
                       usersEmailColumnId: null,
+                      recipientGateColumnId: null,
+                      recipientGateLabelId: null,
                     })
                   }
                   clearable={false}
@@ -318,6 +330,43 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                   }}
                 />
               </div>
+            </div>
+            <div className="dc-row">
+              <div className="dc-field">
+                <label>עמודת סטטוס לסינון נמענים (אופציונלי)</label>
+                <Dropdown
+                  placeholder={usersColumnsLoading ? 'טוען עמודות…' : 'ללא סינון — כולם מקבלים'}
+                  disabled={!digest.usersBoardId || usersColumnsLoading}
+                  options={gateColumnOptions}
+                  value={findOption(gateColumnOptions, digest.recipientGateColumnId)}
+                  onChange={(opt: Option | null) =>
+                    onChange({
+                      recipientGateColumnId: opt?.value ?? null,
+                      recipientGateLabelId: null,
+                    })
+                  }
+                  clearable
+                />
+              </div>
+              <div className="dc-field">
+                <label>לייבל שמאשר קבלת מייל</label>
+                <Dropdown
+                  placeholder={!digest.recipientGateColumnId ? 'בחרו קודם עמודת סטטוס' : 'בחרו לייבל'}
+                  disabled={!digest.recipientGateColumnId}
+                  options={gateLabelOptions}
+                  value={gateLabelValue}
+                  onChange={(opt: Option | null) =>
+                    onChange({ recipientGateLabelId: opt ? Number(opt.value) : null })
+                  }
+                  clearable
+                />
+              </div>
+            </div>
+            <div className="dc-hint">
+              ברירת מחדל — <b>ללא סינון</b>: כל שורה בלוח המשתמשים מקבלת את המייל, בדיוק כמו היום.
+              אם בוחרים עמודה <b>וגם</b> לייבל, רק שורות שמסומן להן הלייבל הזה יקבלו את המייל —
+              דרך לכבות את המייל לאדם ספציפי בלי לגעת בשאר ההגדרות. שורה שנחסמה כך תופיע בדוח
+              ה-CSV עם הסיבה "לא מסומן לקבלת מייל".
             </div>
           </>
         )}
@@ -599,7 +648,9 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                           ? 'חסר איש'
                           : s.reason === 'multi_person'
                             ? 'יותר מאיש אחד'
-                            : s.reason;
+                            : s.reason === 'not_labeled'
+                              ? 'לא מסומן לקבלת מייל'
+                              : s.reason;
                     return `${s.name} (${reason})`;
                   })
                   .join(', ')}

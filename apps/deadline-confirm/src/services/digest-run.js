@@ -9,6 +9,7 @@ import {
   buildDigest,
   digestSections,
   digestTaskColumnIds,
+  digestUsersColumnIds,
   decorateRecipientSections,
 } from './digest-service.js';
 import { applyTokens, normalizeDigestBlocks } from './digest-blocks.js';
@@ -96,7 +97,10 @@ export async function runDigestForAccount({
       api.getBoardItems({
         token,
         boardId: config.digest.usersBoardId,
-        columnIds: [config.digest.usersPeopleColumnId, config.digest.usersEmailColumnId],
+        // digestUsersColumnIds also requests the recipient label gate's status
+        // column (round348 §E) when configured — without it the gate would read
+        // every row as unlabeled and silently exclude everyone.
+        columnIds: digestUsersColumnIds(config.digest),
       }),
     ]);
   } catch (err) {
@@ -233,9 +237,12 @@ export async function runDigestForAccount({
   for (const skipped of skippedUsers) {
     summaryRows.push({
       name: skipped.name,
-      // A row skipped for `no_email` has no address by definition, and one
+      // A row skipped for `no_email` has no address by definition, one
       // skipped for `no_person`/`multi_person` was never resolved to an
-      // employee — so the address column stays empty rather than guessing.
+      // employee, and `not_labeled` (round348 §E) simply isn't carried by
+      // skippedUsers (DigestSkippedUser has no email field) even though the
+      // row DID resolve one — so the address column stays empty rather than
+      // guessing, for every reason alike.
       email: '',
       kind: 'skipped',
       reason: skipped.reason,

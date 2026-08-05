@@ -38,6 +38,24 @@ export function digestSections(digest) {
 }
 
 /**
+ * Column ids the users-board read needs: person, email, and — when configured
+ * — the recipient label gate's status column (round348 §E). Deduped and
+ * null-filtered, same contract as digestTaskColumnIds below.
+ * @param {object} digest
+ * @returns {string[]}
+ */
+export function digestUsersColumnIds(digest) {
+  const ids = new Set([
+    digest.usersPeopleColumnId,
+    digest.usersEmailColumnId,
+    digest.recipientGateColumnId,
+  ]);
+  ids.delete(null);
+  ids.delete(undefined);
+  return [...ids];
+}
+
+/**
  * Column ids the tasks-board read needs (people + every section date +
  * every referenced button's status column), deduped.
  * @param {object} config
@@ -156,6 +174,18 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
   // classifies against an empty list.
   const configSections = digestSections(digest);
 
+  // Recipient label gate (round348 §E): mapping a status column + a specific
+  // label on the USERS board lets an operator opt individual people OUT of the
+  // digest. EITHER piece absent -> the gate is OFF and every row qualifies,
+  // same as every digest before this feature — a reversed default would
+  // silently mute mail for every existing tenant the moment they upgrade,
+  // with nobody having touched the setting (owner decision, round348).
+  // Label id 0 is a valid label — compared with !=, never a truthy check.
+  const gateColumnId = digest.recipientGateColumnId;
+  const gateLabelId = digest.recipientGateLabelId;
+  const gateActive =
+    typeof gateColumnId === 'string' && gateColumnId.length > 0 && gateLabelId !== null && gateLabelId !== undefined;
+
   // --- users board -> recipients (D16: one row = one message) --------------
   /** @type {Array<{ email: string, name: string, personId: string }>} */
   const userRecipients = [];
@@ -173,6 +203,10 @@ export function buildDigest({ config, tasks, users, today, statusColumnColors })
     }
     if (personIds.length > 1) {
       skippedUsers.push({ itemId: row.id, name: row.name, reason: 'multi_person' });
+      continue;
+    }
+    if (gateActive && col(row, gateColumnId).statusLabelId !== gateLabelId) {
+      skippedUsers.push({ itemId: row.id, name: row.name, reason: 'not_labeled' });
       continue;
     }
     userRecipients.push({ email, name: row.name, personId: personIds[0] });

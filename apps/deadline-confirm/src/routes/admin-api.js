@@ -33,7 +33,12 @@ import { generateSecret, maskSecret } from '../services/secret.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
 import { renderDigestPlain } from '../helpers/digest-plain.js';
 import { buildMultipartAlternative } from '../helpers/mime-alternative.js';
-import { buildDigest, digestTaskColumnIds, decorateRecipientSections } from '../services/digest-service.js';
+import {
+  buildDigest,
+  digestTaskColumnIds,
+  digestUsersColumnIds,
+  decorateRecipientSections,
+} from '../services/digest-service.js';
 import {
   DIGEST_FONTS,
   FONT_SIZE_MAX,
@@ -252,6 +257,28 @@ function validateConfig(body) {
     if (!isNonEmptyString(raw.usersEmailColumnId)) return { field: 'digest.usersEmailColumnId' };
     if (!isNonEmptyString(raw.subject, 120)) return { field: 'digest.subject' };
 
+    // --- recipient label gate (round348 §E, optional) ------------------------
+    // Column and label travel independently: EITHER absent means the gate is
+    // OFF and every users-board row qualifies, same as every digest before
+    // this feature (digest-service.js's buildDigest). A reversed default would
+    // silently mute mail for every existing tenant the moment they upgrade,
+    // with nobody having touched the setting.
+    let recipientGateColumnId = null;
+    if (raw.recipientGateColumnId !== undefined && raw.recipientGateColumnId !== null) {
+      if (!isNonEmptyString(raw.recipientGateColumnId)) {
+        return { field: 'digest.recipientGateColumnId' };
+      }
+      recipientGateColumnId = raw.recipientGateColumnId;
+    }
+    let recipientGateLabelId = null;
+    if (raw.recipientGateLabelId !== undefined && raw.recipientGateLabelId !== null) {
+      // 0 is a valid label id — Number.isInteger, never a truthy/falsy check.
+      if (!Number.isInteger(raw.recipientGateLabelId)) {
+        return { field: 'digest.recipientGateLabelId' };
+      }
+      recipientGateLabelId = raw.recipientGateLabelId;
+    }
+
     // --- the body (0.15.0): an ordered block list, or the legacy sections ----
     // `blocks` is the source of truth and `sections` is DERIVED from it, in
     // block order — that derivation is what makes the mail's order the cluster
@@ -319,6 +346,8 @@ function validateConfig(body) {
       usersBoardId: raw.usersBoardId,
       usersPeopleColumnId: raw.usersPeopleColumnId,
       usersEmailColumnId: raw.usersEmailColumnId,
+      recipientGateColumnId,
+      recipientGateLabelId,
       subject: raw.subject,
       sendHour,
       sections,
@@ -385,7 +414,10 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         api.getBoardItems({
           token,
           boardId: digest.usersBoardId,
-          columnIds: [digest.usersPeopleColumnId, digest.usersEmailColumnId],
+          // Also requests the recipient label gate's status column (round348
+          // §E) when configured — the preview must gate the same recipients
+          // the send path would.
+          columnIds: digestUsersColumnIds(digest),
         }),
       ]);
     } catch (err) {
