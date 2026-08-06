@@ -293,6 +293,11 @@ Legacy `text`/`value` are null on relation-family columns. Read typed fragments:
 - Rename board: `update_board(board_id, board_attribute: name, new_value)`.
 - Create board: `create_board(board_name, board_kind: public, workspace_id, empty: true)`.
 - Some system columns (subitems link, parent link) are non-deletable — rename, don't delete.
+- **`update_group` color takes a NAMED palette color, not hex.** (Verified live 2026-08-06,
+  round363 sandbox.) `new_value: "#ff642e"` fails with `"Input color is not in colors options"`;
+  `new_value: "dark-orange"` works and reads back as `#FF642E`. Names seen live:
+  `orange`=#fdab3d, `dark-orange`=#ff642e. Title via the same mutation
+  (`group_attribute: title`); `update_group` returns type `Group` — select subfields.
 - Verify a user id before assigning: `users(kind: all) { id name email }`.
 
 ## Board views — typed API, `settings_str` is a red herring

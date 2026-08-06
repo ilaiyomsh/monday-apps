@@ -1106,6 +1106,13 @@ export const COLUMN_SCHEMA = {
     topicsLinkID: { type: 'board_relation', title: 'link to נושאים לדיון1' },
     // ---- read-only display field ----
     phaseID: { type: 'text', title: 'שלב' },
+    // round363 — the two 0/1 flag formulas the DISCUSSIONS board's mirrors
+    // ("סך משימות בעיכוב"/"שבוצעו") sum over. Provisioned by applyBoardBlueprint;
+    // the app never reads them directly, they exist as mirror sources — which is
+    // why they are mapped here (so top-up reuses them) but deliberately NOT
+    // listed in TASKS_SETTINGS_FIELDS (nothing for the owner to remap).
+    taskDelayedFlagID: { type: 'formula', title: 'האם המשימה בעיכוב' },
+    taskDoneFlagID: { type: 'formula', title: 'האם המשימה בוצעה' },
   },
 
   topics: {
