@@ -32,14 +32,15 @@ describe('round364 — isCustomAlias', () => {
 });
 
 describe('round364 — canAddCustomColumn (owner spec: 2 boards × 6 type groups)', () => {
-  it('allows exactly discussions+tasks, and exactly the six owner-spec type groups', () => {
+  it('allows exactly discussions+tasks, and exactly the owner-spec type groups', () => {
     expect(CUSTOM_COLUMN_BOARDS).toEqual(['discussions', 'tasks']);
     for (const board of ['discussions', 'tasks']) {
-      for (const group of ['people', 'dropdown', 'relation', 'date', 'text', 'file']) {
+      // round372 — the owner added `status` to the original six.
+      for (const group of ['people', 'status', 'dropdown', 'relation', 'date', 'text', 'file']) {
         expect(canAddCustomColumn(board, group), `${board}/${group}`).toBe(true);
       }
-      // statuses, checkboxes and computed fields are deliberately excluded
-      for (const group of ['status', 'checkbox', 'formula', 'other', 'board']) {
+      // checkboxes and computed fields stay deliberately excluded
+      for (const group of ['checkbox', 'formula', 'other', 'board']) {
         expect(canAddCustomColumn(board, group), `${board}/${group}`).toBe(false);
       }
     }
@@ -94,7 +95,7 @@ describe('round364 — makeCustomColumn', () => {
   });
 
   it('returns null for a group that is not customizable', () => {
-    expect(makeCustomColumn('status')).toBe(null);
+    expect(makeCustomColumn('checkbox')).toBe(null);
     expect(makeCustomColumn('formula')).toBe(null);
     expect(makeCustomColumn('nope')).toBe(null);
     expect(makeCustomColumn(undefined)).toBe(null);
@@ -103,6 +104,7 @@ describe('round364 — makeCustomColumn', () => {
   it('every customizable group maps to a type the schema uses', () => {
     expect(CUSTOM_COLUMN_TYPE_GROUPS).toEqual({
       people: 'people',
+      status: 'status',
       dropdown: 'dropdown',
       relation: 'board_relation',
       date: 'date',

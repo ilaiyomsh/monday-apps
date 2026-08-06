@@ -16,6 +16,7 @@ import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx'
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
 import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
 import { customEntriesFor, customColumnIcon } from '@generated/utils/customColumns.js';
+import { CustomStatusCollector, statusFilterOptions } from '@generated/components/CustomStatusCollector';
 import {
   filterTasks, filterCount, serializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
@@ -559,6 +560,21 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const clearSort = () => setSort({ col: null, dir: null, active: false });
 
   // round366 — value options per custom dim, scanned off the loaded tasks.
+  /*
+   * round372 — a custom STATUS column's values are stable label IDs, so its filter
+   * menu needs that column's own label map. One collector per status column (never
+   * per row) reports the maps up; statusFilterOptions turns the scanned ids into
+   * labelled, coloured, display-ordered options.
+   */
+  const customStatusCols = useMemo(
+    () => customTaskCols.filter((c) => c.type === 'status' || c.type === 'color').map((c) => c.alias),
+    [customTaskCols]
+  );
+  const [customStatusMaps, setCustomStatusMaps] = useState({});
+  const reportCustomStatus = useCallback((alias, opts) => {
+    setCustomStatusMaps((m) => (m[alias] === opts ? m : { ...m, [alias]: opts }));
+  }, []);
+
   const customFilterOptions = useMemo(() => {
     const map = {};
     for (const d of customDims) {
@@ -574,10 +590,12 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
           customComparableValues(raw).forEach((v) => { if (!seen.has(v)) seen.set(v, { id: v, label: v, color: null }); });
         }
       });
-      map[d.key] = [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
+      map[d.key] = customStatusCols.includes(d.key)
+        ? statusFilterOptions([...seen.keys()], customStatusMaps[d.key])
+        : [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
     }
     return map;
-  }, [customDims, tasks]);
+  }, [customDims, tasks, customStatusCols, customStatusMaps]);
 
   // Assignee options = the distinct people present across the loaded tasks.
   const personOptions = useMemo(() => {
@@ -1122,6 +1140,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         <div className={styles.board}>
         <div className={styles.groupScrollInner}>
         <div className={styles.groupStack}>
+                {/* round372 — one label-options loader per custom STATUS column, so the
+                    filter menu can show label text + colour instead of raw ids. */}
+                {customStatusCols.map((alias) => (
+                  <CustomStatusCollector key={alias} alias={alias} onOptions={reportCustomStatus} />
+                ))}
           {grouped.map((grp) => {
             const groupColor = grp.color;
             const groupSelectedCount = grp.items.reduce((count, task) => count + (selectedIds.has(task.id) ? 1 : 0), 0);

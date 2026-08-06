@@ -19,6 +19,7 @@ import {
   customFilterDims, customComparableValues,
 } from '@generated/components/MyTasksView/controls/controls.js';
 import { customEntriesFor, customColumnIcon } from '@generated/utils/customColumns.js';
+import { CustomStatusCollector, statusFilterOptions } from '@generated/components/CustomStatusCollector';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
@@ -205,6 +206,21 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
 
   // round366 — value options per custom dim, scanned off the loaded tasks
   // (people by id+name; dropdown/relation by comparable value text).
+  /*
+   * round372 — a custom STATUS column's values are stable label IDs, so its filter
+   * menu needs that column's own label map. One collector per status column (never
+   * per row) reports the maps up; statusFilterOptions turns the scanned ids into
+   * labelled, coloured, display-ordered options.
+   */
+  const customStatusCols = useMemo(
+    () => customTaskCols.filter((c) => c.type === 'status' || c.type === 'color').map((c) => c.alias),
+    [customTaskCols]
+  );
+  const [customStatusMaps, setCustomStatusMaps] = useState({});
+  const reportCustomStatus = useCallback((alias, opts) => {
+    setCustomStatusMaps((m) => (m[alias] === opts ? m : { ...m, [alias]: opts }));
+  }, []);
+
   const customFilterOptions = useMemo(() => {
     const map = {};
     for (const d of customDims) {
@@ -220,10 +236,12 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
           customComparableValues(raw).forEach((v) => { if (!seen.has(v)) seen.set(v, { id: v, label: v, color: null }); });
         }
       });
-      map[d.key] = [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
+      map[d.key] = customStatusCols.includes(d.key)
+        ? statusFilterOptions([...seen.keys()], customStatusMaps[d.key])
+        : [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
     }
     return map;
-  }, [customDims, items]);
+  }, [customDims, items, customStatusCols, customStatusMaps]);
 
   // Client pipeline: filter -> sort (both instant, over the loaded page). An
   // inactive sort returns the list unchanged, so default order is untouched.
@@ -580,6 +598,11 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
       <div className={styles.board}>
       <div className={styles.groupScrollInner}>
       <div className={styles.groupStack}>
+          {/* round372 — one label-options loader per custom STATUS column, so the
+              filter menu can show label text + colour instead of raw ids. */}
+          {customStatusCols.map((alias) => (
+            <CustomStatusCollector key={alias} alias={alias} onOptions={reportCustomStatus} />
+          ))}
         {grouped.length === 0 ? (
           <TaskTable tasks={[]}
             onInlineCreate={canCreateTask && onInlineCreateTask ? (name, opts) => onInlineCreateTask(name, opts) : undefined}

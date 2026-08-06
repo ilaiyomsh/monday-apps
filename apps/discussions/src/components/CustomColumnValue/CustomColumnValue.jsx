@@ -13,9 +13,18 @@ import styles from './CustomColumnValue.module.css';
  *   people   → [{ id, name }]            date  → Date|null (hasTime flag)
  *   dropdown → label text|null           text/long_text → string|null
  *   file     → string of URLs|null       board_relation → { linkedItems, ids, text }
+ *   status   → stable label ID (number)  ← round372
  * Anything empty renders the muted em-dash, so a mapped-but-blank cell reads
  * as intentionally empty rather than broken.
+ *
+ * round372 — a STATUS value is the label's stable ID, not its text, so this
+ * renderer cannot resolve it alone: the caller passes `statusOpts`
+ * ({ labelById, colorById }) from useStatusOptions for that column's alias. With
+ * no map available the cell shows the em-dash rather than the raw id — a bare
+ * "2" in a cell is worse than an honest blank.
  */
+
+const NEUTRAL = 'hsl(var(--status-default))';
 
 const Empty = () => <span className={styles.muted}>—</span>;
 
@@ -50,8 +59,25 @@ function fileLinks(text) {
   });
 }
 
-export function CustomColumnValue({ type, value }) {
+export function CustomColumnValue({ type, value, statusOpts }) {
   switch (type) {
+    // round372 — 'color' is monday's legacy name for the same column type.
+    case 'status':
+    case 'color': {
+      // A label id of 0 is REAL, so test the type, never truthiness.
+      if (typeof value !== 'number') return <Empty />;
+      const label = statusOpts?.labelById?.[value];
+      if (!label) return <Empty />;
+      return (
+        <span
+          className={styles.statusFill}
+          style={{ background: statusOpts?.colorById?.[value] || NEUTRAL }}
+          title={label}
+        >
+          {label}
+        </span>
+      );
+    }
     case 'people':
     case 'person':
     case 'multiple_person': {

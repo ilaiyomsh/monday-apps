@@ -17,15 +17,24 @@
 export const CUSTOM_COLUMN_BOARDS = ['discussions', 'tasks'];
 
 /*
- * The type groups an owner may add custom columns under (owner spec: people,
- * dropdowns, board links, dates, text, files — NOT statuses/checkboxes/
- * computed). Keys match the mapping screen's COLUMN_TYPE_GROUPS keys; the
- * value is the canonical monday column TYPE stored on a new custom entry
- * (the Settings picker's type-compatibility check expands it to the group's
- * sibling types, e.g. text ⇄ long_text).
+ * The type groups an owner may add custom columns under. Keys match the mapping
+ * screen's COLUMN_TYPE_GROUPS keys; the value is the canonical monday column TYPE
+ * stored on a new custom entry (the Settings picker's type-compatibility check
+ * expands it to the group's sibling types, e.g. text ⇄ long_text, status ⇄ color).
+ *
+ * round372 (owner spec, reversing round364's "NOT statuses") — `status` joined the
+ * set, which fixes two reported symptoms at once: the סטטוסים group had no
+ * "+ הוספת עמודה מהלוח" button, AND on the DISCUSSIONS board the group did not
+ * render at all. The second one follows from the first: the mapping sidebar keeps a
+ * folder only when it has schema entries OR custom columns may be added there, and
+ * the discussions schema has zero status-type columns ("סוג דיון" is a dropdown).
+ *
+ * Still OUT, on purpose: `checkbox` (owner deferred it) and `formula`/`mirror`
+ * (computed — monday exposes no write path, so offering one would be a trap).
  */
 export const CUSTOM_COLUMN_TYPE_GROUPS = {
   people: 'people',
+  status: 'status',
   dropdown: 'dropdown',
   relation: 'board_relation',
   date: 'date',

@@ -51,15 +51,70 @@ function formatCreatedAt(nativeCreatedAt) {
  * (owner request); `file` is the only one still read-only, since uploading an
  * asset is not a table-cell interaction.
  */
-function CustomColumnCell({ col, value, onChange, dropdownOpts, relationOpts }) {
+function CustomColumnCell({ col, value, onChange, dropdownOpts, relationOpts, statusOpts }) {
   const [ddOpen, setDdOpen] = useState(false);
   const [relOpen, setRelOpen] = useState(false);
   const [relSearch, setRelSearch] = useState('');
+  const [stOpen, setStOpen] = useState(false);
   const t = col.type;
   const isRelation = t === 'board_relation' || t === 'connect_boards';
+  const isStatus = t === 'status' || t === 'color';
   // file has no inline editor (asset upload is not a table-cell interaction).
   if (!onChange || t === 'file') {
-    return <CustomColumnValue type={t} value={value} />;
+    return <CustomColumnValue type={t} value={value} statusOpts={statusOpts} />;
+  }
+  /*
+   * round372 — a custom STATUS column is editable with the same label menu the
+   * built-in status column uses. The written value is the stable label ID (0 is a
+   * real label, so every guard here tests the type, not truthiness), and picking
+   * the already-set label CLEARS it — the only way to empty a status from a table
+   * cell, matching the built-in column's behaviour.
+   */
+  if (isStatus) {
+    const options = statusOpts?.options || [];
+    const current = typeof value === 'number' ? value : null;
+    const label = current == null ? null : statusOpts?.labelById?.[current];
+    const fill = current == null ? null : (statusOpts?.colorById?.[current] || NEUTRAL);
+    return (
+      <Dialog
+        open={stOpen}
+        showTrigger={['click']}
+        hideTrigger={['clickoutside', 'esc', 'onContentClick']}
+        onDialogDidShow={() => setStOpen(true)}
+        onDialogDidHide={() => setStOpen(false)}
+        position="bottom"
+        zIndex={10000}
+        content={() => (
+          <DialogContentContainer>
+            <div className={styles.statusMenu}>
+              {options.length === 0 && <div className={styles.relEmpty}>אין תוויות בעמודה זו</div>}
+              {options.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={styles.statusOption}
+                  style={{ background: opt.color || NEUTRAL }}
+                  onClick={() => {
+                    onChange(opt.id === current ? null : opt.id);
+                    setStOpen(false);
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </DialogContentContainer>
+        )}
+      >
+        <button type="button" className={styles.statusTrigger} aria-label={`עריכת ${col.title || col.alias}`}>
+          {label ? (
+            <span className={styles.statusFill} style={{ background: fill }}>{label}</span>
+          ) : (
+            <span className={styles.statusEmpty}>{statusOpts?.emptyLabel || 'בחר סטאטוס'}</span>
+          )}
+        </button>
+      </Dialog>
+    );
   }
   /*
    * round368 §4 (owner request) — a CONNECTED BOARD custom column is editable:
@@ -262,6 +317,8 @@ export const TaskTableRow = memo(function TaskTableRow({
   customDropdownOptions,
   // round368 — candidate items per custom RELATION alias (hoisted in TaskTable).
   customRelationOptions,
+  // round372 — label options/maps per custom STATUS alias (hoisted in TaskTable).
+  customStatusOptions,
   rowStyle,
   // When provided (and the row is read-only, i.e. no inline rename), clicking the
   // task name opens its item card via this callback (Previous-tasks tab → Updates).
@@ -712,6 +769,7 @@ export const TaskTableRow = memo(function TaskTableRow({
           onChange={onCustomChange ? (value) => onCustomChange(task.id, c.alias, value) : null}
           dropdownOpts={customDropdownOptions?.[c.alias]}
           relationOpts={customRelationOptions?.[c.alias]}
+          statusOpts={customStatusOptions?.[c.alias]}
         />
       </div>
     );
