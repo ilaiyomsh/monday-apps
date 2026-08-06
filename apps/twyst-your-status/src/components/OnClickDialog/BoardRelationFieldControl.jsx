@@ -13,7 +13,7 @@
  * accepts exactly what monday's cell would. Writing two ids to a single-link column is
  * a ColumnValueException, which is why the registry's default is single.
  */
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Search as SearchIcon } from '@vibe/icons';
 import {
   relationAllowsMultiple,

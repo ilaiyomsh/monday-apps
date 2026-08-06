@@ -1,0 +1,21 @@
+{
+  // knip config for the twyst-your-status GUARD SERVER workspace ONLY (monday-code).
+  //
+  // Scanned separately from the SPA (`--directory apps/twyst-your-status/server`) so the
+  // cleanup scan stays inside this one app. `.jsonc` because knip rejects unknown keys
+  // in its config — see the note in ../knip.jsonc.
+  //
+  // Entry points knip already infers (src/index.js from package.json, build.mjs from the
+  // build script) are NOT repeated — it reports redundant patterns as configuration hints.
+  // What is listed is what nothing in this workspace imports:
+  //   tests/**  — the vitest suite
+  //   helpers/axiomServerSink.js — a VENDORED copy of @mapps/error-kit that
+  //     packages/error-kit/test/drift.test.ts imports directly. It has no importer inside
+  //     this workspace by design, so it is an entry point here, not dead code. The cleanup
+  //     guard also refuses to edit it (drift-locked).
+  "entry": [
+    "src/helpers/axiomServerSink.js",
+    "tests/**/*.test.js"
+  ],
+  "project": ["src/**/*.js"]
+}

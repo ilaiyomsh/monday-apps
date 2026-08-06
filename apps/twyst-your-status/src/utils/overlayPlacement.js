@@ -9,6 +9,18 @@ function clamp(value, min, max) {
 }
 
 /**
+ * Horizontal clamp for a fixed-position overlay anchored under its trigger:
+ * never closer than VIEWPORT_PADDING to either edge, and never pushed past the
+ * left edge when the popup is wider than the viewport.
+ */
+export function clampOverlayLeft(anchorLeft, popupWidth, viewportWidth) {
+  return Math.min(
+    Math.max(VIEWPORT_PADDING, anchorLeft),
+    Math.max(VIEWPORT_PADDING, viewportWidth - popupWidth - VIEWPORT_PADDING),
+  );
+}
+
+/**
  * Returns a popover position that stays inside viewport bounds.
  * - Flips vertically when there is not enough space below/above.
  * - Clamps horizontal/vertical coordinates to prevent clipping.

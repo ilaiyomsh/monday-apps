@@ -1,4 +1,3 @@
-import React from 'react';
 
 /*
  * A CSS spinner rather than Vibe's <Loader>, for the same reason as ErrorState:
@@ -15,7 +14,7 @@ import React from 'react';
 
 function LoadingState({ message = 'Loading...' }) {
   return (
-    <div className="twyst-loading-state flex flex-col items-center justify-center py-12">
+    <div className="twyst-loading-state twyst-center-column">
       <svg viewBox="0 0 50 50" role="alert" aria-label={message}>
         <circle cx="25" cy="25" r="20" fill="none" strokeWidth="5" />
       </svg>

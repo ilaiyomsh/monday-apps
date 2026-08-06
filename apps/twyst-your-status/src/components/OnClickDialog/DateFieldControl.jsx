@@ -8,7 +8,7 @@
  *
  * Calendar math lives in domain/monthGrid.js — this file only renders it.
  */
-import React, { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Calendar, Time } from '@vibe/icons';
 import { buildMonthGrid, isoToday, shiftMonth } from '../../domain/monthGrid';
 import { Popover } from '../shared/Popover';

@@ -18,28 +18,9 @@
 import { actorMatchesPeopleAssignments } from './peopleColumnGate.js';
 import { getLabelRule, isOpenAllowlist, migrateSettings } from './settingsSchema.js';
 import { RESERVED_EMPTY_LABEL_ID } from './statusColors.js';
+import { currentLabelIdFromValue } from './statusPolicy.js';
 
-function normalizeNonNegativeInteger(value) {
-  if (typeof value === 'number') {
-    return Number.isInteger(value) && value >= 0 ? value : null;
-  }
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!/^\d+$/.test(trimmed)) return null;
-  return Number(trimmed);
-}
-
-export function currentLabelIdFromValue(currentValue) {
-  const directIndex = normalizeNonNegativeInteger(currentValue?.index);
-  if (directIndex !== null) return String(directIndex);
-
-  if (typeof currentValue?.value !== 'string') return null;
-  const serializedIndex = currentValue.value.match(/"index"\s*:\s*(\d+)/);
-  if (!serializedIndex) return null;
-
-  const fallbackIndex = normalizeNonNegativeInteger(serializedIndex[1]);
-  return fallbackIndex === null ? null : String(fallbackIndex);
-}
+export { currentLabelIdFromValue } from './statusPolicy.js';
 
 function passesAllowlist(rule, actor) {
   if (isOpenAllowlist(rule)) return true;

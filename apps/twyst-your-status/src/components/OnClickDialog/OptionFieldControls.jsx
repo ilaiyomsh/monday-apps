@@ -6,7 +6,7 @@
  * and made a status field look nothing like the fields above it. A column with a
  * dozen labels now costs the same single row as a text field.
  */
-import React, { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Dropdown as DropdownIcon } from '@vibe/icons';
 import { dropdownOptionsFrom } from '../../domain/columnFields';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';
@@ -16,14 +16,15 @@ import { Popover } from '../shared/Popover';
  * How tall the option menu ASKS to be.
  *
  * It has to be read against the window it opens in: the required-fields modal is an
- * iframe sized to fit its form to the pixel (requiredFormModalSize.js — 184px for one
- * field, 548px at the 8-field cap). A menu taller than that iframe cannot open beside
+ * iframe sized to fit its form to the pixel (requiredFormModalSize.js — 276px for one
+ * field, 588px at the 8-field cap). A menu taller than that iframe cannot open beside
  * its field at all: overlayPlacement clamps it to `viewport - 16`, flips it, and pins
  * it 8px from the top, so it covers the trigger and every row. That is exactly what
  * "the list opens somewhere else" was — geometry, not a placement bug.
  *
- * 220 leaves room for the bar plus the menu in every modal from two fields up, and
- * still shows ~6 options before scrolling.
+ * 220 leaves room for the bar plus the menu in every modal from one field up (one field
+ * is floored to two rows by FORM_MIN_ROWS = 2, so a one-field modal is 276px — the same
+ * height as a two-field one), and still shows ~6 options before scrolling.
  */
 const OPTION_POPOVER_HEIGHT_PX = 220;
 

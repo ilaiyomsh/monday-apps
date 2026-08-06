@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AttentionBox, Button } from '@vibe/core';
 import { loadIsBoardOwner } from '../../services/boardOwnerGate';
 import mondayService from '../../services/mondayService';
