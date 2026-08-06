@@ -19,6 +19,7 @@ import {
   DEFAULT_PARTICIPANT_SEPARATOR,
 } from '../../utils/mondayApi/boards.config.js';
 import { resolveParticipantParts, resolvePeopleFormat, partCustomFieldId, resolveRecordMarker } from '../../utils/participantFormat.js';
+import { resolveExportTitle, TITLE_FIELD_OPTIONS, TITLE_SEPARATORS, TITLE_NONE_FIELD } from '../../utils/exportTitle.js';
 import logger from '../../utils/logger.js';
 import { fetchUserCustomFieldMetas } from '../../utils/mondayApi/userProfiles.js';
 import { computeFloatingPosition } from '../../utils/overlayPlacement.js';
@@ -334,6 +335,8 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
   const headerMode = template?.headerMode || EXPORT_HEADER_MODES.CONFIG;
   const isConfig = headerMode !== EXPORT_HEADER_MODES.UPLOAD;
   const [expandedKey, setExpandedKey] = React.useState(null);
+  // round366 — the title card opens on demand, closed by default (owner request).
+  const [titleOpen, setTitleOpen] = React.useState(false);
   // Immediate over-quota alert on upload (replaces the old usage bar). The total
   // assets bundle (logos + uploaded .docx) must stay under the 6MB storage quota.
   const [sizeAlert, setSizeAlert] = useState(null);
@@ -601,6 +604,115 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
 
   const fontKey = template?.font || DEFAULT_EXPORT_FONT;
 
+  /*
+   * round365 (owner spec, approved mockup) — the document TITLE card: a fixed
+   * free text + a discussion field + an optional second field, orderable (⇄
+   * swaps adjacent parts), positional separators, alignment (center default).
+   * Lives on template.title so it rides the same cascade as every field —
+   * system template → type snapshot → per-export ephemeral edit (this same
+   * component rendered inside the export dialog).
+   */
+  const titleCfg = resolveExportTitle(template?.title);
+  const patchTitle = (patch) => setTemplate((prev) => ({ ...prev, title: { ...resolveExportTitle(prev?.title), ...patch } }));
+  const swapTitleParts = (i) => setTemplate((prev) => {
+    const cfg = resolveExportTitle(prev?.title);
+    const order = [...cfg.order];
+    [order[i], order[i + 1]] = [order[i + 1], order[i]];
+    return { ...prev, title: { ...cfg, order } };
+  });
+
+  const renderTitlePartEditor = (partKey) => {
+    if (partKey === 'free') {
+      return (
+        <TextField
+          value={titleCfg.free || ''}
+          onChange={(v) => patchTitle({ free: v })}
+          placeholder="מלל חופשי קבוע"
+          size="small"
+          ariaLabel="מלל חופשי קבוע בכותרת"
+        />
+      );
+    }
+    const isThird = partKey === 'field3';
+    return (
+      <select
+        className={styles.partSep}
+        value={titleCfg[partKey]}
+        onChange={(e) => patchTitle({ [partKey]: e.target.value })}
+        aria-label={isThird ? 'פריט מידע שלישי בכותרת (רשות)' : 'פריט מידע בכותרת'}
+      >
+        {isThird && <option value={TITLE_NONE_FIELD}>ללא</option>}
+        {TITLE_FIELD_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    );
+  };
+
+  /*
+   * round366 (owner request) — the card is COLLAPSIBLE like the section rows:
+   * closed by default, the header row toggles it. The chevron mirrors the
+   * sections' open/closed affordance.
+   */
+  const renderTitleCard = () => (
+    <div className={styles.band}>
+      <button
+        type="button"
+        className={styles.titleCardToggle}
+        onClick={() => setTitleOpen((o) => !o)}
+        aria-expanded={titleOpen}
+      >
+        <Text type="text2" weight="medium" className={styles.bandLabel}>כותרת המסמך</Text>
+        <ChevronDown size={15} className={`${styles.titleCardChevron} ${titleOpen ? styles.titleCardChevronOpen : ''}`} aria-hidden="true" />
+      </button>
+      {titleOpen && titleCfg.order.map((partKey, i) => (
+        <React.Fragment key={partKey}>
+          {i > 0 && (
+            <div className={styles.ctrlRow}>
+              <Text type="text3" color="secondary">מפריד</Text>
+              <select
+                className={styles.partSep}
+                value={i === 1 ? titleCfg.sep12 : titleCfg.sep23}
+                onChange={(e) => patchTitle(i === 1 ? { sep12: e.target.value } : { sep23: e.target.value })}
+                aria-label={`מפריד לפני חלק ${i + 1}`}
+              >
+                {TITLE_SEPARATORS.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className={styles.ctrlRow}>
+            {renderTitlePartEditor(partKey)}
+            {i < titleCfg.order.length - 1 && (
+              <button
+                type="button"
+                className={styles.iconBtn}
+                onClick={() => swapTitleParts(i)}
+                aria-label={`החלף מקום עם החלק הבא`}
+                title="החלפת מקום עם החלק הבא"
+              >
+                ⇅
+              </button>
+            )}
+          </div>
+        </React.Fragment>
+      ))}
+      {titleOpen && (
+        <div className={styles.ctrlRow}>
+          <Text type="text3" color="secondary">יישור</Text>
+          <ButtonGroup
+            options={ALIGN_OPTIONS}
+            value={titleCfg.align}
+            onSelect={(v) => patchTitle({ align: v })}
+            size="small"
+            kind="secondary"
+          />
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className={styles.layout}>
       <div className={styles.controls}>
@@ -625,6 +737,8 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
           </div>
         </div>
       </div>
+
+      {renderTitleCard()}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={sections.map((s) => s.key)} strategy={verticalListSortingStrategy}>

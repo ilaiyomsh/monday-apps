@@ -8,6 +8,8 @@ import { PersonList } from '@generated/components/PersonAvatar';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
+import { CustomColumnValue } from '@generated/components/CustomColumnValue';
+import { NotesEditor } from '@generated/components/NotesEditor';
 import grid from '../TaskTable/TaskTable.module.css';
 import styles from './TaskTableRow.module.css';
 
@@ -41,6 +43,103 @@ function formatCreatedAt(nativeCreatedAt) {
 // handlers stabilized (useStableHandler) and the status/priority option maps
 // hoisted to TaskTable, a selection toggle / search keystroke / single-row
 // edit no longer re-renders every other row in the table.
+/*
+ * round366 — a custom column's cell: typed EDITOR when onChange is provided
+ * (permission-gated upstream in TaskTable), read-only CustomColumnValue
+ * otherwise. file/board_relation have no inline editor (asset upload / item
+ * linking are not writable from a table cell) and stay read-only by design.
+ */
+function CustomColumnCell({ col, value, onChange, dropdownOpts }) {
+  const [ddOpen, setDdOpen] = useState(false);
+  const t = col.type;
+  if (!onChange || t === 'file' || t === 'board_relation' || t === 'connect_boards') {
+    return <CustomColumnValue type={t} value={value} />;
+  }
+  if (t === 'people' || t === 'person' || t === 'multiple_person') {
+    return (
+      <div className={styles.assigneeCell}>
+        <PersonPicker
+          selected={Array.isArray(value) ? value : []}
+          onChange={(p) => onChange(p)}
+          boardKey="tasks"
+          accountWide
+        />
+      </div>
+    );
+  }
+  if (t === 'date') {
+    const d = value instanceof Date ? value : null;
+    return (
+      <div className={styles.customDateWrap}>
+        <DatePickerPopover value={d} onChange={(nd) => onChange(nd)} />
+        {d && (
+          <button
+            type="button"
+            className={styles.customClearX}
+            aria-label={`נקה ${col.title}`}
+            onClick={(e) => { e.stopPropagation(); onChange(null); }}
+          >
+            <CloseSmall size={14} />
+          </button>
+        )}
+      </div>
+    );
+  }
+  if (t === 'dropdown') {
+    const options = dropdownOpts?.options || [];
+    const label = value ? String(value) : '';
+    return (
+      <Dialog
+        open={ddOpen}
+        showTrigger={['click']}
+        hideTrigger={['clickoutside', 'esc', 'onContentClick']}
+        onDialogDidShow={() => setDdOpen(true)}
+        onDialogDidHide={() => setDdOpen(false)}
+        position="bottom"
+        zIndex={10000}
+        content={() => (
+          <DialogContentContainer>
+            <div className={styles.customDdMenu}>
+              {options.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={styles.customDdOption}
+                  onClick={() => { onChange(opt.label); setDdOpen(false); }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              {label && (
+                <button
+                  type="button"
+                  className={`${styles.customDdOption} ${styles.customDdClear}`}
+                  onClick={() => { onChange(null); setDdOpen(false); }}
+                >
+                  נקה ערך
+                </button>
+              )}
+            </div>
+          </DialogContentContainer>
+        )}
+      >
+        <button type="button" className={styles.customDdTrigger} aria-label={`בחירת ${col.title}`}>
+          {label || <span className={styles.muted}>בחר</span>}
+        </button>
+      </Dialog>
+    );
+  }
+  // text / long_text — the notes-style inline editor (one line + popover).
+  return (
+    <NotesEditor
+      value={value == null ? '' : String(value)}
+      placeholder="—"
+      ariaLabel={col.title}
+      onCommit={(next) => onChange(next)}
+    />
+  );
+}
+
 export const TaskTableRow = memo(function TaskTableRow({
   task,
   // Status/priority option state, hoisted to TaskTable (ONE hook pair per
@@ -70,6 +169,14 @@ export const TaskTableRow = memo(function TaskTableRow({
   // Ordered column keys (incl. 'sel'/'name') + the grid template, both supplied
   // by TaskTable so header and body honor the same drag-reorder order.
   columns,
+  // round364 — owner-added custom mappings [{ alias, type, title }] rendered as
+  // trailing cells (supplied by TaskTable off the published settings).
+  customColumns,
+  // round366 — inline edit of a custom column: (taskId, alias, value); absent
+  // (not provided / permission-denied per row) ⇒ read-only cells.
+  onCustomChange,
+  // Board label options per custom DROPDOWN alias (hoisted in TaskTable).
+  customDropdownOptions,
   rowStyle,
   // When provided (and the row is read-only, i.e. no inline rename), clicking the
   // task name opens its item card via this callback (Previous-tasks tab → Updates).
@@ -506,6 +613,23 @@ export const TaskTableRow = memo(function TaskTableRow({
       </div>
     ) : null,
   };
+
+  // round364 — owner-added custom columns; the alias doubles as the column
+  // key, so the dispatch below picks these up exactly like the fixed cells.
+  // round366 — when onCustomChange is present (permission-gated upstream) the
+  // editable types render a typed editor; file/board_relation stay read-only.
+  for (const c of customColumns || []) {
+    cellByKey[c.alias] = (
+      <div key={c.alias} className={`${grid.taskCell} ${styles.customCell}`} title={c.title}>
+        <CustomColumnCell
+          col={c}
+          value={task?.[c.alias]}
+          onChange={onCustomChange ? (value) => onCustomChange(task.id, c.alias, value) : null}
+          dropdownOpts={customDropdownOptions?.[c.alias]}
+        />
+      </div>
+    );
+  }
 
   const orderedKeys = columns || [
     ...(selectable ? ['sel'] : []),

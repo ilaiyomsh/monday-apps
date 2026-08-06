@@ -365,3 +365,30 @@
   opacity: 0.35;
   cursor: default;
 }
+
+/* round366 — the "כותרת המסמך" card header is a full-width toggle (closed by
+   default); the chevron mirrors the section rows' open state. */
+.titleCardToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+.titleCardChevron {
+  flex-shrink: 0;
+  color: var(--secondary-text-color, #676879);
+  transition: transform 0.15s ease;
+}
+.titleCardChevronOpen {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .titleCardChevron { transition: none; }
+}

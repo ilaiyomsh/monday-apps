@@ -1,0 +1,53 @@
+/* round364 — read-only custom-column values (details row + task tables). */
+.muted {
+  color: var(--secondary-text-color, #9497a8);
+}
+.text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--primary-text-color, #323338);
+}
+.chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+}
+.linkChip {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 12px;
+  background: var(--allgrey-background-color, #f6f7fb);
+  color: var(--primary-text-color, #323338);
+  font-size: 12px;
+  cursor: pointer;
+}
+.linkChip:hover {
+  border-color: var(--primary-color, #0073ea);
+  color: var(--primary-color, #0073ea);
+}
+.more {
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+}
+.fileLink {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--primary-color, #0073ea);
+  text-decoration: none;
+}
+.fileLink:hover {
+  text-decoration: underline;
+}

@@ -12,7 +12,9 @@ describe('ExportPreview (static sketch, jsdom)', () => {
   it('renders the sketch: label, centered doc title, and the real docx table headers', () => {
     render(<ExportPreview template={DEFAULT_EXPORT_TEMPLATE} assets={null} />);
     expect(screen.getByText('תצוגה מקדימה')).toBeInTheDocument();
-    expect(screen.getByText(/סיכום דיון:/)).toBeInTheDocument();
+    // round365 — the title is COMPOSED from template.title (default: free text,
+    // dash, name, space, date), no longer the hardcoded colon form.
+    expect(screen.getByText(/סיכום דיון - /)).toBeInTheDocument();
     // tasks table headers (round191 shape — no "מדיון קודם")
     expect(screen.getByText('משימה')).toBeInTheDocument();
     expect(screen.getByText('אחראי')).toBeInTheDocument();

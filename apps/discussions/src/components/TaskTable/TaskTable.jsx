@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { Checkbox } from '@vibe/core';
 import { Plus } from 'lucide-react';
 import {
@@ -12,12 +12,25 @@ import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
 import { useRowOrder } from '@generated/hooks/useRowOrder.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
+import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
 import { getColumns } from '@api/board-config-store.js';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
 import { TASKS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { useColumnRenameMenu } from '@generated/components/ColumnRenameMenu';
+import { customEntriesFor } from '@generated/utils/customColumns.js';
 import styles from './TaskTable.module.css';
+
+/*
+ * round366 — one options loader per custom DROPDOWN column (rules-of-hooks
+ * forbid a variable-length hook loop in the table body; per-row hooks are the
+ * round136 anti-pattern). Renders nothing; reports the board's label options up.
+ */
+function DropdownOptionsCollector({ alias, onOptions }) {
+  const opts = useDropdownOptions('tasks', alias);
+  useEffect(() => { onOptions(alias, opts); }, [alias, opts, onOptions]);
+  return null;
+}
 
 // Header titles per column key (name has none — it's the frozen first column).
 const TITLE = { name: '', assignee: 'אחראי', partners: 'שותפים', deadline: 'דד ליין', status: 'סטאטוס', priority: 'עדיפות', source: 'דיון מקור' };
@@ -36,6 +49,9 @@ export function TaskTable({
   // round306 — שותפים (partnersID) inline edit, gated per row by editTaskPartners.
   onPartnersChange,
   onDeadlineChange,
+  // round366 — inline edit of an owner-added custom column: (taskId, alias,
+  // value). Gated per row by editTaskCustomColumns; absent ⇒ read-only cells.
+  onCustomChange,
   onOpenNewTask,
   // Inline add (native monday "add item"): when provided, the footer add-row
   // becomes an inline text input — click reveals it, name + Enter creates the
@@ -113,6 +129,20 @@ export function TaskTable({
    * fresh installs, not existing ones.
    */
   const showPartners = !!(getColumns('tasks') || {}).partnersID?.id;
+  /*
+   * round364 — owner-added custom mappings (customEntriesFor: `custom<N>ID`
+   * aliases on the tasks board) render as READ-ONLY trailing columns. The alias
+   * IS the column key, so order/width/rename prefs persist per custom column
+   * through the same 'tasks' stores every other key uses.
+   */
+  const customCols = useMemo(
+    () => customEntriesFor(getColumns('tasks'))
+      .filter(([, col]) => col?.id)
+      .map(([alias, col]) => ({ alias, type: col.type, title: col.title || alias })),
+    // getColumns reads the module-level published settings — same freshness
+    // contract as showPartners above (re-render on settings save remounts).
+    []
+  );
   const baseKeys = [
     ...(selectable ? ['sel'] : []),
     'name',
@@ -121,6 +151,7 @@ export function TaskTable({
     ...(showPriority ? ['priority'] : []),
     'deadline', 'status',
     ...(showSourceDiscussion ? ['source'] : []),
+    ...customCols.map((c) => c.alias),
   ];
   const pinned = selectable ? ['sel', 'name'] : ['name'];
   const { order, reorder } = useColumnOrder('tasks', baseKeys, pinned);
@@ -142,11 +173,28 @@ export function TaskTable({
   const statusOpts = useStatusOptions();
   const priorityOpts = useStatusOptions('tasks', 'priorityID');
 
+  /*
+   * round366 — dropdown CUSTOM columns need their board label options for the
+   * inline editor. Hooks can't run in a variable-length loop, so each dropdown
+   * column mounts ONE collector component (per COLUMN, not per row — the
+   * round136 perf rule) that reports its options up into this map.
+   */
+  const [customDropdownOptions, setCustomDropdownOptions] = useState({});
+  const reportDropdownOptions = useCallback((alias, opts) => {
+    setCustomDropdownOptions((m) => (m[alias] === opts ? m : { ...m, [alias]: opts }));
+  }, []);
+  const customDropdownCols = customCols.filter((c) => c.type === 'dropdown');
+
   // Width defs follow the live VISIBLE order; 'sel' is a fixed (non-resizable)
   // leading track, everything else resizes within the constants' clamps.
-  const defs = visibleOrder.map((k) => (k === 'sel' ? { key: 'sel', fixed: 36 } : { key: k, ...W[k] }));
+  // round364 — a custom key has no entry in the width constants; without a
+  // fallback the grid template gets a literal "undefinedpx" track and the whole
+  // table collapses. Mobile likewise needs a real track per key, or the
+  // template ends up SHORTER than the cell count and every row misaligns.
+  const CUSTOM_W = { default: 140, min: 90, max: 400 };
+  const defs = visibleOrder.map((k) => (k === 'sel' ? { key: 'sel', fixed: 36 } : { key: k, ...(W[k] || CUSTOM_W) }));
   const { gridTemplate, startResize } = useColumnWidths('tasks', defs);
-  const mobileTemplate = visibleOrder.map((k) => MOBILE_TRACK[k]).filter(Boolean).join(' ');
+  const mobileTemplate = visibleOrder.map((k) => MOBILE_TRACK[k] || '130px').join(' ');
   // round136 — memoized so the (memoized) rows' rowStyle prop is referentially
   // stable while the template string is unchanged.
   const rowStyle = useMemo(
@@ -170,8 +218,16 @@ export function TaskTable({
   const canResize = canReorder;
   // round140 — owner-only column display names: hover a header → "⋯" → rename
   // for all users (stored in the shared settings, like saved views).
+  // round364 — custom keys join the base title map (their live column title),
+  // which is what makes them renamable + labeled in the header/DnD overlay.
+  const titlesWithCustom = useMemo(
+    () => (customCols.length
+      ? { ...TITLE, ...Object.fromEntries(customCols.map((c) => [c.alias, c.title])) }
+      : TITLE),
+    [customCols]
+  );
   const { titles: colTitles, dots: renameDots, menu: renameMenu } =
-    useColumnRenameMenu('tasks', TITLE, { canManageSettings, dotsClassName: styles.renameDots });
+    useColumnRenameMenu('tasks', titlesWithCustom, { canManageSettings, dotsClassName: styles.renameDots });
   const movableIds = visibleOrder.filter((k) => k !== 'name' && k !== 'sel');
   // Non-first header cells need a positioning context for the absolute handle;
   // the frozen .taskFirst is already sticky (a containing block), so it doesn't.
@@ -213,6 +269,9 @@ export function TaskTable({
   return (
     <div className={styles.taskTableScroll}>
       {renameMenu}
+      {onCustomChange && customDropdownCols.map((c) => (
+        <DropdownOptionsCollector key={c.alias} alias={c.alias} onOptions={reportDropdownOptions} />
+      ))}
       <div className={tableClass} dir="ltr" style={color ? { '--group-color': color } : undefined}>
         {/* header */}
         <div className={`${styles.taskRow} ${styles.taskHead}`} style={rowStyle}>
@@ -229,6 +288,7 @@ export function TaskTable({
               task={task}
               statusOpts={statusOpts}
               priorityOpts={priorityOpts}
+              customColumns={customCols}
               columns={visibleOrder}
               rowStyle={rowStyle}
               onStatusChange={onStatusChange && canTask('editTaskStatus', task) ? onStatusChange : undefined}
@@ -236,6 +296,8 @@ export function TaskTable({
               onAssigneeChange={onAssigneeChange && canTask('editTaskAssignee', task) ? onAssigneeChange : undefined}
               onPartnersChange={onPartnersChange && canTask('editTaskPartners', task) ? onPartnersChange : undefined}
               onDeadlineChange={onDeadlineChange && canTask('editTaskDeadline', task) ? onDeadlineChange : undefined}
+              onCustomChange={onCustomChange && canTask('editTaskCustomColumns', task) ? onCustomChange : undefined}
+              customDropdownOptions={customDropdownOptions}
               onRenameTask={onRenameTask && canTask('editTaskName', task) ? onRenameTask : undefined}
               onDeleteTask={onDeleteTask}
               onRetryCreate={onRetryCreate}

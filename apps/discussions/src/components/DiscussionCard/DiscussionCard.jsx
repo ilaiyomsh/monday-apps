@@ -18,6 +18,8 @@ import { PersonPicker } from '@generated/components/PersonPicker';
 import { ExternalPeople } from '@generated/components/ExternalPeople';
 import { parseExternalParticipants, formatExternalParticipants } from '@generated/utils/externalParticipants.js';
 import { getColumns } from '@api/board-config-store.js';
+import { customEntriesFor } from '@generated/utils/customColumns.js';
+import { CustomColumnValue } from '@generated/components/CustomColumnValue';
 import {
   ensurePeopleColumns,
   getColumnTitle,
@@ -316,6 +318,15 @@ export function DiscussionCard({
   const canEditExternalParticipants = canEditTitle;
   // The feature exists only when the long_text column is mapped in Settings.
   const externalColumnMapped = Boolean(getColumns('discussions')?.externalParticipantsID?.id);
+  // round364 — owner-added custom discussion mappings (custom<N>ID), rendered as
+  // a read-only details strip above the tabs. Mapped entries only; the strip
+  // hides entirely when the owner added none.
+  const customDiscussionFields = useMemo(
+    () => customEntriesFor(getColumns('discussions'))
+      .filter(([, col]) => col?.id)
+      .map(([alias, col]) => ({ alias, type: col.type, title: col.title || alias })),
+    []
+  );
   const externalNames = externalColumnMapped
     ? parseExternalParticipants(data?.externalParticipantsID)
     : [];
@@ -939,6 +950,21 @@ export function DiscussionCard({
             )
           )}
         </div>
+        {/* round364 — owner-added custom discussion fields (extra mapped columns:
+            people/dropdown/relation/date/text/file), shown READ-ONLY as a
+            label:value strip between the title row and the tabs. Values come off
+            `data`, which useDiscussionDetails backs with itemById (fetches every
+            mapped column) — a custom field is empty until details land, then fills. */}
+        {customDiscussionFields.length > 0 && (
+          <div className={styles.customFieldsRow} dir="rtl">
+            {customDiscussionFields.map((f) => (
+              <div key={f.alias} className={styles.customField}>
+                <span className={styles.customFieldLabel}>{f.title}</span>
+                <CustomColumnValue type={f.type} value={data?.[f.alias]} />
+              </div>
+            ))}
+          </div>
+        )}
         <div className={styles.tabsRow} dir="ltr">
           <TabsContext activeTabId={activeIndex}>
             {/* round205 — the strip renders only the OWNER-VISIBLE components
