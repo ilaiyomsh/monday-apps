@@ -215,6 +215,28 @@ src/
   wraps the status column onto its own line, under the row. Nothing interactive
   may ever be styled inside the query (`tests/digest-amp-responsive.test.js`
   asserts it): a layout bug must not be able to hide a tap target.
+- **THE OPEN STATUS MENU HAS RESERVED ROOM AT THE FOOT OF THE CARD (0.16.2).**
+  `.dd-menu` is `position:absolute; top:100%` — out of flow, so the document's
+  load-time height excludes it and the dynamic-email frame is sized from that
+  height. The LAST row's menu therefore opened into space the frame did not have
+  and was cut off at the bottom edge (reported from a real inbox 2026-08-06).
+  amp4email cannot flip a menu "to where there is room": no JS, no viewport API,
+  no container query, nothing that can measure the space below a trigger. So the
+  renderer makes the room instead — `menuHeightFor()` in `digest-amp.js` emits a
+  generated `.dd-tail { height:… }` and one empty div as the **last child of
+  `.wrap`**, sized from the WIDEST cluster in the document (4 buttons → 184px).
+  Three things are load-bearing: the four pixel constants MIRROR the `.dd-menu`/
+  `.dd-opt` rules (change one, change both); the tail is INSIDE the card, so the
+  menu paints onto white and `.dd-overlay` (absolute, inset 0 of `.wrap`) still
+  covers it for tap-away; and the height is deliberately NOT netted against the
+  padding already below the last row — a number derived from five other numbers
+  goes stale silently, and over-reserving only ever costs whitespace. A document
+  with **no cluster** ships neither the element nor a rule (there is no base rule
+  for the class, and the stylesheet comment avoids naming it, because
+  `tests/digest-amp-menu-room.test.js` asserts a clusterless document mentions it
+  nowhere). Outer gutters were widened in the same change — `body` `22px 16px
+  32px`, `.wrap` `22px` — the bottom being widest because that edge is where an
+  open menu and the frame's end meet.
 - **Per-task required note (0.12.0):** a digest section MAY map
   `noteColumnId` + `noteColumnTitle` (a TEXT column on the TASKS board). When it
   does, every row of that cluster gets a text field **inside that row's form**

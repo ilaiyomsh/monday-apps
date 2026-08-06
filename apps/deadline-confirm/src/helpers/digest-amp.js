@@ -39,6 +39,45 @@ const NOTE_PLACEHOLDER = 'חובה למילוי';
 const SUBMITTING_LABEL = 'מעדכן…';
 const CHECK_GLYPH = '&#10003;';
 
+// --- room for an open status menu -------------------------------------------
+//
+// The menu is `position:absolute; top:100%`, so it is OUT OF FLOW: the document
+// height at load time excludes it, and the dynamic-email frame is sized from
+// that height. The last row's menu therefore opened into space the frame did not
+// have and was cut off at the bottom edge (reported from a real inbox,
+// 2026-08-06).
+//
+// amp4email cannot flip the menu upward "to where there is room": no JS, no
+// viewport API, no container query — nothing here can measure the space below a
+// trigger. The deterministic equivalent is to make the room exist: reserve the
+// tallest menu's height, in the flow, as the card's last child.
+//
+// These four numbers MIRROR the .dd-menu / .dd-opt rules below. They are not a
+// guess and they are not independent — change one there, change it here.
+const MENU_OFFSET = 4; // .dd-menu margin-top
+const MENU_PADDING = 8; // .dd-menu padding (both edges)
+const MENU_OPT_HEIGHT = 38; // .dd-opt height
+const MENU_OPT_GAP = 4; // .dd-opt margin-bottom (:last-child is 0)
+
+/**
+ * Height a menu of `count` options occupies below its trigger.
+ *
+ * Deliberately NOT netted against the padding that already sits below the last
+ * row (form padding + card padding + body padding): a number derived from five
+ * other numbers goes stale silently the day any of them moves, and the only
+ * failure mode of over-reserving is extra whitespace at the foot of the mail —
+ * which is the safety margin the owner asked for.
+ *
+ * @param {number} count
+ * @returns {number} pixels, 0 for an empty menu
+ */
+function menuHeightFor(count) {
+  if (!Number.isInteger(count) || count <= 0) return 0;
+  return (
+    MENU_OFFSET + MENU_PADDING * 2 + count * MENU_OPT_HEIGHT + (count - 1) * MENU_OPT_GAP
+  );
+}
+
 /**
  * A cluster requires a per-task note when it maps a text column.
  * @param {object} section
@@ -305,8 +344,17 @@ function noteRequiredItemIds(recipient) {
 //     so the card is plain block layout. It is also what stacks on a phone.
 // `npm run validate:amp` checks all of this against the official validator.
 const STYLES_BASE = `
-      body { margin:0; padding:14px 10px; background:#F5F6F8; font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif; color:#323338; }
-      .wrap { position:relative; max-width:720px; margin:0 auto; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; padding:18px; }
+      /* The gutters are wide on purpose (owner, 2026-08-06): a mail client that
+         trims the outer edge, or renders the card flush against the frame, eats
+         a margin before it eats content. The bottom gutter is the widest of the
+         three — that edge is where an open menu and the frame's end meet. */
+      body { margin:0; padding:22px 16px 32px; background:#F5F6F8; font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif; color:#323338; }
+      .wrap { position:relative; max-width:720px; margin:0 auto; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; padding:22px; }
+      /* The reserved-room element at the foot of the card (see menuHeightFor)
+         carries a GENERATED rule only, no base rule: a document with no cluster
+         then ships neither the element nor a rule for it. Its class name is
+         deliberately not written here — the sheet ships inside the document, and
+         the suite asserts that a clusterless document mentions it nowhere. */
       /* Operator-authored text block. Everything that varies per block (font,
          size, alignment, color, weight) lands in a generated .tb<n> rule; this
          carries only what every block shares. pre-wrap is what preserves the
@@ -817,6 +865,8 @@ export function renderDigestAmp({
 
   let clusterIndex = 0;
   let textIndex = 0;
+  /** Widest menu in the document — dictates the reserved tail, order-independent. */
+  let maxMenuOptions = 0;
   const bodyParts = [];
 
   for (const unit of units) {
@@ -834,6 +884,7 @@ export function renderDigestAmp({
     const section = unit.section;
     const buttons = resolveSectionButtons(section, recipient.statusColumnColors);
     if (buttons.length === 0) continue;
+    if (buttons.length > maxMenuOptions) maxMenuOptions = buttons.length;
     const accent = buttons[0].color || NEUTRAL_STATUS;
     const accentClass = accentToClass(accent);
     accentRules.set(
@@ -866,10 +917,16 @@ ${rows}
       </div>`);
   }
 
+  // No cluster rendered → no menu can open → nothing to reserve.
+  const tailHeight = menuHeightFor(maxMenuOptions);
+  const tailRule = tailHeight > 0 ? [`.dd-tail { height:${tailHeight}px; }`] : [];
+  const tailMarkup = tailHeight > 0 ? '\n      <div class="dd-tail"></div>' : '';
+
   const colorCss = buildColorClassCss(collectColors(rendered));
   const styles = `${STYLES_BASE}${notesInPlay ? STYLES_NOTES : ''}\n      ${colorCss}\n      ${[
     ...accentRules.values(),
     ...textRules,
+    ...tailRule,
   ].join('\n      ')}`;
 
   return `<!doctype html>
@@ -888,7 +945,7 @@ ${rows}
     <div class="wrap">
       <div class="dd-overlay" hidden [hidden]="dd.o == ''" role="button" tabindex="0"
            on="tap:AMP.setState({dd:{o:''}})"></div>
-${bodyParts.join('\n')}
+${bodyParts.join('\n')}${tailMarkup}
     </div>
   </body>
 </html>`;
