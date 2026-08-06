@@ -635,8 +635,23 @@
  *         around it. 10px is `.item`'s own flex `gap`, i.e. the same rhythm that
  *         already separates the name from the timestamp, rather than a new number.
  */
+/*
+ * round371 (owner bug report) — the third condition, and the one that was
+ * missing: while the row's ⋯ MENU IS OPEN. The menu (and its "למחוק את הדיון?"
+ * confirm) is portaled to document.body, so the moment the pointer travels off
+ * the row to reach מחק, `:hover` is false — and `:focus-within` never covered it
+ * either, because the focused element lives in the portal, OUTSIDE `.itemWrap`'s
+ * subtree. The padding collapsed, the timestamp slid back into the kebab's slot,
+ * and the ⋯ (still opacity:1 via `.kebabBtnOpen`) landed on top of "15:47".
+ *
+ * `:has(.kebabBtnOpen)` reads the state off the trigger that already carries it,
+ * so the slide holds for the whole life of the menu — including every step of the
+ * delete confirmation, which is exactly the owner's requirement ("כל עוד לא נלחץ
+ * כפתור המחיקה תשאיר את השעה והתאריך משמאל לשלוש הנקודות").
+ */
 .itemWrap:hover .item,
-.itemWrap:focus-within .item {
+.itemWrap:focus-within .item,
+.itemWrap:has(.kebabBtnOpen) .item {
   --row-pad-right: calc(6px + 28px + 10px);
 }
 /* round117/round125 — hover-only scrollbar, no stepper arrows (owner request).
