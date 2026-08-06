@@ -17,6 +17,7 @@ import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
 import { TASKS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { useColumnRenameMenu } from '@generated/components/ColumnRenameMenu';
+import { customEntriesFor } from '@generated/utils/customColumns.js';
 import styles from './TaskTable.module.css';
 
 // Header titles per column key (name has none — it's the frozen first column).
@@ -113,6 +114,20 @@ export function TaskTable({
    * fresh installs, not existing ones.
    */
   const showPartners = !!(getColumns('tasks') || {}).partnersID?.id;
+  /*
+   * round364 — owner-added custom mappings (customEntriesFor: `custom<N>ID`
+   * aliases on the tasks board) render as READ-ONLY trailing columns. The alias
+   * IS the column key, so order/width/rename prefs persist per custom column
+   * through the same 'tasks' stores every other key uses.
+   */
+  const customCols = useMemo(
+    () => customEntriesFor(getColumns('tasks'))
+      .filter(([, col]) => col?.id)
+      .map(([alias, col]) => ({ alias, type: col.type, title: col.title || alias })),
+    // getColumns reads the module-level published settings — same freshness
+    // contract as showPartners above (re-render on settings save remounts).
+    []
+  );
   const baseKeys = [
     ...(selectable ? ['sel'] : []),
     'name',
@@ -121,6 +136,7 @@ export function TaskTable({
     ...(showPriority ? ['priority'] : []),
     'deadline', 'status',
     ...(showSourceDiscussion ? ['source'] : []),
+    ...customCols.map((c) => c.alias),
   ];
   const pinned = selectable ? ['sel', 'name'] : ['name'];
   const { order, reorder } = useColumnOrder('tasks', baseKeys, pinned);
@@ -144,9 +160,14 @@ export function TaskTable({
 
   // Width defs follow the live VISIBLE order; 'sel' is a fixed (non-resizable)
   // leading track, everything else resizes within the constants' clamps.
-  const defs = visibleOrder.map((k) => (k === 'sel' ? { key: 'sel', fixed: 36 } : { key: k, ...W[k] }));
+  // round364 — a custom key has no entry in the width constants; without a
+  // fallback the grid template gets a literal "undefinedpx" track and the whole
+  // table collapses. Mobile likewise needs a real track per key, or the
+  // template ends up SHORTER than the cell count and every row misaligns.
+  const CUSTOM_W = { default: 140, min: 90, max: 400 };
+  const defs = visibleOrder.map((k) => (k === 'sel' ? { key: 'sel', fixed: 36 } : { key: k, ...(W[k] || CUSTOM_W) }));
   const { gridTemplate, startResize } = useColumnWidths('tasks', defs);
-  const mobileTemplate = visibleOrder.map((k) => MOBILE_TRACK[k]).filter(Boolean).join(' ');
+  const mobileTemplate = visibleOrder.map((k) => MOBILE_TRACK[k] || '130px').join(' ');
   // round136 — memoized so the (memoized) rows' rowStyle prop is referentially
   // stable while the template string is unchanged.
   const rowStyle = useMemo(
@@ -170,8 +191,16 @@ export function TaskTable({
   const canResize = canReorder;
   // round140 — owner-only column display names: hover a header → "⋯" → rename
   // for all users (stored in the shared settings, like saved views).
+  // round364 — custom keys join the base title map (their live column title),
+  // which is what makes them renamable + labeled in the header/DnD overlay.
+  const titlesWithCustom = useMemo(
+    () => (customCols.length
+      ? { ...TITLE, ...Object.fromEntries(customCols.map((c) => [c.alias, c.title])) }
+      : TITLE),
+    [customCols]
+  );
   const { titles: colTitles, dots: renameDots, menu: renameMenu } =
-    useColumnRenameMenu('tasks', TITLE, { canManageSettings, dotsClassName: styles.renameDots });
+    useColumnRenameMenu('tasks', titlesWithCustom, { canManageSettings, dotsClassName: styles.renameDots });
   const movableIds = visibleOrder.filter((k) => k !== 'name' && k !== 'sel');
   // Non-first header cells need a positioning context for the absolute handle;
   // the frozen .taskFirst is already sticky (a containing block), so it doesn't.
@@ -229,6 +258,7 @@ export function TaskTable({
               task={task}
               statusOpts={statusOpts}
               priorityOpts={priorityOpts}
+              customColumns={customCols}
               columns={visibleOrder}
               rowStyle={rowStyle}
               onStatusChange={onStatusChange && canTask('editTaskStatus', task) ? onStatusChange : undefined}

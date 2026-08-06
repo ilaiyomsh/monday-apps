@@ -486,3 +486,12 @@
 .draggableRow:active {
   cursor: grabbing;
 }
+
+/* round364 — read-only custom-column cell (CustomColumnValue inside). */
+.customCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
