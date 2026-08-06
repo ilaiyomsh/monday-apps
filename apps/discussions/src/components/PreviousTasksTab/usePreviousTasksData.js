@@ -4,6 +4,7 @@ import { getColumns } from '../../utils/mondayApi/board-config-store.js';
 import { משימות1Board, דיונים1Board } from '@api/BoardSDK.js';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
 import { pickLatestPreviousId } from './previousScope.js';
+import { customEntriesFor } from '@generated/utils/customColumns.js';
 import logger from '@generated/utils/logger.js';
 
 // Map a linked task item (from the discussion-side relation query) into the
@@ -186,7 +187,8 @@ export function usePreviousTasksData(discussion, byType, { onResetSelection, sco
       // round306 — partnersID rides along: the tab now RENDERS + edits שותפים, and a
       // picker seeded from an unfetched column would look empty and overwrite the
       // real people list on the next pick.
-      const RENDERED = ['responsibilityID', 'partnersID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID']; // assignee, partners, deadline, status, priority (read-only), discussion links
+      // round364 — custom mappings ride along (read-only cells in the shared TaskTable).
+      const RENDERED = ['responsibilityID', 'partnersID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID', ...customEntriesFor(taskColumns).map(([alias]) => alias)]; // assignee, partners, deadline, status, priority (read-only), discussion links, customs
       const taskCols = RENDERED.map((alias) => taskColumns?.[alias]?.id).filter(Boolean);
       const taskCv = cvSelection(RENDERED.map((alias) => taskColumns?.[alias]?.type));
 
@@ -247,7 +249,8 @@ export function usePreviousTasksData(discussion, byType, { onResetSelection, sco
         setTasksLoading(true);
         const result = await new משימות1Board().items()
           .where({ taskTypeID: taskTypeId })
-          .withColumns(['responsibilityID', 'partnersID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID', 'taskTypeID'])
+          // round364 — custom mappings ride along here too.
+          .withColumns(['responsibilityID', 'partnersID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID', 'taskTypeID', ...customEntriesFor(getColumns('tasks')).map(([alias]) => alias)])
           .withPagination({ limit: 200 })
           .execute();
         if (!cancelled) setTasks(result.items || []);
@@ -277,7 +280,8 @@ export function usePreviousTasksData(discussion, byType, { onResetSelection, sco
       const discussionsColumns = getColumns('discussions');
       const tasksBoardLinkId = discussionsColumns?.tasksBoardLinkID?.id;
       const taskColumns = getColumns('tasks') || {};
-      const RENDERED = ['responsibilityID', 'partnersID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID'];
+      // round364 — custom mappings ride along (read-only cells in the shared TaskTable).
+      const RENDERED = ['responsibilityID', 'partnersID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID', ...customEntriesFor(taskColumns).map(([alias]) => alias)];
       const taskCols = RENDERED.map((alias) => taskColumns?.[alias]?.id).filter(Boolean);
       const taskCv = cvSelection(RENDERED.map((alias) => taskColumns?.[alias]?.type));
       if (!tasksBoardLinkId) { setTasks([]); return; }

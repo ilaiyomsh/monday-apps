@@ -5,6 +5,7 @@ import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js
 import { MondayContext } from '@generated/contexts/MondayContext.jsx';
 import logger from '../utils/logger';
 import { useOptimisticRows, isTempId, isRealId, nextTempId } from './useOptimisticRows.js';
+import { customEntriesFor } from '../utils/customColumns.js';
 
 // Undo window for deferred task deletion — must match the delete toast's
 // auto-hide duration so the real delete fires exactly when "בטל" disappears.
@@ -42,7 +43,10 @@ async function fetchTasksByDiscussion(discussionId) {
   // creator/editor here while allowing them in My Tasks (which does fetch them).
   // responsibilityID is already fetched above; add the rest.
   const PERMISSION_COLS = ['taskCreatorID', 'taskEditorsID'];
-  const FETCH_ALIASES = [...RENDERED, ...PERMISSION_COLS];
+  // round364 — owner-added custom mappings (custom<N>ID) render read-only in the
+  // task tables; without fetching them here they'd deserialize to their empty
+  // shapes and every custom cell would silently show "—".
+  const FETCH_ALIASES = [...RENDERED, ...PERMISSION_COLS, ...customEntriesFor(taskColumns).map(([alias]) => alias)];
   const taskCols = FETCH_ALIASES.map((alias) => taskColumns?.[alias]?.id).filter(Boolean);
   const taskCv = cvSelection(FETCH_ALIASES.map((alias) => taskColumns?.[alias]?.type));
 

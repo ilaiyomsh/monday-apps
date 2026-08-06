@@ -8,6 +8,7 @@ import { PersonList } from '@generated/components/PersonAvatar';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
+import { CustomColumnValue } from '@generated/components/CustomColumnValue';
 import grid from '../TaskTable/TaskTable.module.css';
 import styles from './TaskTableRow.module.css';
 
@@ -70,6 +71,9 @@ export const TaskTableRow = memo(function TaskTableRow({
   // Ordered column keys (incl. 'sel'/'name') + the grid template, both supplied
   // by TaskTable so header and body honor the same drag-reorder order.
   columns,
+  // round364 — owner-added custom mappings [{ alias, type, title }] rendered as
+  // read-only trailing cells (supplied by TaskTable off the published settings).
+  customColumns,
   rowStyle,
   // When provided (and the row is read-only, i.e. no inline rename), clicking the
   // task name opens its item card via this callback (Previous-tasks tab → Updates).
@@ -506,6 +510,17 @@ export const TaskTableRow = memo(function TaskTableRow({
       </div>
     ) : null,
   };
+
+  // round364 — owner-added custom columns render READ-ONLY through the shared
+  // CustomColumnValue; the alias doubles as the column key, so the dispatch
+  // below picks these up exactly like the fixed cells.
+  for (const c of customColumns || []) {
+    cellByKey[c.alias] = (
+      <div key={c.alias} className={`${grid.taskCell} ${styles.customCell}`} title={c.title}>
+        <CustomColumnValue type={c.type} value={task?.[c.alias]} />
+      </div>
+    );
+  }
 
   const orderedKeys = columns || [
     ...(selectable ? ['sel'] : []),
