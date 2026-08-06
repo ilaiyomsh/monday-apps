@@ -30,7 +30,16 @@
  *                     one. Its own status (round330) because the manual register
  *                     button must say so — retrying cannot fix a permission.
  *   'failed'        — network error, timeout, or any other non-200 answer. Logged.
- *
+ */
+
+import logger from '../utils/logger.js';
+import { resolveGuardBase } from './guardBase.js';
+import { getSessionTokenViaSdk } from './sessionToken.js';
+
+/** Long enough for a cold monday-code container, short enough to close a modal on. */
+const DEFAULT_TIMEOUT_MS = 8000;
+
+/**
  * @param {{ boardId: string|number, columnId: string }} target
  * @param {{
  *   guardUrl?: string|null,               // default: '' (same-origin); null skips
@@ -40,19 +49,12 @@
  * }} [deps]
  * @returns {Promise<'disabled'|'enrolled'|'not_activated'|'not_board_owner'|'failed'>}
  */
-
-import logger from '../utils/logger.js';
-import { resolveGuardBase } from './guardBase.js';
-
-/** Long enough for a cold monday-code container, short enough to close a modal on. */
-const DEFAULT_TIMEOUT_MS = 8000;
-
 export async function enrollColumnGuard({ boardId, columnId }, deps = {}) {
   const base = resolveGuardBase(deps.guardUrl);
   if (base === null) return 'disabled';
 
   const doFetch = deps.fetchImpl ?? globalThis.fetch;
-  const getSessionToken = deps.sessionTokenProvider ?? defaultSessionTokenProvider;
+  const getSessionToken = deps.sessionTokenProvider ?? getSessionTokenViaSdk;
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   // The caller waits for this before closing the settings surface, so the wait
@@ -105,13 +107,4 @@ export async function enrollColumnGuard({ boardId, columnId }, deps = {}) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-async function defaultSessionTokenProvider() {
-  // Dynamic import keeps this module inert for suites that stub the SDK — the
-  // dev-harness alias (VITE_MONDAY_MOCK) resolves here exactly as it does in
-  // mondayService.
-  const { default: mondaySdk } = await import('monday-sdk-js');
-  const response = await mondaySdk().get('sessionToken');
-  return response?.data;
 }

@@ -2,6 +2,95 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.16.2 — 2026-08-06 — the bottom row's status menu has room to open
+
+**Reported from a real inbox:** the dropdown of the last row in the digest was cut
+off by the email's bottom edge — the menu opened into the border and was hidden
+behind it.
+
+**Why it happened.** `.dd-menu` is `position:absolute; top:100%`, so it is out of
+flow: the document's height at load time does not include it, and the
+dynamic-email frame is sized from that height. Every row above the last one opens
+its menu over the rows below and is fine. The last one has nothing below it, so it
+opened into space the frame does not have.
+
+**Why it is not "open it upward instead".** amp4email has no JS, no viewport API
+and no container query — there is nothing in the document that can measure the
+space below a trigger and decide. A static flip for the last row only trades the
+bug for its mirror image (a single-row mail with no text above it would then clip
+at the top). The deterministic fix is to make the room exist.
+
+**What the renderer does now.** `menuHeightFor()` in `helpers/digest-amp.js`
+computes the height a menu of N options occupies (`4 + 16 + 38N + 4(N−1)`, the
+four numbers mirroring the `.dd-menu`/`.dd-opt` rules) and emits a generated
+`.dd-tail { height:…px }` plus one empty div as the **last child of `.wrap`**. It
+is sized from the WIDEST cluster in the document, not the last one, so the reserve
+is a document-wide property and cluster order cannot change it — 2 buttons →
+100px, 4 → 184px. Inside the card rather than after it, for two reasons: the menu
+paints onto white instead of onto the page background, and `.dd-overlay`
+(absolute, inset 0 of `.wrap`) keeps covering the reserved strip, so tapping down
+there still closes the menu. A document with no cluster reserves nothing — no
+element, no rule, and the class name is not even mentioned in the stylesheet's
+comments, since the sheet ships inside the message.
+
+**The reserve is deliberately not netted** against the padding that already sits
+below the last row (form padding + card margin + card padding + body padding, some
+209px in the narrow layout against 142px needed for three options). A number
+derived from five other numbers goes stale the day any one of them moves, and the
+only cost of over-reserving is whitespace at the foot of the mail — which is the
+second half of what the owner asked for.
+
+**Outer gutters widened in the same change:** `body` `14px 10px` → `22px 16px
+32px`, `.wrap` `18px` → `22px`. The bottom gutter is the widest of the three
+because that edge is where an open menu and the frame's end meet.
+
+`tests/digest-amp-menu-room.test.js` pins all of it: the reserve exists and is
+sized from the widest cluster in either order, it is the card's last child, a
+clusterless document has none, the rule stays out of the media query (it must not
+depend on width), and the gutters carry minimum sizes rather than exact strings.
+
+The AMP validator could not be reached from this sandbox
+(`cdn.ampproject.org` → 403, the script's documented exit 3 — infrastructure, not
+a verdict). The change adds one empty `div` and a `height` declaration, both
+already in the strict property set; `npm run validate:amp` on a runner with CDN
+access is the confirmation.
+
+## 0.16.1 — 2026-08-06 — the cron runs at the scheduled hour and at no other hour
+
+**Reverses §7.4's catch-up (round348, live since 0.16.0).** That change made
+every hourly tick from `sendHour` to midnight re-attempt a tenant, with the
+per-slot marker keeping it safe. It was safe. The objection was different:
+somebody who became eligible AFTER the scheduled hour — a users-board row
+completed, a task's date or status changed, a recipient-gate label flipped —
+received their digest an hour or two late, and each such tick mailed the operator
+another summary and another CSV.
+
+**Measured in production the first day it ran** (2026-08-06, account 14334098,
+slot 20260806): the 10:00 tick sent 4 digests; the 11:00 catch-up tick sent 1
+more (a person who was not eligible at 10:00), correctly suppressed 2 via the
+marker, found 2 with no tasks left — and mailed a second report. Nobody was
+mailed twice; there was simply a second send, and a second report, that the owner
+did not want.
+
+**The rule now:** `if (sendHour !== hour) continue;` — an exact match in both
+directions, and any other hour is a SILENT skip (the tenant is not listed, no
+boards are read, no summary, no CSV). The digest is a once-a-day event at a known
+hour; whoever joins late gets it tomorrow. `due` goes back to unconditionally
+true for a tenant that ran — reaching that line IS the scheduled hour, so a run
+with zero recipients still reports, which is the daily confirmation the operator
+expects.
+
+**What this costs, on the record so it is not "fixed" back by accident:** a tick
+that NEVER FIRES for a tenant's hour costs that tenant the day, recoverable only
+from the admin screen's resend. A tick that FAILED or timed out is still covered
+— the platform retries it (maxRetries 3, 60s backoff), and the per-slot marker is
+what keeps those retries from re-mailing anyone. The marker is untouched: it
+solves retries, which is a different problem from catch-up.
+
+`tests/scheduler-catchup.test.js` became `tests/scheduler-hour-gate.test.js` and
+now pins the opposite behaviour, including the late-joiner case verbatim from
+production and the accepted-cost case (a missed hour is not recovered).
+
 ## 0.15.0 — 2026-08-05 — the summary email's content is the operator's, not the code's
 
 **The problem was scope of control.** The digest settings screen could choose the

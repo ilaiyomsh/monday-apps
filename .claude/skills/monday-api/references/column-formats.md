@@ -272,14 +272,55 @@ Legacy `text`/`value` are null on relation-family columns. Read typed fragments:
   Passing `defaults` as a JSON **string** (legacy `displayed_column` map form) is accepted with
   HTTP 200 but yields `settings_str: "{}"` — a silently blank, unconfigured mirror. Always read
   `settings_str` back and assert it is non-empty.
+- **Reconfiguring a mirror: `update_column(settings:)` takes the SAME top-level typed shape,
+  NOT the stored `settings_str`.** (Verified live 2026-08-06, round363 sandbox probes.) The
+  mutation validates against its own typed schema — `get_column_type_info(type: mirror)` is the
+  ground truth for it. Feeding back what the API *returns* (`settings_str`'s
+  `displayed_linked_columns` as a `{"<board_id>": [col_ids]}` MAP, or the legacy
+  `displayed_column` form) fails validation. Send the ARRAY form exactly as in the
+  `create_column` block above; the server stores it back as a map. Round-trip trap: **read
+  shape ≠ write shape** — never echo `settings_str` into `update_column`. Verified end-to-end:
+  after linking through the relation, `... on MirrorValue { display_value }` returns the source
+  value (`text` stays `null` on mirrors — see the display_value bullet above).
 
 ## Board / column identity operations
 
 - Rename column keeping id: `change_column_title(board_id, column_id, title)`.
+- **The built-in first (Name) column renames the same way — `column_id: "name"`.**
+  (Verified live 2026-08-06, round363 sandbox.) There is NO `update_board` path for it:
+  `board_attribute: item_nickname` is not in the enum (`name`/`description`/`communication`
+  only) and dies with a bare `INTERNAL_SERVER_ERROR`, not a validation message.
 - Rename board: `update_board(board_id, board_attribute: name, new_value)`.
 - Create board: `create_board(board_name, board_kind: public, workspace_id, empty: true)`.
 - Some system columns (subitems link, parent link) are non-deletable — rename, don't delete.
+- **`update_group` color takes a NAMED palette color, not hex.** (Verified live 2026-08-06,
+  round363 sandbox.) `new_value: "#ff642e"` fails with `"Input color is not in colors options"`;
+  `new_value: "dark-orange"` works and reads back as `#FF642E`. Names seen live:
+  `orange`=#fdab3d, `dark-orange`=#ff642e. Title via the same mutation
+  (`group_attribute: title`); `update_group` returns type `Group` — select subfields.
 - Verify a user id before assigning: `users(kind: all) { id name email }`.
+
+## Board views — typed API, `settings_str` is a red herring
+
+(Verified live 2026-08-06, round363 sandbox, board 18425374847.)
+
+- **Create/update table views via first-class mutations**: `create_view_table` /
+  `update_view_table` (typed `settings: TableViewSettingsInput`), plus generic
+  `create_view`/`update_view` (`type: ViewKind`, `settings: JSON`) and `delete_view`.
+  Full round-trip works: column order, hidden columns (`column_properties`),
+  `group_by` conditions with `hideEmptyGroups`, and `sort` (enum input lowercase
+  `asc`/`desc`, echoed back uppercase):
+  ```graphql
+  mutation { create_view_table(board_id: ..., name: "...",
+    settings: {columns: {column_order: ["name", "date_x"],
+                         column_properties: [{column_id: "formula_x", visible: false}]},
+               group_by: {conditions: [{columnId: "color_x"}], hideEmptyGroups: true}},
+    sort: [{column_id: "date_x", direction: desc}]) { id settings sort } }
+  ```
+- **Read views back through the NEW typed fields** `views { settings sort filter }` —
+  for views written this way, the legacy `settings_str`/`view_specific_data_str` stay
+  `"{}"` **even when the settings stuck**. An empty `settings_str` is NOT the
+  silently-dropped-settings signal it is for mirror `defaults`; assert on `settings`.
 
 ## Updates (comments) — HTML that actually round-trips
 

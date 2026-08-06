@@ -74,8 +74,8 @@ export const REVERTABLE_REASONS = ['not-offered', 'required-fields-empty'];
 
 /**
  * @param {{
- *   api: object, tokenStore: object, rulesStore: object, logger: object,
- *   evaluate?: Function, now?: () => number, retryDelayMs?: number,
+ *   api: object, tokenStore: object, rulesStore: object, bypassLog: object,
+ *   logger: object, evaluate?: Function, now?: () => number, retryDelayMs?: number,
  * }} deps
  */
 export function createStatusChangeHandler({ api, tokenStore, rulesStore, bypassLog, logger, evaluate, now = () => Date.now(), retryDelayMs = 5000 }) {

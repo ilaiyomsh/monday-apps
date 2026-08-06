@@ -21,13 +21,14 @@
 
 import logger from '../utils/logger.js';
 import { resolveGuardBase } from './guardBase.js';
+import { getSessionTokenViaSdk } from './sessionToken.js';
 
 export async function fetchBypasses({ boardId, columnId, fromMs, toMs }, deps = {}) {
   const base = resolveGuardBase(deps.guardUrl);
   if (base === null) return { status: 'disabled' };
 
   const doFetch = deps.fetchImpl ?? globalThis.fetch;
-  const getSessionToken = deps.sessionTokenProvider ?? defaultSessionTokenProvider;
+  const getSessionToken = deps.sessionTokenProvider ?? getSessionTokenViaSdk;
 
   try {
     const sessionToken = await getSessionToken();
@@ -46,10 +47,4 @@ export async function fetchBypasses({ boardId, columnId, fromMs, toMs }, deps = 
     logger.error('bypassMonitor', 'bypasses query failed', err);
     return { status: 'failed' };
   }
-}
-
-async function defaultSessionTokenProvider() {
-  const { default: mondaySdk } = await import('monday-sdk-js');
-  const response = await mondaySdk().get('sessionToken');
-  return response?.data;
 }

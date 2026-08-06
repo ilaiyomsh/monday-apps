@@ -64,6 +64,21 @@ export function createTaskUpdaters(setTasks) {
     try { await new משימות1Board().item(id).update({ partnersID: next.map((x) => Number(x.id)) }).execute(); }
     catch (err) { logger.error('PreviousTasksTab', 'שגיאה בעדכון שותפים', err); setTasks(prev); }
   };
+  /*
+   * round366 — GENERIC single-column update for owner-added custom mappings
+   * (custom<N>ID). formatValue serializes by the alias's stored type (BoardSDK
+   * resolves it off the published settings), so the raw editor value passes
+   * through: people [{id,name}], Date, dropdown label text, plain text.
+   */
+  const updateColumn = async (id, alias, value) => {
+    let prev = [];
+    setTasks((current) => {
+      prev = current;
+      return current.map((t) => (t.id === id ? { ...t, [alias]: value } : t));
+    });
+    try { await new משימות1Board().item(id).update({ [alias]: value }).execute(); }
+    catch (err) { logger.error('PreviousTasksTab', 'שגיאה בעדכון עמודה מותאמת', err); setTasks(prev); }
+  };
   const updateDeadline = async (id, d) => {
     let prev = [];
     setTasks((current) => {
@@ -154,6 +169,7 @@ export function createTaskUpdaters(setTasks) {
 
   return {
     updateName, updateStatus, updatePriority, updateAssignee, updatePartners, updateDeadline,
+    updateColumn,
     updateStatusBatch, updateAssigneeBatch, updateDeadlineBatch,
   };
 }

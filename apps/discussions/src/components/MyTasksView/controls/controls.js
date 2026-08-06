@@ -78,6 +78,8 @@ export const FILTER_COLUMN_PERSON = { key: 'person', type: 'person', alias: 'res
 export const OP_LABEL = {
   is: 'הוא', isnot: 'אינו',
   within: 'בטווח', before: 'לפני', after: 'אחרי',
+  // round366 — free-text custom columns filter by "contains".
+  contains: 'מכיל',
 };
 
 export const DEADLINE_RANGES = [
@@ -203,6 +205,66 @@ function matchPersonCol(c, people) {
   const hit = ids.some((id) => c.values.has(id));
   return c.op === 'isnot' ? !hit : hit;
 }
+/*
+ * round366 — CUSTOM column dimensions (owner-added `custom<N>ID` mappings on
+ * the tasks board) join the filter as typed dimensions. A dim is
+ * { key: alias, control: 'person'|'values'|'date'|'text', title } — `control`
+ * decides the state shape, the editor UI and the predicate. `file` customs are
+ * not filterable (their value is an asset URL string).
+ */
+export function customFilterDims(customCols) {
+  return (customCols || []).map((c) => {
+    const t = c.type;
+    const control = (t === 'people' || t === 'person' || t === 'multiple_person') ? 'person'
+      : t === 'date' ? 'date'
+        : (t === 'dropdown' || t === 'board_relation' || t === 'connect_boards') ? 'values'
+          : (t === 'text' || t === 'long_text') ? 'text'
+            : null;
+    return control ? { key: c.alias, control, title: c.title || c.alias } : null;
+  }).filter(Boolean);
+}
+
+// A fresh pristine state per CONTROL type (shared with useFilterBuilder's resetCol).
+export function pristineFilterCol(control) {
+  if (control === 'date') return { op: 'within', range: null, date: null };
+  if (control === 'text') return { op: 'contains', text: '' };
+  return { op: 'is', values: new Set() };
+}
+
+function textFilterActive(c) {
+  return !!String(c?.text || '').trim();
+}
+// Free-text contains (trimmed, case-insensitive — Hebrew is unaffected, Latin benefits).
+function matchTextCol(c, v) {
+  const needle = String(c.text || '').trim().toLowerCase();
+  return String(v ?? '').toLowerCase().includes(needle);
+}
+// A custom "values" column's comparable values: a board_relation contributes its
+// linked item NAMES; a dropdown's parsed value is the label text (multi-label
+// arrives comma-joined from monday).
+export function customComparableValues(raw) {
+  if (raw == null) return [];
+  if (Array.isArray(raw?.linkedItems)) return raw.linkedItems.map((it) => String(it?.name ?? ''));
+  return String(raw).split(', ').map((s) => s.trim()).filter(Boolean);
+}
+function matchValuesCol(c, raw) {
+  const hit = customComparableValues(raw).some((v) => c.values.has(v));
+  return c.op === 'isnot' ? !hit : hit;
+}
+
+function customDimActive(control, c) {
+  if (!c) return false;
+  if (control === 'date') return deadlineFilterActive(c);
+  if (control === 'text') return textFilterActive(c);
+  return colFilterActive(c);
+}
+function matchCustomDim(control, c, raw, now) {
+  if (control === 'person') return matchPersonCol(c, raw);
+  if (control === 'date') return matchDeadline(c, raw, now);
+  if (control === 'text') return matchTextCol(c, raw);
+  return matchValuesCol(c, raw);
+}
+
 function matchDeadline(d, val, now) {
   const dt = val instanceof Date ? val : null;
   if (d.op === 'before') return dt ? dt.getTime() < startOfDay(d.date).getTime() : false;
@@ -232,39 +294,53 @@ function matchDeadline(d, val, now) {
 export function filterTasks(list, filter, opts = {}) {
   if (!filter) return list;
   const now = opts.now || new Date();
+  // round366 — opts.custom: typed custom dims ([{key, control}]); the task's
+  // value lives directly under the alias key.
+  const custom = (opts.custom || []).filter((dim) => customDimActive(dim.control, filter[dim.key]));
   const s = colFilterActive(filter.status);
   const p = colFilterActive(filter.priority);
   const pr = colFilterActive(filter.person);
   const d = deadlineFilterActive(filter.deadline);
-  if (!s && !p && !pr && !d) return list;
+  if (!s && !p && !pr && !d && custom.length === 0) return list;
   return list.filter((tk) => {
     if (s && !matchStatusCol(filter.status, tk.statusID)) return false;
     if (p && !matchStatusCol(filter.priority, tk.priorityID)) return false;
     if (pr && !matchPersonCol(filter.person, tk.responsibilityID)) return false;
     if (d && !matchDeadline(filter.deadline, tk.deadlineID, now)) return false;
+    for (const dim of custom) {
+      if (!matchCustomDim(dim.control, filter[dim.key], tk[dim.key], now)) return false;
+    }
     return true;
   });
 }
 
 // Active-value count for the toolbar pill badge ("/ N").
-export function filterCount(filter) {
+export function filterCount(filter, customDims = []) {
   if (!filter) return 0;
   let n = 0;
   if (colFilterActive(filter.status)) n += filter.status.values.size;
   if (colFilterActive(filter.priority)) n += filter.priority.values.size;
   if (colFilterActive(filter.person)) n += filter.person.values.size;
   if (deadlineFilterActive(filter.deadline)) n += 1;
+  for (const dim of customDims) {
+    const c = filter[dim.key];
+    if (!customDimActive(dim.control, c)) continue;
+    n += dim.control === 'date' || dim.control === 'text' ? 1 : c.values.size;
+  }
   return n;
 }
 
 // A fresh, empty filter (one Set per status column + a default deadline row off).
-export function emptyFilter() {
-  return {
+// round366 — customDims seed their own pristine keys beside the fixed four.
+export function emptyFilter(customDims = []) {
+  const out = {
     status: { op: 'is', values: new Set() },
     priority: { op: 'is', values: new Set() },
     person: { op: 'is', values: new Set() },
     deadline: { op: 'within', range: null, date: null },
   };
+  for (const dim of customDims) out[dim.key] = pristineFilterCol(dim.control);
+  return out;
 }
 
 // ------------------------------------------------- saved-view (de)serialize --
@@ -272,37 +348,53 @@ export function emptyFilter() {
 // (settings.preferences.savedViews). Serialize to plain arrays + ISO string;
 // deserialize defensively back to the live shape (garbage → empty filter).
 
-export function serializeFilter(filter) {
-  const f = filter || emptyFilter();
+export function serializeFilter(filter, customDims = []) {
+  const f = filter || emptyFilter(customDims);
   const col = (c) => ({ op: c?.op || 'is', values: [...(c?.values || [])] });
-  const d = f.deadline || {};
-  return {
+  const dateCol = (d = {}) => ({
+    op: d.op || 'within',
+    range: d.range || null,
+    date: d.date instanceof Date ? d.date.toISOString() : null,
+  });
+  const out = {
     status: col(f.status),
     priority: col(f.priority),
     person: col(f.person),
-    deadline: {
-      op: d.op || 'within',
-      range: d.range || null,
-      date: d.date instanceof Date ? d.date.toISOString() : null,
-    },
+    deadline: dateCol(f.deadline),
   };
+  // round366 — custom dims round-trip by their control shape.
+  for (const dim of customDims) {
+    const c = f[dim.key];
+    out[dim.key] = dim.control === 'date' ? dateCol(c)
+      : dim.control === 'text' ? { op: 'contains', text: String(c?.text || '') }
+        : col(c);
+  }
+  return out;
 }
 
-export function deserializeFilter(saved) {
-  const out = emptyFilter();
+export function deserializeFilter(saved, customDims = []) {
+  const out = emptyFilter(customDims);
   if (!saved || typeof saved !== 'object') return out;
-  for (const key of ['status', 'priority', 'person']) {
-    const c = saved[key];
-    if (!c || typeof c !== 'object') continue;
+  const setCol = (key, c) => {
+    if (!c || typeof c !== 'object') return;
     if (c.op === 'is' || c.op === 'isnot') out[key].op = c.op;
     out[key].values = new Set(Array.isArray(c.values) ? c.values.map(String) : []);
-  }
-  const d = saved.deadline;
-  if (d && typeof d === 'object') {
-    if (d.op === 'within' || d.op === 'before' || d.op === 'after') out.deadline.op = d.op;
-    out.deadline.range = typeof d.range === 'string' ? d.range : null;
+  };
+  const setDateCol = (key, d) => {
+    if (!d || typeof d !== 'object') return;
+    if (d.op === 'within' || d.op === 'before' || d.op === 'after') out[key].op = d.op;
+    out[key].range = typeof d.range === 'string' ? d.range : null;
     const parsed = d.date ? new Date(d.date) : null;
-    out.deadline.date = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+    out[key].date = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  };
+  for (const key of ['status', 'priority', 'person']) setCol(key, saved[key]);
+  setDateCol('deadline', saved.deadline);
+  for (const dim of customDims) {
+    if (dim.control === 'date') setDateCol(dim.key, saved[dim.key]);
+    else if (dim.control === 'text') {
+      const c = saved[dim.key];
+      if (c && typeof c === 'object' && typeof c.text === 'string') out[dim.key].text = c.text;
+    } else setCol(dim.key, saved[dim.key]);
   }
   return out;
 }

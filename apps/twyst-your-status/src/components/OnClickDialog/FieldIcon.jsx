@@ -7,7 +7,6 @@
  * still touches one place. monday exposes neither its column icons nor their colours
  * through the API — the palette is our approximation of its look.
  */
-import React from 'react';
 import {
   Calendar,
   Checkbox,

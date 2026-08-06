@@ -138,25 +138,11 @@ export const GET_ACCOUNT_TEAMS = `
   }
 `;
 
-/**
- * Required-field values for one item. The selection comes from the columnFields
- * registry: `text`/`value` alone are NULL for people/dropdown/relation columns on
- * API 2025-04+, so every supported type contributes its typed fragment, and
- * `column.settings` rides along for the option-based controls.
+/*
+ * Avatar URLs use monday's photo_thumb (API 2026-04 pin — photo_url { thumb } only
+ * exists from 2026-07).
  */
-export const GET_ITEM_FORM_VALUES = `
-  query GetItemFormValues(
-    $itemIds: [ID!]
-    $columnIds: [String!]
-  ) {
-    items(ids: $itemIds) {
-      id
-      column_values(ids: $columnIds) {
-        ${ALL_COLUMN_VALUE_FIELDS}
-      }
-    }
-  }
-`;
+export const GET_ACCOUNT_USERS = 'query AccountUsers($limit: Int) { users(limit: $limit) { id name photo_thumb } }';
 
 /**
  * Everything the required-fields modal needs, in one round trip: the gated status

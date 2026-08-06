@@ -42,6 +42,15 @@ export const PREVIOUS_TASKS_MODES = {
   AUTO: 'auto',
 };
 /*
+ * round367 (owner spec, approved mockup) — the create card opens on a
+ * two-path toggle: TEMPLATE (בחרו תבנית דיון → the template's roles/externals,
+ * auto name, no "דיון קודם") or ADHOC (clean name, previous-discussion link).
+ */
+export const CREATE_DISCUSSION_MODES = {
+  TEMPLATE: 'template',
+  ADHOC: 'adhoc',
+};
+/*
  * round205 — the owner-selectable APP COMPONENTS (Settings → העדפות, owners
  * only): every major surface a board owner may hide for the whole instance.
  * Visibility is stored under preferences.visibleComponents as an EXPLICIT-false
@@ -112,6 +121,13 @@ export const DEFAULT_PREFERENCES = {
    * `preferences` is merged over these defaults, never replaced by them.
    */
   previousTasksMode: PREVIOUS_TASKS_MODES.AUTO,
+  /*
+   * round367 (owner spec) — which half of the create-card toggle is
+   * pre-selected, and whether TEMPLATE mode auto-names the discussion
+   * ("<תבנית> - <תאריך>") or leaves the name empty for the user to fill.
+   */
+  createDiscussionMode: CREATE_DISCUSSION_MODES.TEMPLATE,
+  templateAutoName: true,
   // round296 — default width split of the ניהול-דיון row: the AGENDA box's share
   // (0..1, clamped [0.25,0.75] by discussionLayout). 0.6 ⇒ agenda 60% / triple
   // box 40% (owner request). Owner-configurable in Settings → העדפות. A per-
@@ -125,6 +141,16 @@ export const DEFAULT_PREFERENCES = {
   // (parallel to the title). Stored as a small downscaled data-URI (self-contained,
   // no asset hosting); null = no logo. Set only by owners in Settings → העדפות.
   logoUrl: null,
+  /*
+   * round365 (owner request, approved mockup) — how much of a point row is
+   * reserved for the point TEXT before the actions cluster (＋ / תוצרים count /
+   * creator avatar / trash) begins. The row is [name flex:G][cluster][spacer
+   * flex:1]; historically G=1 parked the cluster mid-row and truncated long
+   * points. Stored as a PERCENT of the row (pointNameGrow converts to G).
+   * 50 reproduces the old middle; the shipped default is 60 — 20% more text
+   * room, per the owner's spec. Owner-configurable in Settings → העדפות.
+   */
+  pointTextShare: 60,
   /*
    * round314 (owner request) — the three panes of the triple box carry OWNER-SET
    * titles. The defaults are the names the app shipped with, so an instance that
@@ -194,6 +220,20 @@ export const DEFAULT_PREFERENCES = {
  * @param {object|null|undefined} preferences settings.preferences
  * @param {string} key a DEFAULT_PREFERENCES key
  */
+/*
+ * round365 — the point-row text share (see preferences.pointTextShare above)
+ * as the flex-grow the name cell needs against the spacer's flex:1:
+ * share% ⇒ G = share/(100-share) (50→1, 60→1.5). Clamped to the slider's
+ * range so a corrupt stored value can never push the cluster off the row.
+ */
+export const POINT_TEXT_SHARE_RANGE = { min: 40, max: 92 };
+export function pointNameGrow(share) {
+  const n = Number(share);
+  const base = Number.isFinite(n) && n > 0 ? n : DEFAULT_PREFERENCES.pointTextShare;
+  const s = Math.min(POINT_TEXT_SHARE_RANGE.max, Math.max(POINT_TEXT_SHARE_RANGE.min, base));
+  return s / (100 - s);
+}
+
 export function resolvePreference(preferences, key) {
   const stored = preferences?.[key];
   if (stored === undefined || stored === null || stored === '') return DEFAULT_PREFERENCES[key];
@@ -450,6 +490,23 @@ export const DEFAULT_EXPORT_TEMPLATE = {
   },
   // UPLOAD-mode: flag only; the template .docx bytes live in exportAssets.
   hasTemplateDocx: false,
+  /*
+   * round365 (owner spec, approved mockup) — the document TITLE, replacing the
+   * hardcoded `סיכום דיון: <שם>`. Three orderable parts: a fixed FREE TEXT, a
+   * discussion field, and an optional second field; positional separators
+   * between them; alignment (center by default). Rides the export-template
+   * cascade like every other field (system → type snapshot → per-export
+   * ephemeral edit in the dialog). Composition logic: utils/exportTitle.js.
+   */
+  title: {
+    free: 'סיכום דיון',
+    field2: 'discussionName',
+    field3: 'discussionDate',
+    order: ['free', 'field2', 'field3'],
+    sep12: 'dash',
+    sep23: 'space',
+    align: EXPORT_TEXT_ALIGN.CENTER,
+  },
 };
 
 /*
@@ -528,6 +585,8 @@ export const CAPABILITY_DEFAULTS = {
   // personal (no-discussion) ctx the allowed item roles are narrowed by
   // CAP_ITEM_SELF_ROLES below (viewers must NOT inherit it).
   editTaskPartners: 'creatorLeadOwner',
+  // round366 — inline edits of owner-added custom columns in the task tables.
+  editTaskCustomColumns: 'creatorLeadOwner',
   editTaskName: 'creatorLeadOwner',
   deleteTask: 'creatorLeadOwner',
   // ---- decision tier ----
@@ -599,6 +658,7 @@ export const CAPABILITIES = [
   { id: 'editTaskAssignee', tier: 'task', group: 'taskFields', label: 'עריכת אחריות' },
   // round305 — the שותפים people column (partnersID).
   { id: 'editTaskPartners', tier: 'task', group: 'taskFields', label: 'עריכת שותפים' },
+  { id: 'editTaskCustomColumns', tier: 'task', group: 'taskFields', label: 'עריכת עמודות מותאמות' },
   { id: 'editTaskName', tier: 'task', group: 'taskFields', label: 'עריכת שם משימה' },
   { id: 'deleteTask', tier: 'task', group: 'taskFields', label: 'מחיקת משימה' },
   // ---- decision tier (one "שדות החלטה" card; delete is a row) ----
@@ -877,6 +937,7 @@ export const DEFAULT_PERMISSION_SEED = {
       editTaskAssignee: true,
       // round305 — the owner's spec grants שותפים to the task creator.
       editTaskPartners: true,
+      editTaskCustomColumns: true,
       editTaskName: true,
       deleteTask: true,
     },
@@ -891,6 +952,7 @@ export const DEFAULT_PERMISSION_SEED = {
       // round305 — the owner's spec grants שותפים to the task's responsible,
       // even though they may not reassign אחריות itself.
       editTaskPartners: true,
+      editTaskCustomColumns: true,
       editTaskName: false,
       deleteTask: false,
     },
@@ -905,6 +967,7 @@ export const DEFAULT_PERMISSION_SEED = {
       // round305 — editors are seeded FROM the discussion's lead/coordinator/
       // creator (item 19), the exact roles the owner's spec grants.
       editTaskPartners: true,
+      editTaskCustomColumns: true,
       editTaskName: true,
       deleteTask: true,
     },
@@ -1106,6 +1169,13 @@ export const COLUMN_SCHEMA = {
     topicsLinkID: { type: 'board_relation', title: 'link to נושאים לדיון1' },
     // ---- read-only display field ----
     phaseID: { type: 'text', title: 'שלב' },
+    // round363 — the two 0/1 flag formulas the DISCUSSIONS board's mirrors
+    // ("סך משימות בעיכוב"/"שבוצעו") sum over. Provisioned by applyBoardBlueprint;
+    // the app never reads them directly, they exist as mirror sources — which is
+    // why they are mapped here (so top-up reuses them) but deliberately NOT
+    // listed in TASKS_SETTINGS_FIELDS (nothing for the owner to remap).
+    taskDelayedFlagID: { type: 'formula', title: 'האם המשימה בעיכוב' },
+    taskDoneFlagID: { type: 'formula', title: 'האם המשימה בוצעה' },
   },
 
   topics: {

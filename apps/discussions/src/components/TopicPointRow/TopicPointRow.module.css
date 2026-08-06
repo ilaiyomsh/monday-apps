@@ -238,7 +238,11 @@
 /* Point name — fills the row; RTL text; line-through + dimmed when discussed
    (mockup .pt.done .pName). */
 .nameCell {
-  flex: 1;
+  /* round365 — the text's share of the row against .clusterSpacer's flex:1.
+     The var is set by TopicsTab from preferences.pointTextShare (owner slider,
+     Settings → העדפות); the 1.5 fallback IS the shipped default (60% — 20% more
+     text room than the old flex:1 middle). */
+  flex: var(--point-name-grow, 1.5) 1 0;
   min-width: 0;
   display: inline-flex;
   align-items: center;

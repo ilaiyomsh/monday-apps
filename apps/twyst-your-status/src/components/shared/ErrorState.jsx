@@ -1,4 +1,3 @@
-import React from 'react';
 
 /*
  * No @vibe/core here, deliberately. This component sits on the EAGER path (App
@@ -17,6 +16,12 @@ import React from 'react';
  * The colours are tokens rather than Tailwind's text-red-500/text-gray-700, which
  * are fixed light-mode greys — this screen was unreadable in monday's dark themes.
  */
+
+/**
+ * The settings-load failure. All three surfaces that read the rules blob show this
+ * one string with a retry, so the copy cannot drift per surface.
+ */
+export const SETTINGS_LOAD_ERROR_MESSAGE = 'טעינת ההגדרות נכשלה. נסו שוב.';
 
 const iconStyle = {
   width: '48px',
@@ -44,7 +49,7 @@ const buttonStyle = {
 
 function ErrorState({ message = 'An error occurred', onRetry }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12">
+    <div className="twyst-center-column">
       <svg
         style={iconStyle}
         fill="none"

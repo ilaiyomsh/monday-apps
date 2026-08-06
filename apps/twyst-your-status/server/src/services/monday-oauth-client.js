@@ -9,7 +9,8 @@
 // services/monday-oauth-client.js; monday-oauth skill §5). monday-code deploys the
 // app root only, so the guard carries its own copy rather than importing a package.
 //
-// PRIVACY: this module NEVER logs — token material must not reach any logger.
+// PRIVACY: this module never logs TOKEN MATERIAL — machine codes only, through the
+// optional injected `logger` (see the DELIBERATE DIVERGENCE note on `decodeJwtExpMs`).
 // Errors carry machine `code`s (exchange_* / refresh_*) and callers do the logging
 // with those codes only.
 //

@@ -28,6 +28,7 @@
 
 import { api } from './monday-client.js';
 import { detectManagedDropdownColumnId, findManagedDropdownColumnByTitle } from './managedColumns.js';
+import { applyBoardBlueprint, countBlueprintSteps } from './boardBlueprint.js';
 import logger from '../logger.js';
 
 const MODULE = 'provisionBoards';
@@ -320,6 +321,9 @@ function countSteps(tasks, createDiscussionsBoard = false) {
     }
   }
   n += 2; // managed type column "סוג דיון": account-level dropdown on discussions + the SAME column attached to tasks (round126)
+  // round363 — the live-board blueprint layer (formulas, mirrors, views, groups,
+  // name-column terminology) that applyBoardBlueprint runs at the end.
+  n += countBlueprintSteps(tasks, createDiscussionsBoard);
   return n;
 }
 
@@ -877,10 +881,15 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   let folderId = folder.folderId;
   // Roles whose board was CREATED inside the folder — the rest get moved in at the end.
   const createdInFolder = new Set();
+  // round363 — every board CREATED by this run (with or without a folder). The
+  // blueprint's group/name-column restyling applies ONLY to these: a host or
+  // connected board's groups and name column are the owner's content.
+  const createdBoards = new Set();
   if (createDiscussionsBoard && !(existingConfig && hasIdEarly(existingConfig.boards?.discussions))) {
     setPhase('מקים את לוח הדיונים…');
     boardIds.discussions = await createBoard(PROVISION_SPEC.discussions.name, resolvedWorkspaceId, folderId);
     if (folderId) createdInFolder.add('discussions');
+    createdBoards.add('discussions');
     tick('נוצר לוח: דיונים');
     if (!resolvedWorkspaceId) {
       // Step 3: the board we just created is now the authoritative source for the workspace.
@@ -929,6 +938,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
     setPhase(`יוצר את לוח "${PROVISION_SPEC[key].name}"…`);
     boardIds[key] = await createBoard(PROVISION_SPEC[key].name, resolvedWorkspaceId, folderId);
     if (folderId) createdInFolder.add(key);
+    createdBoards.add(key);
     tick(`נוצר לוח: ${PROVISION_SPEC[key].name}`);
   }
 
@@ -1126,6 +1136,29 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       }
       tick(`קישור: ${rel.title}`);
     }
+  }
+
+  /*
+   * 5) round363 — the live-board blueprint layer: task flag formulas, the
+   * discussions effectiveness pipeline (counts → mirrors → percents →
+   * effectiveness), default views, and — on boards CREATED by this run only —
+   * the default group's title+color and the name-column terminology. Runs
+   * AFTER the relations pass because the mirrors are configured off the
+   * tasksBoardLinkID relation column. Everything in it is display/derived
+   * data, so it is fail-soft inside AND belt-and-braces guarded here: a
+   * blueprint failure must never abort an otherwise-good install.
+   */
+  setPhase('מחיל את תבנית הלוחות (נוסחאות, מירורים, תצוגות)…');
+  try {
+    await applyBoardBlueprint({
+      boardIds,
+      columns,
+      existingByBoard,
+      createdBoards: [...createdBoards],
+      onProgress: tick,
+    });
+  } catch (err) {
+    logger.warn(MODULE, 'החלת תבנית הלוחות נכשלה — ההתקנה ממשיכה בלעדיה', err);
   }
 
   const config = {

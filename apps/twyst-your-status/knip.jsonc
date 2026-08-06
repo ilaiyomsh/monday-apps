@@ -1,0 +1,38 @@
+{
+  // knip config for the twyst-your-status SPA workspace ONLY.
+  //
+  // Deliberately scoped to this directory: the cleanup workflow runs knip with
+  // `--directory apps/twyst-your-status`, so a scan can never reach another app in the
+  // monorepo. `ignoreWorkspaces: ["server"]` keeps the nested guard-server workspace out
+  // of THIS report — it is scanned separately with its own server/knip.jsonc, which is
+  // the only way each workspace's dependencies get attributed to its own package.json.
+  //
+  // `.jsonc` and not `.json`: knip validates its config against a strict schema and
+  // rejects unknown keys, so a `_comment` field fails the whole run — comments are the
+  // only way to keep the rationale next to the config.
+  //
+  // Entry points that knip already infers on its own are deliberately NOT repeated here
+  // (it reports redundant patterns as configuration hints): index.html → src/index.jsx,
+  // vite.config.js, postcss.config.js, and src/setupTests.js via vite's test.setupFiles.
+  // What is listed below is what static imports do NOT reach:
+  //   src/dev-harness/** — the monday-sdk-js stub, aliased by vite in dev:mock AND vitest
+  //   src/test-utils/**  — imported only from test files
+  //   src/**/*.test.*    — the suites themselves are entry points, not dead files
+  "entry": [
+    "src/dev-harness/**/*.js",
+    "src/test-utils/**/*.{js,jsx}",
+    "src/**/*.test.{js,jsx}"
+  ],
+  "project": ["src/**/*.{js,jsx}"],
+  // LOAD-BEARING despite knip's own "Remove from ignoreWorkspaces" configuration hint:
+  // verified 2026-08-05 that dropping it puts 6 phantom "unlisted dependencies"
+  // (supertest, jsonwebtoken from server/tests/**) into the SPA report. knip's
+  // redundancy analyzer is wrong here — keep the line, ignore the hint.
+  "ignoreWorkspaces": ["server"],
+  // KNOWN FALSE POSITIVE, do not "fix" by removing the dependency: the app imports
+  // `@mapps/error-kit/browser` (a subpath export), which knip 5 does not credit to the
+  // bare package name, so it reports the workspace dependency as unused. Removing it
+  // would take the whole Axiom error pipeline down with it (src/index.jsx attachAxiomSink,
+  // src/hooks/useMondayContext.js setAxiomContext).
+  "ignoreDependencies": ["@mapps/error-kit"]
+}

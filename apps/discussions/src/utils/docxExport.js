@@ -33,6 +33,7 @@ import { api, parseValue, cvSelection } from './mondayApi/monday-client.js';
 import { דיונים1Board, החלטות1Board } from './mondayApi/BoardSDK.js';
 import { getColumns, getBoardId } from './mondayApi/board-config-store.js';
 import { DEFAULT_EXPORT_TEMPLATE, EXPORT_FONTS, DEFAULT_EXPORT_FONT, PEOPLE_META_FIELDS, isPeopleMetaField } from './mondayApi/boards.config.js';
+import { resolveExportTitle, composeExportTitle, titleAlign } from './exportTitle.js';
 import { loadSummaryUpdateId } from './summaryStore.js';
 import { loadReferencesUpdateId } from './referencesStore.js';
 import { loadBackgroundUpdateId } from './backgroundStore.js';
@@ -1032,7 +1033,16 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   // template's ordered `sections` list (skip disabled), so reordering/toggling in
   // Settings changes the document without touching this code.
   const children = [];
-  children.push(new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, children: [run(`סיכום דיון: ${model.title}`)] }));
+  // round365 (owner spec) — the title is COMPOSED from the template's title
+  // config (3 orderable parts + separators + alignment) instead of the old
+  // hardcoded `סיכום דיון: <שם>`; legacy templates resolve to the shipped
+  // default (`סיכום דיון - <שם> <תאריך>`). Alignment maps through START/END,
+  // never RIGHT/LEFT — RTL viewers flip absolute sides.
+  const titleCfg = resolveExportTitle(template?.title);
+  const titleAlignment = titleAlign(titleCfg) === 'center'
+    ? AlignmentType.CENTER
+    : titleAlign(titleCfg) === 'left' ? AlignmentType.END : AlignmentType.START;
+  children.push(new Paragraph({ bidirectional: true, alignment: titleAlignment, heading: HeadingLevel.HEADING_1, children: [run(composeExportTitle(titleCfg, model))] }));
 
   const sections = Array.isArray(template?.sections) ? template.sections : DEFAULT_EXPORT_TEMPLATE.sections;
   for (const section of sections) {

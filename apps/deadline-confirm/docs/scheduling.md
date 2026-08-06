@@ -310,30 +310,33 @@ mapps scheduler:run -a 11704868 -n digest-send
 היא מעכבת את הדיג'סט, ובאמצע פעימה שנהרגה הדוח של §5.2 **לא נשלח** (הוא נשלח
 בסוף), כך שריצה איטית קונה גם עיוורון לדוח.
 
-### 7.4 ~~A missed hour is never caught up~~ — implemented in round348
+### 7.4 A missed hour is never caught up — accepted (catch-up reverted 2026-08-06)
 
-Was: the comparison is to a **whole hour** (`sendHour !== hour`). A tick that
-is delayed and crosses the hour boundary misses the tenant for the entire
-day — no automatic catch-up, only a manual `resend-today`.
+**היסטוריה בשלושה שלבים, כדי שאף אחד לא "יתקן" את זה שוב:**
 
-**Now:** an hour that has already passed today is a catch-up candidate —
-every tick from that hour on retries the tenant, relying on the per-slot
-marker (`skipAlreadySent`, `digest-run.js`) to avoid a double send. A tick
-that already mailed everyone does not send again; a tick that died mid-run
-(e.g. hitting the §7.3 timeout) completes only whoever has not received it
-yet. The `due` flag (the audience for the operator summary + the CSV report)
-changed accordingly: at the tenant's own scheduled hour it is always true
-(even zero recipients is the normal reporting moment); on a catch-up hour it
-is true **only** when something actually happened (`sent>0` or `failed>0`) —
-otherwise every remaining hour of the day would re-report "nothing new,"
-exactly the hourly noise §5.1 already fixed once, for a different reason.
+1. **מקור:** ההשוואה היא לשעה שלמה (`sendHour !== hour`). פעימה שלא רצה בשעה
+   המדויקת של הטננט — מפספסת אותו ליום שלם. רק `resend-today` ידני מציל.
+2. **round348:** נוסף catch-up — כל שעה מ-`sendHour` ועד חצות מנסה שוב, כשסמן
+   ה-slot (`skipAlreadySent`) מבטיח שאף אחד לא יקבל מייל פעמיים.
+3. **2026-08-06 — הוחזר לאחור (החלטת בעלים).** ה-catch-up היה בטוח, אבל לא זו
+   הייתה ההתנגדות: **מי שנעשה זכאי אחרי השעה המתוזמנת** (שורה בלוח המשתמשים
+   שהושלמה, תאריך/סטטוס של משימה שהשתנה, תווית gate שהתהפכה) קיבל דיג'סט שעה
+   או שעתיים באיחור, וכל פעימה כזאת שלחה למפעיל עוד סיכום ועוד CSV. נמדד
+   בפרודקשן ב-2026-08-06: פעימת 10:00 שלחה 4, פעימת ה-catch-up של 11:00 שלחה
+   עוד 1 ודיווחה שוב. הכלל שנבחר פשוט יותר: **הדיג'סט הוא אירוע יומי בשעה
+   ידועה, ומי שהצטרף מאוחר מקבל למחרת.**
 
-**Cost:** a tenant already fully sent today is re-checked against the boards
-every remaining hour — the same two-board-read overhead §7.3 measures for a
-tick that sends nobody anything. Accepted overhead: there is no cheaper way
-to know "nothing left to do" without asking.
+**המצב היום:** `if (sendHour !== hour) continue;` — התאמה מדויקת לשני הכיוונים,
+ודילוג **שקט** (הטננט לא נכנס לרשימה בכלל: אין קריאות לוח, אין קהל לסיכום, אין
+דוח). `due` חזר להיות `true` לכל טננט שרץ — הגעה לשורה הזאת *היא* השעה
+המתוזמנת, ופעימה בשעה של הטננט מדווחת גם כשלא נשלח אף מייל (זה רגע הדיווח
+היומי הצפוי).
 
-Tests: `tests/scheduler-catchup.test.js`.
+**המחיר, על הפרוטוקול:** פעימה ש**מעולם לא רצה** בשעה של טננט עולה לו היום כולו,
+וההתאוששות היחידה היא שליחה ידנית ממסך הניהול. מה שכן מכוסה: פעימה ש**נכשלה או
+עברה timeout** — הפלטפורמה מנסה שוב (maxRetries 3, backoff 60 שניות, §2), וסמן
+ה-slot הוא מה שמונע מהניסיונות האלה למחזר מיילים. הסמן לא השתנה: הוא פותר
+retries, וזו בעיה אחרת מ-catch-up.
 
 ### 7.5 ~~קובץ סיכום פר עובד~~ — מיושם ב-0.14.0, ראה §5.2
 
@@ -363,7 +366,7 @@ Tests: `tests/scheduler-catchup.test.js`.
 | `tests/scheduler-summary-gate.test.js` | מי נחשב due לצורך הסיכום |
 | `tests/scheduler-summary-file.test.js` | מי מקבל את הדוח ומתי (§5.2) |
 | `tests/scheduler-duration.test.js` | מדידת זמן הריצה (§7.3) |
-| `tests/scheduler-catchup.test.js` | missed-hour catch-up, with no noise to the summary/report (§7.4) |
+| `tests/scheduler-hour-gate.test.js` | the EXACT-hour gate: no catch-up, no late joiner, and the scheduled hour still reports (§7.4) |
 | `tests/digest-summary-report.test.js` | הבייטים של ה-CSV, ה-BOM, הנוסח |
 | `tests/digest-summary-rows.test.js` | מאיפה המספרים — שורה לכל עובד |
 | `tests/mime-mixed.test.js` | העוטף, כולל אלטרנטיב מקונן בייט-אחר-בייט |

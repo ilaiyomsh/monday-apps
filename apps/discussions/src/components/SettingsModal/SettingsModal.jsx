@@ -21,7 +21,10 @@ function Diskette({ size = 16 }) {
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, COLUMN_SCHEMA, DEFAULT_PREFERENCES, resolvePreference, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, COLUMN_SCHEMA, DEFAULT_PREFERENCES, resolvePreference, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField, POINT_TEXT_SHARE_RANGE, CREATE_DISCUSSION_MODES } from '../../utils/mondayApi/boards.config.js';
+// round364 — owner-added custom column mappings (extra columns per type group
+// on the discussions/tasks boards). Pure logic lives in utils/customColumns.js.
+import { isCustomAlias, canAddCustomColumn, nextCustomAlias, makeCustomColumn, customEntriesFor } from '../../utils/customColumns.js';
 
 // Round 78: the effective auto-fill role list for a tasks access column
 // (taskEditorsID) — the stored preference, or the default when
@@ -159,6 +162,10 @@ export function seedExportTemplate(stored) {
   }
   base.header = { ...DEFAULT_EXPORT_TEMPLATE.header, ...(stored?.header || {}) };
   base.footer = { ...DEFAULT_EXPORT_TEMPLATE.footer, ...(stored?.footer || {}) };
+  // round365 — back-fill the document TITLE config into templates stored
+  // before the field existed (nested object: the top-level spread alone would
+  // leave a partial stored title missing its new sub-keys).
+  base.title = { ...DEFAULT_EXPORT_TEMPLATE.title, ...(stored?.title || {}) };
   return base;
 }
 
@@ -303,6 +310,12 @@ function seedPermissions(stored) {
   }
   return base;
 }
+
+// round367 — the create card's default toggle half + the auto-name choice.
+const CREATE_DISCUSSION_MODE_OPTIONS = [
+  { value: CREATE_DISCUSSION_MODES.TEMPLATE, text: 'דיון מתבנית' },
+  { value: CREATE_DISCUSSION_MODES.ADHOC, text: 'דיון מזדמן' },
+];
 
 const PREVIOUS_TASKS_MODE_OPTIONS = [
   { value: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION, text: 'לפי דיון קודם' },
@@ -542,6 +555,47 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
           id,
           // Manual selection is treated as user verification.
           verified: Boolean(String(id || '').trim()),
+        },
+      },
+    }));
+
+  /*
+   * round364 — custom extra column mappings. Adding creates an UNMAPPED row
+   * under a fresh `custom<N>ID` alias (index never reused — see customColumns);
+   * picking a column stamps the picked column's ACTUAL live type (a "טקסט"
+   * group pick may be long_text) + its title, so display surfaces parse and
+   * label it correctly with no schema entry. Removal deletes the alias from
+   * the draft — updateSettings replaces the whole per-board columns map on
+   * save, so a removed alias genuinely leaves storage (no resurrection).
+   */
+  const addCustomColumn = (boardKey, groupKey) =>
+    setColumns((c) => {
+      const entry = makeCustomColumn(groupKey);
+      if (!entry) return c;
+      return { ...c, [boardKey]: { ...c[boardKey], [nextCustomAlias(c[boardKey])]: entry } };
+    });
+
+  const removeCustomColumn = (boardKey, alias) =>
+    setColumns((c) => {
+      const board = { ...c[boardKey] };
+      delete board[alias];
+      return { ...c, [boardKey]: board };
+    });
+
+  const setCustomColPick = (boardKey, alias, picked) =>
+    setColumns((c) => ({
+      ...c,
+      [boardKey]: {
+        ...c[boardKey],
+        [alias]: {
+          ...(c[boardKey][alias] || {}),
+          id: String(picked?.id || ''),
+          // The picked column's live type + title travel WITH the mapping —
+          // customs have no COLUMN_SCHEMA entry to fall back on.
+          ...(picked?.type ? { type: picked.type } : {}),
+          title: picked?.title || '',
+          verified: Boolean(String(picked?.id || '').trim()),
+          custom: true,
         },
       },
     }));
@@ -967,8 +1021,8 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
 
   // round280 — mapping master–detail view model. These read the same `columns`
   // draft + alias lists the accordion used, so persistence is untouched.
-  const settingsFieldsFor = (boardKey) =>
-    boardKey === 'discussions'
+  const settingsFieldsFor = (boardKey) => {
+    const fixed = boardKey === 'discussions'
       ? DISCUSSIONS_SETTINGS_FIELDS
       : boardKey === 'tasks'
         ? TASKS_SETTINGS_FIELDS
@@ -977,6 +1031,11 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
           : boardKey === 'decisions'
             ? DECISIONS_SETTINGS_FIELDS
             : Object.keys(columns?.[boardKey] || {});
+    // round364 — the board's custom mappings join the list; typeGroupKey buckets
+    // them into the right type folder off the entry's own stored type.
+    const custom = customEntriesFor(columns?.[boardKey]).map(([alias]) => alias);
+    return custom.length ? [...fixed, ...custom] : fixed;
+  };
 
   const entriesFor = (boardKey) =>
     settingsFieldsFor(boardKey)
@@ -993,7 +1052,10 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
         title: g.title,
         entries: entries.filter(([, col]) => typeGroupKey(col.type) === g.key),
       }))
-      .filter((f) => f.entries.length > 0);
+      // round364 — an EMPTY folder still shows when the owner may add a custom
+      // column under it (e.g. tasks has no schema file field, but a custom file
+      // column must have somewhere to be added from).
+      .filter((f) => f.entries.length > 0 || canAddCustomColumn(boardKey, f.key));
   };
 
   if (!isOpen) return null;
@@ -1156,6 +1218,52 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                             ? String(subitemsBoardByBoard[ownBoardId] || '')
                             : ownBoardId;
                           const typedOptions = getTypedColumnOptions(boardId, col.type);
+                          /*
+                           * round364 — an owner-added custom mapping row. Same picker as a
+                           * schema row, plus a remove ✕; the pick resolves the column's
+                           * ACTUAL live type+title off the raw board column list (the
+                           * typed options strip them), because customs have no schema
+                           * entry to supply either.
+                           */
+                          if (isCustomAlias(alias)) {
+                            const rawCols = columnsByBoardId[String(boardId || '')] || [];
+                            const pick = (id) => {
+                              const hit = rawCols.find((o) => String(o.value) === String(id));
+                              setCustomColPick(boardKey, alias, hit
+                                ? { id: hit.value, type: hit.type, title: hit.label }
+                                : { id: '' });
+                            };
+                            return (
+                              <div key={alias} className={`${styles.colRow} ${styles.customColRow}`}>
+                                <div className={styles.colLabel}>
+                                  <Text type={"text2"}>{col.title || 'עמודה מותאמת'}</Text>
+                                </div>
+                                <SearchablePicker
+                                  options={typedOptions}
+                                  value={String(col.id || '')}
+                                  onChange={(id) => pick(id || '')}
+                                  placeholder={
+                                    loadingColumnsByBoardId[boardId]
+                                      ? 'טוען עמודות'
+                                      : typedOptions.length === 0
+                                        ? 'אין עמודות תואמות'
+                                        : 'בחר עמודה מהלוח'
+                                  }
+                                  isLoading={loadingColumnsByBoardId[boardId]}
+                                  disabled={loadingColumnsByBoardId[boardId] || typedOptions.length === 0}
+                                />
+                                <button
+                                  type="button"
+                                  className={styles.customColRemove}
+                                  aria-label={`הסר עמודה מותאמת ${col.title || alias}`}
+                                  title="הסרת העמודה מהמיפוי (העמודה בלוח לא נמחקת)"
+                                  onClick={() => removeCustomColumn(boardKey, alias)}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            );
+                          }
                           // Multi-column people mapping (יכולת עריכה): chips of
                           // the picked columns (first = the auto-fill target) +
                           // a picker that ADDS another column on select.
@@ -1291,9 +1399,14 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               const showDoneStatus = !searching && boardKey === 'tasks' && activeFolderKey === 'status';
               const detailMeta = activeFolder ? (TYPE_META[activeFolder.key] || TYPE_META.other) : TYPE_META.other;
 
+              // round364 — "+ הוספת עמודה" per eligible type folder (owner spec:
+              // discussions/tasks × people/dropdown/relation/date/text/file).
+              // Hidden while searching (search cuts across folders, so "which
+              // group would this add into" is undefined there).
+              const showAddCustom = !searching && canAddCustomColumn(boardKey, activeFolderKey);
               const rowsBody = (
                 <div className={styles.mapRows}>
-                  {shownEntries.length === 0 ? (
+                  {shownEntries.length === 0 && !showAddCustom ? (
                     <div className={styles.mapEmpty}>{searching ? 'לא נמצאו שדות' : 'אין שדות בקטגוריה זו'}</div>
                   ) : (
                     shownEntries.map((entry) => (
@@ -1304,6 +1417,15 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                         </React.Fragment>
                       ) : renderRow(entry)
                     ))
+                  )}
+                  {showAddCustom && (
+                    <button
+                      type="button"
+                      className={styles.addCustomCol}
+                      onClick={() => addCustomColumn(boardKey, activeFolderKey)}
+                    >
+                      + הוספת עמודה מהלוח
+                    </button>
                   )}
                 </div>
               );
@@ -1481,6 +1603,37 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       </label>
                     </div>
                   </div>
+                  {/* round367 — which half of the create-card toggle opens selected. */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>ברירת מחדל ליצירת דיון</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <ButtonGroup
+                        options={CREATE_DISCUSSION_MODE_OPTIONS}
+                        value={resolvePreference(preferences, 'createDiscussionMode')}
+                        onSelect={(value) => setPreferences((p) => ({ ...p, createDiscussionMode: value || DEFAULT_PREFERENCES.createDiscussionMode }))}
+                        size="small"
+                        kind="secondary"
+                      />
+                    </div>
+                  </div>
+                  {/* round367 — TEMPLATE mode only: auto name ("תבנית - תאריך") or empty. */}
+                  <div className={styles.prefRow} style={resolvePreference(preferences, 'createDiscussionMode') === CREATE_DISCUSSION_MODES.ADHOC ? { opacity: 0.45, pointerEvents: 'none' } : undefined}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>שם הדיון בדיון מתבנית</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={resolvePreference(preferences, 'templateAutoName') === true}
+                          onChange={(e) => setPreferences((p) => ({ ...p, templateAutoName: e.target.checked }))}
+                        />
+                        <Text type={"text2"}>שם אוטומטי — שם התבנית ותאריך הדיון</Text>
+                      </label>
+                    </div>
+                  </div>
                   {/* round296 — default width split of the ניהול-דיון row (agenda vs
                       triple box). Stored as preferences.defaultLayoutRatio = agenda's
                       share [0.25,0.75]. A per-discussion drag override is saved on that
@@ -1503,6 +1656,32 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                         />
                         <Text type={"text2"} style={{ whiteSpace: 'nowrap' }}>
                           {`אג'נדה ${Math.round((preferences.defaultLayoutRatio ?? DEFAULT_PREFERENCES.defaultLayoutRatio) * 100)}% · תיבה משולשת ${100 - Math.round((preferences.defaultLayoutRatio ?? DEFAULT_PREFERENCES.defaultLayoutRatio) * 100)}%`}
+                        </Text>
+                      </div>
+                    </div>
+                  </div>
+                  {/* round365 (owner spec, approved mockup) — how much of a point row
+                      the TEXT gets before the actions cluster (＋/מונה/אווטאר/פח)
+                      begins. 50% reproduces the old mid-row cluster; the shipped
+                      default is 60% (+20% text room). Applied live in ניהול דיון. */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>רוחב הטקסט של נקודה (מיקום כפתורי הפעולה)</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, direction: 'rtl' }}>
+                        <input
+                          type="range"
+                          min={POINT_TEXT_SHARE_RANGE.min}
+                          max={POINT_TEXT_SHARE_RANGE.max}
+                          step={1}
+                          value={Number(preferences.pointTextShare ?? DEFAULT_PREFERENCES.pointTextShare)}
+                          onChange={(e) => setPreferences((p) => ({ ...p, pointTextShare: Number(e.target.value) }))}
+                          aria-label="רוחב הטקסט של נקודה באחוזים משורת הנקודה"
+                          style={{ flex: 1, minWidth: 140 }}
+                        />
+                        <Text type={"text2"} style={{ whiteSpace: 'nowrap' }}>
+                          {`טקסט ${Number(preferences.pointTextShare ?? DEFAULT_PREFERENCES.pointTextShare)}% · 50% = ההתנהגות הישנה (אמצע)`}
                         </Text>
                       </div>
                     </div>

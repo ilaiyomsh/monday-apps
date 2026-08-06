@@ -16,6 +16,8 @@ import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { countPoints } from '@generated/utils/templates.js';
 import { shouldApplyTypeEdit } from './typeEditRequest.js';
+import { missingStoredTemplateDocx } from '@generated/utils/exportAssets.js';
+import { canSaveType, cleanTypeTopics } from './typeSaveGuard.js';
 import {
   useDropdownOptions,
   addDropdownLabel,
@@ -24,6 +26,7 @@ import {
 } from '@generated/hooks/useDropdownOptions.js';
 import { validateTypeRename } from '@generated/utils/typeRename.js';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
+import { splitPastedLines } from '@generated/utils/splitPastedLines.js';
 import { MONDAY_COLOR_NAMES, colorNameToCss } from '@generated/constants/mondayPalette.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import ExportTemplateTab from '@generated/components/SettingsModal/ExportTemplateTab.jsx';
@@ -123,7 +126,7 @@ function TypeDropdown({ value, onChange, options, colorFn, takenNames }) {
 }
 
 /* One draggable point row inside a topic (keyed by stable _uid). */
-function SortablePointRow({ topicUid, point, onChange, onRemove, onEnterAddPoint, autoFocus = false, onFocused }) {
+function SortablePointRow({ topicUid, point, onChange, onRemove, onEnterAddPoint, onPasteLines, autoFocus = false, onFocused }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: point._uid });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
   // round295 — when ENTER on the previous point created THIS (freshly added) row,
@@ -141,7 +144,17 @@ function SortablePointRow({ topicUid, point, onChange, onRemove, onEnterAddPoint
       <button type="button" className={styles.dragGrip} {...attributes} {...listeners} aria-label="גרור נקודה">
         <GripVertical size={14} />
       </button>
-      <div className={styles.pointField} ref={fieldRef}>
+      <div
+        className={styles.pointField}
+        ref={fieldRef}
+        /* round367 — a multi-line paste becomes one point ROW per line. */
+        onPaste={(e) => {
+          const lines = splitPastedLines(e.clipboardData?.getData('text'));
+          if (lines.length <= 1) return;
+          e.preventDefault();
+          onPasteLines?.(topicUid, point._uid, lines);
+        }}
+      >
         <TextField
           value={point.text}
           onChange={(v) => onChange(topicUid, point._uid, v)}
@@ -158,7 +171,7 @@ function SortablePointRow({ topicUid, point, onChange, onRemove, onEnterAddPoint
 }
 
 /* One draggable topic card with its own sortable points list. */
-function SortableTopicCard({ topic, sensors, canRemove, onSetName, onRemove, onAddPoint, onRemovePoint, onSetPoint, onPointsDragEnd, autoFocusPointUid, onPointFocused }) {
+function SortableTopicCard({ topic, sensors, canRemove, onSetName, onRemove, onAddPoint, onRemovePoint, onSetPoint, onPasteLines, onPointsDragEnd, autoFocusPointUid, onPointFocused }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: topic._uid });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
   return (
@@ -178,7 +191,7 @@ function SortableTopicCard({ topic, sensors, canRemove, onSetName, onRemove, onA
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onPointsDragEnd(topic._uid, e)}>
           <SortableContext items={topic.points.map((p) => p._uid)} strategy={verticalListSortingStrategy}>
             {topic.points.map((point) => (
-              <SortablePointRow key={point._uid} topicUid={topic._uid} point={point} onChange={onSetPoint} onRemove={onRemovePoint} onEnterAddPoint={onAddPoint} autoFocus={point._uid === autoFocusPointUid} onFocused={onPointFocused} />
+              <SortablePointRow key={point._uid} topicUid={topic._uid} point={point} onChange={onSetPoint} onRemove={onRemovePoint} onEnterAddPoint={onAddPoint} onPasteLines={onPasteLines} autoFocus={point._uid === autoFocusPointUid} onFocused={onPointFocused} />
             ))}
           </SortableContext>
         </DndContext>
@@ -297,6 +310,9 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
   // Item 18 — per-type default decider: when true, NEW decisions in discussions
   // of this type default their מחליט to the discussion's מנהל דיון.
   const [typeDeciderIsLead, setTypeDeciderIsLead] = useState(false);
+  // round367 — free-text external participants carried on the type template.
+  const [typeExternalParticipants, setTypeExternalParticipants] = useState([]);
+  const [typeExternalDraft, setTypeExternalDraft] = useState('');
   // round256 — the type editor is split into 3 sub-tabs: roles / agenda / export.
   const [typeSubTab, setTypeSubTab] = useState('roles'); // 'roles' | 'agenda' | 'export'
   // round254/256 — per-type export template (config on the TypeTemplate) + its own
@@ -402,6 +418,8 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
     setTypeParticipants(existing?.participants || []);
     setTypeColorDraft(typeColorName(typeName));
     setTypeDeciderIsLead(existing?.deciderIsLead === true);
+    setTypeExternalParticipants(existing?.externalParticipants || []);
+    setTypeExternalDraft('');
     // round256 — always open on the roles sub-tab; the export tab seeds from the
     // type's OWN template if it has one, otherwise from the system default
     // (settings.exportTemplate) → the built-in default. Not dirty until edited.
@@ -420,13 +438,31 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
      */
     const token = (typeAssetsLoadRef.current += 1);
     typeExportTouchedRef.current = false;
-    Promise.resolve(loadTypeExportAssets?.(typeName))
+    /*
+     * round361 (owner: "אין שגיאה אבל הקובץ לא שם") — the editor's read is STRICT,
+     * because here a swallowed read failure renders exactly like "no file was ever
+     * saved". Two distinct states become visible on the export sub-tab:
+     *   - the read itself failed → say so, instead of an innocent empty upload row;
+     *   - the read succeeded EMPTY while the type's OWN stored config says a file
+     *     was saved (`hasTemplateDocx` persists in the small, reliable
+     *     type-templates key) → the asset write was lost — say that.
+     * Both are token-guarded like the assets themselves — a stale result must not
+     * stamp an error onto a newer editing session.
+     */
+    Promise.resolve(loadTypeExportAssets?.(typeName, { strict: true }))
       .then((a) => {
         if (!a) return;
         if (token !== typeAssetsLoadRef.current || typeExportTouchedRef.current) return;
         setTypeExportAssets(a);
+        if (missingStoredTemplateDocx(existing?.exportTemplate ?? null, a)) {
+          setTypeExportAssetError('קובץ התבנית סומן כשמור, אך לא נמצא באחסון — נסו להעלות ולשמור אותו שוב.');
+        }
       })
-      .catch((err) => logger.warn('TemplateManagerModal', 'טעינת נכסי הייצוא של הסוג נכשלה', err));
+      .catch((err) => {
+        logger.warn('TemplateManagerModal', 'טעינת נכסי הייצוא של הסוג נכשלה', err);
+        if (token !== typeAssetsLoadRef.current) return;
+        setTypeExportAssetError('קריאת נכסי הייצוא של הסוג מהאחסון נכשלה — הקובץ עשוי להיות שמור. סגרו את העורך ונסו שוב.');
+      });
     setIsNew(!existing);
     setView('edit');
   };
@@ -440,6 +476,8 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
     setTypeParticipants([]);
     setTypeColorDraft(null);
     setTypeDeciderIsLead(false);
+    setTypeExternalParticipants([]);
+    setTypeExternalDraft('');
     setTypeSubTab('roles');
     setTypeExportTemplate(null);
     setTypeExportAssets(null);
@@ -520,6 +558,27 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
         t._uid === tuid ? { ...t, points: t.points.filter((p) => p._uid !== puid) } : t
       ),
     }));
+  /*
+   * round367 — a multi-line paste into a point field: an empty field takes the
+   * first line and the rest become new rows after it; a non-empty field keeps
+   * its text and ALL pasted lines become new rows.
+   */
+  const pastePointLines = (tuid, puid, lines) => {
+    update((d) => ({
+      ...d,
+      topics: d.topics.map((t) => {
+        if (t._uid !== tuid) return t;
+        const idx = t.points.findIndex((p) => p._uid === puid);
+        if (idx === -1) return t;
+        const target = t.points[idx];
+        const fillsTarget = !target.text.trim();
+        const newRows = (fillsTarget ? lines.slice(1) : lines).map((txt) => makePoint(txt));
+        const points = t.points.map((pt, i) => (i === idx && fillsTarget ? { ...pt, text: lines[0] } : pt));
+        points.splice(idx + 1, 0, ...newRows);
+        return { ...t, points };
+      }),
+    }));
+  };
   const setPoint = (tuid, puid, v) =>
     update((d) => ({
       ...d,
@@ -536,8 +595,24 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
       ? !!draft && draft.name.trim() && draft.topics.some((t) => t.name.trim())
       : kind === 'participants'
       ? !!pDraft && pDraft.name.trim() && (pDraft.participants || []).length > 0
-      // types: the type is fixed; require at least one topic or any person.
-      : !!draft && (draft.topics.some((t) => t.name.trim()) || typeLead.length > 0 || typeCoordinator.length > 0 || typeParticipants.length > 0);
+      // types: content (a topic / any person) OR an actual edit to one of the
+      // template-independent facets. round362 — the old content-only gate silently
+      // discarded an export-.docx upload (or a color / decider change) on a
+      // template-less type: it opens with one blank seeded topic, so canSave stayed
+      // false and the שמור button did nothing, with no error anywhere.
+      : canSaveType({
+          draft,
+          lead: typeLead,
+          coordinator: typeCoordinator,
+          participants: typeParticipants,
+          externalParticipants: typeExternalParticipants,
+          exportDirty: typeExportDirty,
+          colorDraft: typeColorDraft,
+          storedColor: draft ? typeColorName(draft.discussionType) : null,
+          deciderIsLead: typeDeciderIsLead,
+          storedDeciderIsLead:
+            typeTemplates.find((t) => t.discussionType === draft?.discussionType)?.deciderIsLead === true,
+        });
 
   const handleSave = async () => {
     if (!canSave || saving) return;
@@ -591,7 +666,9 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
         await upsertTypeTemplate({
           id: draft.id,
           discussionType: draft.discussionType,
-          topics: draft.topics.map((t) => ({ name: t.name, points: t.points.map((p) => p.text) })),
+          // round362 — blank rows (incl. the seeded one) are dropped, so an
+          // export-only save does not mint an empty agenda item.
+          topics: cleanTypeTopics(draft.topics),
           lead: typeLead,
           coordinator: typeCoordinator,
           participants: typeParticipants,
@@ -629,6 +706,7 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
     return JSON.stringify({
       topics: draft ? draft.topics.map((t) => ({ name: t.name, points: t.points.map((p) => p.text) })) : null,
       lead: typeLead, coordinator: typeCoordinator, participants: typeParticipants,
+      externalParticipants: typeExternalParticipants,
       color: typeColorDraft, deciderIsLead: typeDeciderIsLead, exportDirty: typeExportDirty,
     });
   };
@@ -1095,6 +1173,7 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
                       onAddPoint={addPoint}
                       onRemovePoint={removePoint}
                       onSetPoint={setPoint}
+                      onPasteLines={pastePointLines}
                       onPointsDragEnd={onPointsDragEnd}
                       autoFocusPointUid={autoFocusPointUid}
                       onPointFocused={() => setAutoFocusPointUid(null)}
@@ -1191,6 +1270,53 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
                   )}
                 </div>
 
+                {/* round367 — external participants (free-text names), carried
+                    on the template and injected into discussions of this type.
+                    Same chips UX as the create card; shown only when the
+                    column is mapped (like there). */}
+                {Boolean(discCols.externalParticipantsID?.id) && (
+                  <div className={styles.peopleCol}>
+                    <Text type="text2" className={styles.label}>משתתפים חיצוניים</Text>
+                    <div className={styles.extChipsRow}>
+                      {typeExternalParticipants.map((extName, i) => (
+                        <span key={`${extName}-${i}`} className={styles.extChip}>
+                          {extName}
+                          <button
+                            type="button"
+                            className={styles.extChipRemove}
+                            aria-label={`הסרת ${extName}`}
+                            onClick={() => setTypeExternalParticipants((list) => list.filter((_, j) => j !== i))}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      <input
+                        className={styles.extChipInput}
+                        value={typeExternalDraft}
+                        placeholder={typeExternalParticipants.length ? 'שם נוסף…' : 'שם מלא… (Enter להוספה)'}
+                        onChange={(e) => setTypeExternalDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter' || e.shiftKey) return;
+                          e.stopPropagation();
+                          if (typeExternalDraft.trim()) {
+                            e.preventDefault();
+                            setTypeExternalParticipants((list) => [...list, typeExternalDraft.trim()]);
+                            setTypeExternalDraft('');
+                          }
+                        }}
+                        onBlur={() => {
+                          if (typeExternalDraft.trim()) {
+                            setTypeExternalParticipants((list) => [...list, typeExternalDraft.trim()]);
+                            setTypeExternalDraft('');
+                          }
+                        }}
+                        aria-label="הוספת משתתף חיצוני לתבנית"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {/* Item 18 — per-type default decider toggle. */}
                 <label className={styles.deciderDefaultRow}>
                   <input
@@ -1221,6 +1347,7 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
                           onAddPoint={addPoint}
                           onRemovePoint={removePoint}
                           onSetPoint={setPoint}
+                          onPasteLines={pastePointLines}
                           onPointsDragEnd={onPointsDragEnd}
                           autoFocusPointUid={autoFocusPointUid}
                           onPointFocused={() => setAutoFocusPointUid(null)}

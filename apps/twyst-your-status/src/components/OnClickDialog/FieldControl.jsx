@@ -7,7 +7,6 @@
  * Adding a column type means adding a registry record and, only if it needs a
  * control that does not exist yet, one branch here.
  */
-import React from 'react';
 import { fieldControlFor } from '../../domain/columnFields';
 import { PersonPicker } from '../shared/PersonPicker';
 import BoardRelationFieldControl from './BoardRelationFieldControl';

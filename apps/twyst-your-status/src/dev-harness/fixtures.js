@@ -152,23 +152,6 @@ export const API_FIXTURES = [
     },
   },
   {
-    match: 'GetItemFormValues',
-    data: {
-      items: [{
-        id: '2222222222',
-        column_values: [
-          {
-            id: 'text',
-            type: 'text',
-            text: 'ערך קיים',
-            value: '"ערך קיים"',
-            column: { id: 'text', title: 'הערות', type: 'text' },
-          },
-        ],
-      }],
-    },
-  },
-  {
     match: 'GetStatusColumnRevision',
     data: {
       boards: [{ id: '1234567890', columns: [STATUS_GUARD_COLUMN] }],
