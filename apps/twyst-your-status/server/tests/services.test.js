@@ -648,28 +648,96 @@ describe('createMondayApi — getCurrentStatusLabelId', () => {
 // ---------------------------------------------------------------------------
 
 describe('createMondayApi — getColumnLabels', () => {
-  it('parses settings_str into label objects with STRING ids and an isDeactivated flag', async () => {
-    const settings = JSON.stringify({
-      labels: [
-        { id: 0, index: 0, label: 'ממתין' },
-        { id: 2, index: 1, label: 'בוצע', is_deactivated: true },
-      ],
-    });
+  // amend-intent round360: the old fixtures locked a wire shape that was
+  // factually WRONG — they fed `settings_str` (legacy stringified blob whose
+  // "labels" is a MAP {"0":"בעבודה",...}). normalizeStatusLabels only reads the
+  // TYPED ARRAY shape, so against the real API the evaluator got [] and the
+  // guard blocked EVERY transition on the column. The guard now reads the typed
+  // `settings` field (verified live on API 2026-04 — same field the client
+  // picker reads), so the fixtures lock THAT shape instead.
+
+  it('selects the typed `settings` field in the labels query — never legacy settings_str', async () => {
     const fetchImpl = makeFetch(
       jsonResponse({
-        data: {
-          boards: [{ columns: [{ id: 'status_col', settings_str: settings }] }],
-        },
+        data: { boards: [{ columns: [{ id: 'status_col', settings: { labels: [] } }] }] },
+      })
+    );
+    const api = apiWith(fetchImpl);
+
+    await api.getColumnLabels('tok', '5098', 'status_col');
+
+    const { body } = fetchCall(fetchImpl);
+    // settings_str's map-shaped "labels" normalizes to [] and turned the guard
+    // into a block-everything wall (round360) — the query must never regress.
+    expect(body.query).not.toContain('settings_str');
+    expect(body.query).toMatch(/\bsettings\b/);
+  });
+
+  it('normalizes the real live `settings` OBJECT (API 2026-04) into STRING ids with isDeactivated/isDone mapped', async () => {
+    // Verbatim live shape (probe on API 2026-04, round360): `settings` arrives
+    // as a JSON OBJECT whose labels is an ARRAY — no string parsing involved.
+    const settings = {
+      labels: [
+        { id: 0, color: 0, label: 'בעבודה', index: 0, is_done: false, is_deactivated: false, hex: '#fdab3d' },
+        { id: 1, color: 1, label: 'תקוע', index: 1, is_done: false, is_deactivated: true, hex: '#e2445c' },
+        { id: 2, color: 2, label: 'בוצע', index: 2, is_done: true, is_deactivated: false, hex: '#00c875' },
+      ],
+    };
+    const fetchImpl = makeFetch(
+      jsonResponse({
+        data: { boards: [{ columns: [{ id: 'status_col', settings }] }] },
       })
     );
     const api = apiWith(fetchImpl);
 
     const labels = await api.getColumnLabels('tok', '5098', 'status_col');
 
-    expect(labels).toHaveLength(2);
-    expect(labels[0]).toEqual(expect.objectContaining({ id: '0' }));
+    expect(labels).toHaveLength(3);
+    expect(labels[0]).toEqual(expect.objectContaining({ id: '0', label: 'בעבודה' }));
     expect(labels[0].isDeactivated).not.toBe(true);
-    expect(labels[1]).toEqual(expect.objectContaining({ id: '2', isDeactivated: true }));
+    expect(labels[1]).toEqual(expect.objectContaining({ id: '1', isDeactivated: true }));
+    expect(labels[2]).toEqual(expect.objectContaining({ id: '2', isDone: true }));
+  });
+
+  it('defensively parses `settings` when it arrives as a JSON STRING', async () => {
+    const settings = JSON.stringify({
+      labels: [{ id: 4, index: 0, label: 'ממתין' }],
+    });
+    const fetchImpl = makeFetch(
+      jsonResponse({
+        data: { boards: [{ columns: [{ id: 'status_col', settings }] }] },
+      })
+    );
+    const api = apiWith(fetchImpl);
+
+    const labels = await api.getColumnLabels('tok', '5098', 'status_col');
+
+    expect(labels).toHaveLength(1);
+    expect(labels[0]).toEqual(expect.objectContaining({ id: '4', label: 'ממתין' }));
+  });
+
+  it('returns [] when the column has no settings (unchanged contract)', async () => {
+    const fetchImpl = makeFetch(
+      jsonResponse({
+        data: { boards: [{ columns: [{ id: 'status_col', settings: null }] }] },
+      })
+    );
+    const api = apiWith(fetchImpl);
+
+    await expect(api.getColumnLabels('tok', '5098', 'status_col')).resolves.toEqual([]);
+  });
+
+  it('rejects with MondayApiError when a string settings payload is unparseable', async () => {
+    const fetchImpl = makeFetch(
+      jsonResponse({
+        data: { boards: [{ columns: [{ id: 'status_col', settings: '{not json' }] }] },
+      })
+    );
+    const api = apiWith(fetchImpl);
+
+    const err = await api.getColumnLabels('tok', '5098', 'status_col').catch((e) => e);
+    expect(err).toBeInstanceOf(MondayApiError);
+    expect(err.message).toContain('status_col');
   });
 });
 
