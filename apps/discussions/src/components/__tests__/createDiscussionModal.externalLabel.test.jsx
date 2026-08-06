@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /*
@@ -123,6 +123,11 @@ async function renderOpen(props = {}) {
     utils = render(<CreateDiscussionModal open onClose={() => {}} onCreated={() => {}} {...props} />);
   });
   await flush();
+  // round367 — the card opens folded behind the מתבנית/מזדמן toggle; reveal the
+  // ADHOC body so the form fields exist (create mode only — duplicate opens revealed).
+  if (!props.editDiscussion && !props.duplicateFrom) {
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'דיון מזדמן' })); });
+  }
   return utils;
 }
 

@@ -142,12 +142,22 @@ async function flush() {
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 }
 
-async function renderOpen(props = {}) {
+async function renderOpen(props = {}, { mode = 'adhoc', name = 'דיון בדיקה' } = {}) {
   let utils;
   await act(async () => {
     utils = render(<CreateDiscussionModal open onClose={() => {}} onCreated={() => {}} {...props} />);
   });
   await flush();
+  // round367 — the card opens folded behind the מתבנית/מזדמן toggle. Most tests
+  // exercise the form body, so the default reveals the ADHOC path and types a
+  // name (the old pre-seeded "דיון חדש" is gone by owner spec). Template-path
+  // tests pass { mode: 'template' } and drive the template picker themselves.
+  if (mode === 'adhoc' && !props.editDiscussion && !props.duplicateFrom) {
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'דיון מזדמן' })); });
+    if (name != null) {
+      fireEvent.change(screen.getByLabelText('שם הדיון'), { target: { value: name } });
+    }
+  }
   return utils;
 }
 
@@ -200,24 +210,25 @@ describe('CreateDiscussionModal', () => {
   });
 
   it('does not render a "ללא סוג" option and shows the placeholder when type unset', async () => {
-    await renderOpen();
+    await renderOpen({}, { mode: 'template' });
     expect(screen.queryByText('ללא סוג')).toBeNull();
-    expect(screen.getByText('בחר סוג דיון')).toBeTruthy();
+    // round367 — the picker cell is named for the TEMPLATE (the toggle already
+    // said "מתבנית"; "סוג" twice would be confusing).
+    expect(screen.getByText('בחרו תבנית דיון')).toBeTruthy();
   });
 
   it('shows a clear (X) button on the title only when a name is present, and clears it', async () => {
-    // A new discussion is prefilled with the default name, so the clear shows.
-    await renderOpen();
+    // round367 — the card no longer pre-seeds a name: it opens empty (no X).
+    await renderOpen({}, { name: null });
     const input = screen.getByLabelText('שם הדיון');
-    expect(input.value).toBeTruthy();
+    expect(input.value).toBe('');
+    expect(screen.queryByLabelText('ניקוי שם')).toBeNull();
+    // typing summons the clear button; clicking it empties the name again
+    fireEvent.change(input, { target: { value: 'דיון' } });
     const clear = screen.getByLabelText('ניקוי שם');
     fireEvent.click(clear);
     expect(input.value).toBe('');
-    // empty -> no clear
     expect(screen.queryByLabelText('ניקוי שם')).toBeNull();
-    // typing brings it back
-    fireEvent.change(input, { target: { value: 'דיון' } });
-    expect(screen.getByLabelText('ניקוי שם')).toBeTruthy();
   });
 
   it('shows a clear button on the date field (preset since round148) and clears it', async () => {
@@ -241,14 +252,14 @@ describe('CreateDiscussionModal', () => {
   });
 
   it('hides the "+ add type" affordance for a non-owner without the permission', async () => {
-    await renderOpen();
-    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    await renderOpen({}, { mode: 'template' });
+    fireEvent.click(screen.getByText('בחרו תבנית דיון'));
     expect(screen.queryByText('+ הוסף סוג דיון חדש')).toBeNull();
   });
 
   it('shows the "+ add type" affordance for an owner (canManageSettings)', async () => {
-    await renderOpen({ canManageSettings: true });
-    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    await renderOpen({ canManageSettings: true }, { mode: 'template' });
+    fireEvent.click(screen.getByText('בחרו תבנית דיון'));
     expect(screen.getByText('+ הוסף סוג דיון חדש')).toBeTruthy();
   });
 
@@ -375,10 +386,10 @@ describe('CreateDiscussionModal', () => {
       stagedCallsAtHandoff = templateApi.createTopicsFromTemplate.mock.calls.length;
     });
     const onStageAdvance = vi.fn();
-    await renderOpen({ onOptimisticCreate, onCreated: vi.fn(), onStageAdvance });
+    await renderOpen({ onOptimisticCreate, onCreated: vi.fn(), onStageAdvance }, { mode: 'template' });
     // Actually PICK the type, so its template really is attached — without this the
     // assertions below would vacuously pass with zero staged calls.
-    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    fireEvent.click(screen.getByText('בחרו תבנית דיון'));
     await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
     const submit = screen.getByText('צור דיון').closest('button');
     await act(async () => { fireEvent.click(submit); });
@@ -419,8 +430,8 @@ describe('CreateDiscussionModal', () => {
       throw new Error('topics pass failed');
     });
     const onOptimisticCreate = vi.fn();
-    await renderOpen({ onOptimisticCreate, onCreated: vi.fn() });
-    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    await renderOpen({ onOptimisticCreate, onCreated: vi.fn() }, { mode: 'template' });
+    fireEvent.click(screen.getByText('בחרו תבנית דיון'));
     await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
     await act(async () => { fireEvent.click(screen.getByText('צור דיון').closest('button')); });
     await flush();
@@ -459,8 +470,8 @@ describe('CreateDiscussionModal', () => {
         throw err;
       });
     const onStageError = vi.fn();
-    await renderOpen({ onOptimisticCreate: vi.fn(), onCreated: vi.fn(), onStageError });
-    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    await renderOpen({ onOptimisticCreate: vi.fn(), onCreated: vi.fn(), onStageError }, { mode: 'template' });
+    fireEvent.click(screen.getByText('בחרו תבנית דיון'));
     await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
     await act(async () => { fireEvent.click(screen.getByText('צור דיון').closest('button')); });
 
@@ -496,8 +507,8 @@ describe('CreateDiscussionModal', () => {
     const onOptimisticCreate = vi.fn();
     const onStageComplete = vi.fn();
     const onStageError = vi.fn();
-    await renderOpen({ onOptimisticCreate, onCreated: vi.fn(), onStageComplete, onStageError });
-    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    await renderOpen({ onOptimisticCreate, onCreated: vi.fn(), onStageComplete, onStageError }, { mode: 'template' });
+    fireEvent.click(screen.getByText('בחרו תבנית דיון'));
     await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
     const submit = screen.getByText('צור דיון').closest('button');
     await act(async () => { fireEvent.click(submit); });
@@ -536,8 +547,8 @@ describe('CreateDiscussionModal', () => {
 describe('CreateDiscussionModal — the staged background tail (round306 review)', () => {
   const withType = async (props) => {
     templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: [{ name: 'נושא א', points: ['א1'] }] }];
-    const utils = await renderOpen({ onCreated: vi.fn(), ...props });
-    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    const utils = await renderOpen({ onCreated: vi.fn(), ...props }, { mode: 'template' });
+    fireEvent.click(screen.getByText('בחרו תבנית דיון'));
     await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
     return utils;
   };

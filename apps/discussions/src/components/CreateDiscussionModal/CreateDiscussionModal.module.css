@@ -668,3 +668,36 @@
   background: transparent;
   padding: 4px 2px;
 }
+
+/* round367 — the create-path toggle: full-width, two halves (right =
+   מתבנית, left = מזדמן), clean — no captions, no state text. */
+.modeToggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1.5px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--primary-background-color, #fff);
+}
+.modeToggleBtn {
+  padding: 12px 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--secondary-text-color, #676879);
+  transition: background 0.15s, color 0.15s;
+}
+.modeToggleBtn:not(.modeToggleActive):hover {
+  background: var(--primary-selected-color, #e6f1fd);
+  color: var(--primary-color, #0073ea);
+}
+.modeToggleActive {
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+}
+.modeToggleBtn:focus-visible { outline: 2px solid var(--primary-color, #0073ea); outline-offset: -3px; }
+/* keeps the header X pinned left while the title input is hidden */
+.titleSpacer { flex: 1; }

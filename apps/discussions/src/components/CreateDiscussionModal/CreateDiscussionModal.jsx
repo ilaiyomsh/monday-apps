@@ -17,7 +17,8 @@ import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { PREVIOUS_TASKS_MODES, resolvePreference } from '@generated/utils/mondayApi/boards.config.js';
+import { PREVIOUS_TASKS_MODES, CREATE_DISCUSSION_MODES, resolvePreference } from '@generated/utils/mondayApi/boards.config.js';
+import { buildAutoName, formatNameDate, syncTrailingDate } from '@generated/utils/autoDiscussionName.js';
 import { createTopicsFromTemplate, linkTemplateTopics, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
 import { parseExternalParticipants, formatExternalParticipants } from '@generated/utils/externalParticipants.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
@@ -52,7 +53,6 @@ function FieldClearButton({ onClear, label = 'ניקוי' }) {
   );
 }
 
-const NEW_DISCUSSION_NAME = 'דיון חדש';
 
 // round115 — may the app WRITE the mapped discussion-creator column? Only a
 // regular people column is writable; monday's built-in "creation log" column
@@ -131,6 +131,16 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
   // repeated per call site (which is how this drifted from the shipped default).
   const previousTasksMode = resolvePreference(settings?.preferences, 'previousTasksMode');
   const [name, setName] = useState('');
+  /*
+   * round367 (owner spec, approved mockup) — the card opens on a two-path
+   * toggle: TEMPLATE (pick a template → template aspects revealed, auto name,
+   * no previous-discussion link) or ADHOC (clean name + previous link).
+   * lastAutoDateRef carries the date string the card last wrote at the END of
+   * the name; a date change rewrites only that suffix, and stops forever once
+   * the user removed/changed it.
+   */
+  const [createMode, setCreateMode] = useState(CREATE_DISCUSSION_MODES.TEMPLATE);
+  const lastAutoDateRef = useRef('');
   // round129 — while the edit/duplicate SOURCE record is being fetched, the
   // form is hidden behind a loading bar (the owner saw an "empty card filling
   // in slowly"); the fields appear only fully populated.
@@ -210,8 +220,14 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
   // must stay). LINKED_DISCUSSION always shows it. Derived from `discussionType`,
   // so it reacts live as the type is picked/cleared.
   const typeChosen = discussionType !== null && discussionType !== undefined;
+  // round367 — the staged card: in create/duplicate the form body reveals only
+  // once the path is usable (ADHOC immediately; TEMPLATE after a template was
+  // picked). Edit mode keeps the full card. TEMPLATE mode never shows דיון קודם.
+  const templateMode = !isEdit && createMode === CREATE_DISCUSSION_MODES.TEMPLATE;
+  const formRevealed = isEdit || isDuplicate || !templateMode || typeChosen;
   const hidePreviousDiscussion =
-    previousTasksMode === PREVIOUS_TASKS_MODES.DISCUSSION_TYPE
+    templateMode
+    || previousTasksMode === PREVIOUS_TASKS_MODES.DISCUSSION_TYPE
     || (previousTasksMode === PREVIOUS_TASKS_MODES.AUTO && typeChosen);
 
   // Opening the time menu lands on the selected time (or 08:00), centered.
@@ -321,7 +337,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
         // "Duplicate" actually creates a CONTINUATION of the source discussion:
         // same participants + topics, a clean date, the source itself set as the
         // "previous discussion", and a "דיון המשך - {name}" title.
-        setName(src ? `דיון המשך - ${src.name || ''}` : NEW_DISCUSSION_NAME);
+        setName(src ? `דיון המשך - ${src.name || ''}` : '');
+      // round367 — the toggle's initial half: a duplicate of a TYPED discussion
+      // lands on template mode; otherwise the owner's preference decides.
+      lastAutoDateRef.current = '';
+      setCreateMode(src
+        ? (src.discussionTypeID ? CREATE_DISCUSSION_MODES.TEMPLATE : CREATE_DISCUSSION_MODES.ADHOC)
+        : resolvePreference(settings?.preferences, 'createDiscussionMode'));
         // round148 — a new-discussion card opens stamped with the MOMENT it
         // was opened (today + the current time), immediately editable. An
         // explicit calendar-slot prefill (the user clicked a specific hour)
@@ -403,6 +425,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
     });
     // The template may also carry a "מוביל דיון" — set it when present.
     if (Array.isArray(tpl.lead) && tpl.lead.length) setLead(tpl.lead);
+    // round367 — the template's external participants merge in (dedup by trimmed name).
+    if (Array.isArray(tpl.externalParticipants) && tpl.externalParticipants.length) {
+      setExternalParticipants((prev) => {
+        const seen = new Set(prev.map((n) => String(n).trim()));
+        return [...prev, ...tpl.externalParticipants.filter((n) => !seen.has(String(n).trim()))];
+      });
+    }
     // round295 — and a "מרכז דיון" (coordinator): it is stored on the template
     // (sanitizeTypeTemplate/sanitizeParticipantTemplate) but was never applied
     // here, so the coordinator defined in a type/participant template never
@@ -438,7 +467,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
       // manual topic-template pick so we don't double-create topics.
       setTemplateId('none');
       setTypeTopics(typeTopicsFor(id));
-      applyParticipantTemplate({ participants: typeTpl.participants, lead: typeTpl.lead, coordinator: typeTpl.coordinator });
+      applyParticipantTemplate({
+        participants: typeTpl.participants,
+        lead: typeTpl.lead,
+        coordinator: typeTpl.coordinator,
+        externalParticipants: typeTpl.externalParticipants,
+      });
+      autoNameForType(id);
       return;
     }
 
@@ -447,6 +482,22 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
     if (topicTpl) setTemplateId(topicTpl.id);
     const partTpl = participantTemplates.find((t) => t.discussionType === id);
     if (partTpl) applyParticipantTemplate(partTpl);
+    autoNameForType(id);
+  };
+
+  /*
+   * round367 — TEMPLATE mode + the templateAutoName preference: picking a
+   * template writes "<תבנית> - <DD.MM.YYYY>" (the card's current date). Only
+   * when the name is empty or still the previous auto name — a name the user
+   * typed is never overwritten.
+   */
+  const autoNameForType = (typeName) => {
+    if (isEdit || createMode !== CREATE_DISCUSSION_MODES.TEMPLATE) return;
+    if (resolvePreference(settings?.preferences, 'templateAutoName') !== true) return;
+    const isAutoOrEmpty = !name.trim() || (lastAutoDateRef.current && name.endsWith(lastAutoDateRef.current));
+    if (!isAutoOrEmpty) return;
+    setName(buildAutoName(typeName, date));
+    lastAutoDateRef.current = formatNameDate(date);
   };
 
   // Add a new discussion type: create the label on the "סוג" dropdown column
@@ -495,6 +546,23 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
       logger.error('CreateDiscussionModal', 'שגיאה בהוספת סוג דיון — הסוג לא נוצר בלוח', err);
     } finally {
       setAddingType(false);
+    }
+  };
+
+  /*
+   * round367 — switching the toggle half. To ADHOC: the discussion is typeless
+   * (type + stashed agenda cleared) and a still-auto name is cleared to the
+   * clean empty state; a user-typed name survives the switch. To TEMPLATE: the
+   * form folds back until a template is picked (unless one is already picked).
+   */
+  const switchCreateMode = (nextMode) => {
+    if (nextMode === createMode) return;
+    setCreateMode(nextMode);
+    if (nextMode === CREATE_DISCUSSION_MODES.ADHOC) {
+      setDiscussionType(null);
+      setTypeTopics(null);
+      if (lastAutoDateRef.current && name.endsWith(lastAutoDateRef.current)) setName('');
+      lastAutoDateRef.current = '';
     }
   };
 
@@ -1140,15 +1208,19 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
         dir="rtl"
       >
         <div className={styles.header}>
-          <input
-            ref={titleRef}
-            className={styles.titleInput}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="שם הדיון"
-            aria-label="שם הדיון"
-          />
-          {name && <FieldClearButton onClear={() => setName('')} label="ניקוי שם" />}
+          {/* round367 — the title appears only once the card body has opened
+              (adhoc immediately; template after picking a template). */}
+          {formRevealed ? (
+            <input
+              ref={titleRef}
+              className={styles.titleInput}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="שם הדיון"
+              aria-label="שם הדיון"
+            />
+          ) : <span className={styles.titleSpacer} aria-hidden="true" />}
+          {formRevealed && name && <FieldClearButton onClear={() => setName('')} label="ניקוי שם" />}
           <button type="button" className={styles.closeButton} onClick={onClose} aria-label="סגירה">
             ×
           </button>
@@ -1163,7 +1235,35 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
             </div>
           )}
           <Flex direction="column" gap={16} align="stretch" className={styles.form} style={prefillLoading ? { display: 'none' } : undefined}>
-            {/* Row 1: סוג דיון — full-width, on its own row. */}
+            {/* round367 — the two-path toggle (approved mockup): full-width,
+                right = מתבנית (default per preference), left = מזדמן. Always
+                switchable; not shown when editing an existing discussion. */}
+            {!isEdit && (
+              <div className={styles.modeToggle} role="tablist" aria-label="אופן יצירת הדיון">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={createMode === CREATE_DISCUSSION_MODES.TEMPLATE}
+                  className={`${styles.modeToggleBtn} ${createMode === CREATE_DISCUSSION_MODES.TEMPLATE ? styles.modeToggleActive : ''}`}
+                  onClick={() => switchCreateMode(CREATE_DISCUSSION_MODES.TEMPLATE)}
+                >
+                  דיון מתבנית
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={createMode === CREATE_DISCUSSION_MODES.ADHOC}
+                  className={`${styles.modeToggleBtn} ${createMode === CREATE_DISCUSSION_MODES.ADHOC ? styles.modeToggleActive : ''}`}
+                  onClick={() => switchCreateMode(CREATE_DISCUSSION_MODES.ADHOC)}
+                >
+                  דיון מזדמן
+                </button>
+              </div>
+            )}
+
+            {/* Row 1: סוג דיון — full-width, on its own row. round367: shown in
+                TEMPLATE mode (and in edit, where the toggle doesn't exist). */}
+            {(isEdit || templateMode) && (
             <div className={`${styles.row} ${styles.rowSingle}`}>
               <div className={styles.field}>
                 <Text type="text2" className={styles.label}>{fieldLabels.type}</Text>
@@ -1193,7 +1293,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
                         {discussionType}
                       </span>
                     ) : (
-                      <span className={`${styles.dropdownValue} ${styles.dropdownPlaceholder}`}>בחר סוג דיון</span>
+                      <span className={`${styles.dropdownValue} ${styles.dropdownPlaceholder}`}>{templateMode ? 'בחרו תבנית דיון' : 'בחר סוג דיון'}</span>
                     )}
                     <span className={styles.dropdownChevron} aria-hidden="true">▾</span>
                   </button>
@@ -1307,6 +1407,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
               </div>
             </div>
 
+            )}
+
+            {/* round367 — the card body opens downward only once the path is
+                usable; until then only the toggle (+ template picker) shows. */}
+            {formRevealed && (<>
             {/* Row 2: תאריך הדיון + שעה, side by side. */}
             <div className={`${styles.row} ${styles.rowSingle}`}>
               <div className={styles.field}>
@@ -1318,7 +1423,14 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
                         variant="field"
                         zIndex={4200}
                         value={date ? new Date(`${date}T00:00:00`) : null}
-                        onChange={(d) => setDate(d ? toDateInput(d) : '')}
+                        onChange={(d) => {
+                          const next = d ? toDateInput(d) : '';
+                          setDate(next);
+                          // round367 — rewrite ONLY the auto date at the END of
+                          // the name; a removed suffix means hands off forever.
+                          const sync = syncTrailingDate(name, lastAutoDateRef.current, next);
+                          if (sync) { setName(sync.name); lastAutoDateRef.current = sync.dateStr; }
+                        }}
                       />
                     </div>
                   </div>
@@ -1511,6 +1623,8 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
               </div>
             )}
 
+            </>)}
+
             {/* Row 4: דיון קודם (previous discussion). */}
             {!hidePreviousDiscussion && (
             <div className={`${styles.row} ${styles.rowSingle}`}>
@@ -1587,6 +1701,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
             </div>
             )}
           </Flex>
+          {formRevealed && (
           <Flex align="center" justify="space-between" className={styles.footer}>
             <div className={styles.creator}>
               {creatorUsers.length > 0 ? (
@@ -1615,6 +1730,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
               </Button>
             </Flex>
           </Flex>
+          )}
           {/* Item 6 — real-progress bar while the discussion (+ template topics)
               is being created; confetti bursts over everything on success. */}
           {creating && createProgress && (
