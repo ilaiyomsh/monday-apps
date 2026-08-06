@@ -81,7 +81,7 @@ describe('round347 — the agenda, verbatim from the spec', () => {
   it('produces the canonical stored shape', () => {
     const t = buildDefaultTypeTemplate(ME, 'fixed-id');
     expect(Object.keys(t).sort()).toEqual([
-      'coordinator', 'deciderIsLead', 'discussionType', 'exportTemplate', 'id', 'lead', 'participants', 'topics',
+      'coordinator', 'deciderIsLead', 'discussionType', 'exportTemplate', 'externalParticipants', 'id', 'lead', 'participants', 'topics',
     ]);
     expect(t.id).toBe('fixed-id');
     // The "decider = lead" default is a GLOBAL preference; the per-type flag stays off so the

@@ -119,8 +119,8 @@ export function sanitizeParticipantTemplate(template, id) {
  *
  * Shape:
  *   TypeTemplate = { id, discussionType: string, topics: Topic[], lead, coordinator,
- *                    participants: Person[], deciderIsLead: boolean,
- *                    exportTemplate: object|null }
+ *                    participants: Person[], externalParticipants: string[],
+ *                    deciderIsLead: boolean, exportTemplate: object|null }
  *
  * `discussionType` is REQUIRED (it is the key — the label TEXT) — sanitize
  * returns null when it is missing so callers can drop malformed entries.
@@ -142,6 +142,11 @@ export function sanitizeTypeTemplate(template, id) {
     lead: sanitizePeople(template?.lead),
     coordinator: sanitizePeople(template?.coordinator),
     participants: sanitizePeople(template?.participants),
+    // round367 — free-text external participants (not monday users), carried
+    // on the type template exactly like the create card's chips.
+    externalParticipants: (Array.isArray(template?.externalParticipants) ? template.externalParticipants : [])
+      .map((s) => String(s ?? '').trim())
+      .filter(Boolean),
     // item 18 — per-type default decider flag (מחליט = מנהל הדיון). Strict
     // boolean so a stored junk value can never truthy its way in.
     deciderIsLead: template?.deciderIsLead === true,

@@ -27,6 +27,7 @@ export function canSaveType({
   lead,
   coordinator,
   participants,
+  externalParticipants,
   exportDirty,
   colorDraft,
   storedColor,
@@ -38,7 +39,9 @@ export function canSaveType({
     (draft.topics || []).some((t) => String(t?.name || '').trim()) ||
     (lead?.length || 0) > 0 ||
     (coordinator?.length || 0) > 0 ||
-    (participants?.length || 0) > 0;
+    (participants?.length || 0) > 0 ||
+    // round367 — a type whose only content is its external participants still saves.
+    (externalParticipants?.length || 0) > 0;
   const edited =
     exportDirty === true ||
     (colorDraft != null && colorDraft !== storedColor) ||
