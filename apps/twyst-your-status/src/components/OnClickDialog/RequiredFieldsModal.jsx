@@ -10,7 +10,7 @@
  * The picker passes board/column/item explicitly rather than trusting the modal's
  * monday context to carry a cell selection it never made.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { prefillFieldValue } from '../../domain/columnFields';
 import { buildMultiColumnWritePayload } from '../../domain/columnValueFormats';
 import { getLabelRule } from '../../domain/settingsSchema';
@@ -21,11 +21,11 @@ import {
   UPDATE_MULTIPLE_COLUMN_VALUES,
 } from '../../services/graphqlQueries';
 import mondayService from '../../services/mondayService';
+import { useBootLoaderRelease } from '../../hooks/useBootLoaderRelease';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
-import { dismissBootLoader } from '../../utils/bootLoader';
 import { readModalHandoffParams } from '../../utils/modalHandoffParams';
-import ErrorState from '../shared/ErrorState';
+import ErrorState, { SETTINGS_LOAD_ERROR_MESSAGE } from '../shared/ErrorState';
 import RequiredFieldsForm from './RequiredFieldsForm';
 import './OnClickDialog.css';
 
@@ -172,9 +172,7 @@ function RequiredFieldsModal({ context }) {
   // behind a spinner, and `loading` stays true forever on the missing-ids path because
   // load() returns before its finally block.
   const stillLoading = hasIds && (settingsLoading || loading) && !settingsError;
-  useEffect(() => {
-    if (!stillLoading) dismissBootLoader();
-  }, [stillLoading]);
+  useBootLoaderRelease(stillLoading);
 
   if (!hasIds) {
     return (
@@ -182,7 +180,7 @@ function RequiredFieldsModal({ context }) {
     );
   }
   if (settingsError) {
-    return <ErrorState message="טעינת ההגדרות נכשלה. נסו שוב." onRetry={reloadSettings} />;
+    return <ErrorState message={SETTINGS_LOAD_ERROR_MESSAGE} onRetry={reloadSettings} />;
   }
   if (settingsLoading || loading) {
     // Nothing of our own: the boot overlay is still up, and drawing a second loader

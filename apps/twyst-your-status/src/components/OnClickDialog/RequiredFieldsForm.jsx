@@ -8,7 +8,7 @@
  * domain/columnFields.js — see requiredFieldsForm.test.jsx, which pins the
  * blocking behavior.
  */
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AttentionBox } from '@vibe/core';
 import { isFieldValueEmpty, isSupportedFormColumnType } from '../../domain/columnFields';
 import { LABEL_COLUMN_WIDTH_PX, requiredFormLayout } from '../../utils/requiredFormModalSize';

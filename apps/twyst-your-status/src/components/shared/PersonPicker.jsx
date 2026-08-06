@@ -5,12 +5,13 @@
 // Adaptations for the scaffold: the account roster is fetched here via
 // mondayService (the source app read it from a shared usersStore), and logging
 // hooks were dropped. Behavior and markup are otherwise identical.
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Avatar, AvatarGroup } from '@vibe/core';
 import { Check, CloseSmall, Search, Person } from '@vibe/icons';
 import { computeFloatingPosition } from '../../utils/overlayPlacement';
 import mondayService from '../../services/mondayService';
+import { loadRoster, getCachedRoster } from '../../services/rosterAccess';
 import logger from '../../utils/logger';
 import styles from './PersonPicker.module.css';
 
@@ -28,29 +29,6 @@ function photoOf(user) {
 
 function entryKey(entry) {
   return `${entry?.kind || 'person'}:${String(entry?.id)}`;
-}
-
-// Module-level roster cache: one users query per page load, shared by every
-// picker instance. Avatar URLs use monday's photo_thumb (API 2026-04 pin —
-// photo_url { thumb } only exists from 2026-07).
-let rosterCache = null;
-let rosterPromise = null;
-async function loadRoster() {
-  if (rosterCache) return rosterCache;
-  if (!rosterPromise) {
-    rosterPromise = mondayService
-      .query('query AccountUsers($limit: Int) { users(limit: $limit) { id name photo_thumb } }', { limit: 500 })
-      .then((data) => {
-        rosterCache = data?.users || [];
-        return rosterCache;
-      })
-      .catch((err) => {
-        logger.error('PersonPicker', 'Failed to load account roster', err);
-        rosterPromise = null; // allow retry on next open
-        return [];
-      });
-  }
-  return rosterPromise;
 }
 
 /**
@@ -79,8 +57,8 @@ export function PersonPicker({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [pos, setPos] = useState(null);
-  const [fetchedUsers, setFetchedUsers] = useState(rosterCache || []);
-  const [loading, setLoading] = useState(!users && !rosterCache);
+  const [fetchedUsers, setFetchedUsers] = useState(getCachedRoster() || []);
+  const [loading, setLoading] = useState(!users && !getCachedRoster());
   const triggerRef = useRef(null);
   const popoverRef = useRef(null);
 
@@ -120,7 +98,6 @@ export function PersonPicker({
   }, [roster]);
   const getEntry = (entry) => byKey.get(entryKey(entry));
 
-  // Close on click-outside / Escape.
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (e) => {
@@ -139,23 +116,24 @@ export function PersonPicker({
     };
   }, [open]);
 
+  const reposition = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const next = computeFloatingPosition({
+      anchorRect: rect,
+      preferred: 'bottom-start',
+      popupWidth: Math.max(rect.width, 300),
+      popupHeight: 430,
+      offset: 4,
+    });
+    if (!next) return;
+    setPos({ top: next.top, left: next.left, minWidth: Math.max(rect.width, 280) });
+  }, []);
+
   // Reposition on scroll/resize while open (capture-phase scroll catches
   // scrolling containers, not just the window).
   useEffect(() => {
     if (!open) return undefined;
-    const reposition = () => {
-      const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const next = computeFloatingPosition({
-        anchorRect: rect,
-        preferred: 'bottom-start',
-        popupWidth: Math.max(rect.width, 300),
-        popupHeight: 430,
-        offset: 4,
-      });
-      if (!next) return;
-      setPos({ top: next.top, left: next.left, minWidth: Math.max(rect.width, 280) });
-    };
     reposition();
     window.addEventListener('resize', reposition);
     window.addEventListener('scroll', reposition, true);
@@ -206,19 +184,7 @@ export function PersonPicker({
       setSearch('');
       return;
     }
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) {
-      const next = computeFloatingPosition({
-        anchorRect: rect,
-        preferred: 'bottom-start',
-        popupWidth: Math.max(rect.width, 300),
-        popupHeight: 430,
-        offset: 4,
-      });
-      if (next) {
-        setPos({ top: next.top, left: next.left, minWidth: Math.max(rect.width, 280) });
-      }
-    }
+    reposition();
     setOpen(true);
   };
 
@@ -370,5 +336,3 @@ export function PersonPicker({
     </>
   );
 }
-
-export default PersonPicker;

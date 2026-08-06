@@ -26,7 +26,8 @@ const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
  * @param {{
  *   handleEvent: Function,
  *   tokenStore: object, enrollmentStore: object, api: object,
- *   env: object, logger: object, fetchImpl?: typeof fetch,
+ *   rulesStore: object, bypassLog: object, oauthClient: object,
+ *   env: object, logger: object, now?: () => number,
  *   publicDir?: string,   // override the SPA dir (tests); default server/public
  * }} deps
  */

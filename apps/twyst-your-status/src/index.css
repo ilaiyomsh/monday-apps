@@ -72,6 +72,15 @@ html:has(.app-shell.is-modal) #root {
   overflow: hidden;
 }
 
+.twyst-center-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
 /*
  * LoadingState's spinner — a CSS copy of @vibe/core's Loader (medium, 40px), the
  * same hand transcription as the boot overlay in index.html. Importing Vibe's

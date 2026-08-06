@@ -54,7 +54,10 @@ export function useMondayContext() {
 
     initContext();
 
-    // Listen for context changes (theme switches, language changes).
+    // Listen for context changes (theme switches, language changes) — monday re-emits the
+    // whole context object on those, which is why locale and theme are re-applied here and
+    // not only on first mount. (Restored after a cleanup batch removed it: it states a
+    // platform fact about WHICH events re-emit context, not what the line below does.)
     const unsubscribe = mondayService.listenToContext((newContext) => {
       setContext(newContext);
       applyLocale(newContext);

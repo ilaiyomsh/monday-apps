@@ -120,7 +120,8 @@ export function normalizeStatusLabels(columnSettings) {
 
 /**
  * @deprecated Prefer buildAvailableLabels from ./buildAvailableLabels.js for
- * permission-aware picking. Kept for legacy restricted-label-only callers/tests.
+ * permission-aware picking. No production callers remain; kept only for the
+ * restricted-label-only cases pinned in statusPolicy.test.js.
  */
 export function buildStatusPickerModel({ labels, currentValue, config }) {
   const normalizedLabels = Array.isArray(labels) ? labels : [];
