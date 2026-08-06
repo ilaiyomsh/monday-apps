@@ -23,13 +23,14 @@ function clamp(v, lo, hi) {
  * missing (caller then falls back to the viewport placement).
  */
 export function computeBoundedAnchorStyle({
-  anchor, bounds, cardWidth = 280, widthScale = 1.8, gap = 8, pad = 8, estHeight = 260, viewportWidth,
+  anchor, bounds, cardWidth = 280, widthScale = 1.2, gap = 8, pad = 8, estHeight = 260, viewportWidth,
 }) {
   if (!anchor || !bounds) return null;
   /*
-   * round368 §3 / round369 (owner spec) — the card is `widthScale`× wider and
-   * every added pixel goes LEFT: its RIGHT edge stays exactly where round243/266
-   * put it. round369 raised the scale from 1.5 to 1.8 on the owner's request.
+   * round368 §3 (owner spec) — the card is `widthScale`× wider and every added
+   * pixel goes LEFT: its RIGHT edge stays exactly where round243/266 put it.
+   * The scale is the owner's dial: 1.5 (round368) → 1.8 (round369) → **1.2**
+   * (round370, "אני לא רוצה ב80% אלא ב20%"). Only this number moves.
    * So the base placement is computed first (a cardWidth-wide card centered
    * under the "+", clamped inside the agenda box), its right edge is frozen,
    * and the card then grows leftward from there. Growing left may take it past

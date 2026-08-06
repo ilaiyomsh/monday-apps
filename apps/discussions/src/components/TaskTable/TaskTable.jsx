@@ -14,6 +14,7 @@ import { useViewport } from '@generated/hooks/useViewport.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
 import { useRelationItems } from '@generated/hooks/useRelationItems.js';
+import { collectedEquals } from './collectedEquals.js';
 import { getColumns } from '@api/board-config-store.js';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
@@ -190,16 +191,21 @@ export function TaskTable({
    * inline editor. Hooks can't run in a variable-length loop, so each dropdown
    * column mounts ONE collector component (per COLUMN, not per row — the
    * round136 perf rule) that reports its options up into this map.
+   *
+   * round370 — both setters bail on collectedEquals, not on `===`. A collected
+   * hook that rebuilds its view object each render would otherwise make the
+   * report-up effect fire forever (state → render → new object → state …), which
+   * is precisely how a custom relation column froze the whole tab.
    */
   const [customDropdownOptions, setCustomDropdownOptions] = useState({});
   const reportDropdownOptions = useCallback((alias, opts) => {
-    setCustomDropdownOptions((m) => (m[alias] === opts ? m : { ...m, [alias]: opts }));
+    setCustomDropdownOptions((m) => (collectedEquals(m[alias], opts) ? m : { ...m, [alias]: opts }));
   }, []);
   const customDropdownCols = customCols.filter((c) => c.type === 'dropdown');
   // round368 — candidate items per custom relation column (same collector shape).
   const [customRelationOptions, setCustomRelationOptions] = useState({});
   const reportRelationItems = useCallback((alias, rel) => {
-    setCustomRelationOptions((m) => (m[alias] === rel ? m : { ...m, [alias]: rel }));
+    setCustomRelationOptions((m) => (collectedEquals(m[alias], rel) ? m : { ...m, [alias]: rel }));
   }, []);
   const customRelationCols = customCols.filter((c) => c.type === 'board_relation' || c.type === 'connect_boards');
 
