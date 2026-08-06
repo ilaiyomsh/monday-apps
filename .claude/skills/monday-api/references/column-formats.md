@@ -286,6 +286,10 @@ Legacy `text`/`value` are null on relation-family columns. Read typed fragments:
 ## Board / column identity operations
 
 - Rename column keeping id: `change_column_title(board_id, column_id, title)`.
+- **The built-in first (Name) column renames the same way — `column_id: "name"`.**
+  (Verified live 2026-08-06, round363 sandbox.) There is NO `update_board` path for it:
+  `board_attribute: item_nickname` is not in the enum (`name`/`description`/`communication`
+  only) and dies with a bare `INTERNAL_SERVER_ERROR`, not a validation message.
 - Rename board: `update_board(board_id, board_attribute: name, new_value)`.
 - Create board: `create_board(board_name, board_kind: public, workspace_id, empty: true)`.
 - Some system columns (subitems link, parent link) are non-deletable — rename, don't delete.
