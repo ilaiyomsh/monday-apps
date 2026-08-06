@@ -2,6 +2,59 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.16.2 — 2026-08-06 — the bottom row's status menu has room to open
+
+**Reported from a real inbox:** the dropdown of the last row in the digest was cut
+off by the email's bottom edge — the menu opened into the border and was hidden
+behind it.
+
+**Why it happened.** `.dd-menu` is `position:absolute; top:100%`, so it is out of
+flow: the document's height at load time does not include it, and the
+dynamic-email frame is sized from that height. Every row above the last one opens
+its menu over the rows below and is fine. The last one has nothing below it, so it
+opened into space the frame does not have.
+
+**Why it is not "open it upward instead".** amp4email has no JS, no viewport API
+and no container query — there is nothing in the document that can measure the
+space below a trigger and decide. A static flip for the last row only trades the
+bug for its mirror image (a single-row mail with no text above it would then clip
+at the top). The deterministic fix is to make the room exist.
+
+**What the renderer does now.** `menuHeightFor()` in `helpers/digest-amp.js`
+computes the height a menu of N options occupies (`4 + 16 + 38N + 4(N−1)`, the
+four numbers mirroring the `.dd-menu`/`.dd-opt` rules) and emits a generated
+`.dd-tail { height:…px }` plus one empty div as the **last child of `.wrap`**. It
+is sized from the WIDEST cluster in the document, not the last one, so the reserve
+is a document-wide property and cluster order cannot change it — 2 buttons →
+100px, 4 → 184px. Inside the card rather than after it, for two reasons: the menu
+paints onto white instead of onto the page background, and `.dd-overlay`
+(absolute, inset 0 of `.wrap`) keeps covering the reserved strip, so tapping down
+there still closes the menu. A document with no cluster reserves nothing — no
+element, no rule, and the class name is not even mentioned in the stylesheet's
+comments, since the sheet ships inside the message.
+
+**The reserve is deliberately not netted** against the padding that already sits
+below the last row (form padding + card margin + card padding + body padding, some
+209px in the narrow layout against 142px needed for three options). A number
+derived from five other numbers goes stale the day any one of them moves, and the
+only cost of over-reserving is whitespace at the foot of the mail — which is the
+second half of what the owner asked for.
+
+**Outer gutters widened in the same change:** `body` `14px 10px` → `22px 16px
+32px`, `.wrap` `18px` → `22px`. The bottom gutter is the widest of the three
+because that edge is where an open menu and the frame's end meet.
+
+`tests/digest-amp-menu-room.test.js` pins all of it: the reserve exists and is
+sized from the widest cluster in either order, it is the card's last child, a
+clusterless document has none, the rule stays out of the media query (it must not
+depend on width), and the gutters carry minimum sizes rather than exact strings.
+
+The AMP validator could not be reached from this sandbox
+(`cdn.ampproject.org` → 403, the script's documented exit 3 — infrastructure, not
+a verdict). The change adds one empty `div` and a `height` declaration, both
+already in the strict property set; `npm run validate:amp` on a runner with CDN
+access is the confirmation.
+
 ## 0.16.1 — 2026-08-06 — the cron runs at the scheduled hour and at no other hour
 
 **Reverses §7.4's catch-up (round348, live since 0.16.0).** That change made
