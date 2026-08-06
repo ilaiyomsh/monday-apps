@@ -936,4 +936,132 @@ describe('createStatusChangeHandler', () => {
     );
     expect(timingLines).toHaveLength(0);
   });
+
+  it('COUNTS echo skips per revert: two pre-echo reverts arm two skips, both echoes are consumed with zero I/O, and a THIRD owner change to the same value is evaluated', async () => {
+    // With 40s-4min deliveries observed live, TWO illegal changes can both be
+    // processed (both reverting to '0') before EITHER echo webhook arrives. A
+    // single-flag marker would skip one echo and evaluate the other — reverting
+    // the guard's own write. The allowance is therefore a COUNTER: one skip per
+    // revert, and the budget is EXACT — once both echoes are consumed, a real
+    // owner change to that same value must be evaluated like anyone else's.
+    const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue(autoRules());
+    deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
+    deps.api.getCurrentStatusLabelId.mockResolvedValue('2'); // illegal value still current
+    const handle = createStatusChangeHandler(deps);
+
+    // Two illegal 0→2 changes by two different actors, BEFORE any echo arrives.
+    await handle(makeEvent({ userId: 41 }));
+    await handle(makeEvent({ userId: 42 }));
+    await settle(); // detached notify+append tails land
+    expect(deps.api.revertStatus).toHaveBeenCalledTimes(2);
+    expect(deps.evaluate).toHaveBeenCalledTimes(2);
+    expect(deps.bypassLog.append).toHaveBeenCalledTimes(2);
+
+    // Both echoes of our own reverts: primary owner "changed" 2→0, twice.
+    await handle(makeEvent({
+      userId: 50,
+      value: { label: { index: 0, text: 'ממתין' } },
+      previousValue: { label: { index: 2, text: 'בוצע' } },
+    }));
+    await handle(makeEvent({
+      userId: 50,
+      value: { label: { index: 0, text: 'ממתין' } },
+      previousValue: { label: { index: 2, text: 'בוצע' } },
+    }));
+    await settle();
+
+    // BOTH echoes were skipped, not evaluated — and with ZERO store/api I/O:
+    // the reader-token count is still exactly the two illegal deliveries.
+    expect(deps.evaluate).toHaveBeenCalledTimes(2);
+    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledTimes(2);
+    expect(deps.api.revertStatus).toHaveBeenCalledTimes(2);
+
+    // Budget exhausted: a THIRD owner change to the same value '0' is a genuine
+    // change — evaluated (blocked by the mocks), re-read '2' ≠ '0' → stale →
+    // recorded, not reverted.
+    await handle(makeEvent({
+      userId: 50,
+      value: { label: { index: 0, text: 'ממתין' } },
+      previousValue: { label: { index: 2, text: 'בוצע' } },
+    }));
+    await settle();
+
+    expect(deps.evaluate).toHaveBeenCalledTimes(3);
+    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledTimes(3); // real I/O this time
+    expect(deps.api.revertStatus).toHaveBeenCalledTimes(2); // stale → no third revert
+    expect(deps.bypassLog.append).toHaveBeenCalledTimes(3);
+    expect(appendedRecord(deps, 2)).toMatchObject({
+      userId: '50', fromLabelId: '2', toLabelId: '0', reverted: false,
+    });
+
+    // Both illegal-change actors were notified; the stale third change was not
+    // (order between detached tails is not guaranteed).
+    const notifiedUserIds = deps.api.notifyUser.mock.calls.map((call) => String(call[1])).sort();
+    expect(notifiedUserIds).toEqual(['41', '42']);
+  });
+
+  it('cancels the armed echo-skip when revertStatus REJECTS: the would-be echo is evaluated as a genuine change with real I/O', async () => {
+    // A failed revert never landed on the board, so monday will never fire its
+    // echo. Leaving the skip armed would silently swallow the NEXT genuine owner
+    // change that happens to match it (same value, within the TTL) — so a
+    // rejected revert must disarm its own marker.
+    const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue(autoRules());
+    deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
+    deps.api.getCurrentStatusLabelId.mockResolvedValue('2');
+    deps.api.revertStatus.mockRejectedValue(new Error('change_column_value failed'));
+    const handle = createStatusChangeHandler(deps);
+
+    await handle(makeEvent()); // illegal 0→2 → revert attempted → REJECTS
+    await settle();
+    expect(deps.api.revertStatus).toHaveBeenCalledTimes(1);
+    expect(deps.logger.error).toHaveBeenCalledTimes(1);
+    // Processing failed AT the revert — its append never happened.
+    expect(deps.bypassLog.append).not.toHaveBeenCalled();
+
+    // The delivery that WOULD have matched the (cancelled) echo marker.
+    await handle(makeEvent({
+      userId: 50,
+      value: { label: { index: 0, text: 'ממתין' } },
+      previousValue: { label: { index: 2, text: 'בוצע' } },
+    }));
+    await settle();
+
+    // Evaluated as genuine, with real I/O — not skipped.
+    expect(deps.evaluate).toHaveBeenCalledTimes(2);
+    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledTimes(2);
+    // And its verdict is processed normally: blocked, re-read '2' ≠ '0' → stale
+    // → recorded reverted false, no second revert attempt, no new error.
+    expect(deps.api.revertStatus).toHaveBeenCalledTimes(1);
+    expect(deps.bypassLog.append).toHaveBeenCalledTimes(1);
+    expect(appendedRecord(deps)).toMatchObject({ userId: '50', reverted: false });
+    expect(deps.logger.error).toHaveBeenCalledTimes(1); // only the failed revert
+  });
+
+  it('TIMING: still emits exactly ONE guard-timing line, full format and ids, on a fail-open (empty labels) delivery', async () => {
+    // The degraded deliveries are precisely the ones the timing line exists to
+    // attribute — a fail-open path that went dark would hide the very latency
+    // that caused it. The fail-open behavior itself (error + no evaluate) is
+    // pinned elsewhere; here we pin only that the timing line survives it.
+    const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue(autoRules());
+    deps.api.getColumnLabels.mockResolvedValue([]);
+    const handle = createStatusChangeHandler(deps);
+
+    await handle(makeEvent());
+    await settle();
+
+    expect(deps.evaluate).not.toHaveBeenCalled(); // proves we're on the degraded path
+    const timingLines = deps.logger.info.mock.calls.filter(
+      ([msg]) => typeof msg === 'string' && msg.startsWith('guard timing'),
+    );
+    expect(timingLines).toHaveLength(1);
+    expect(timingLines[0][0]).toMatch(
+      /^guard timing total=\d+ms tokens=\d+ms rules=\d+ms gql=\d+ms reread=\d+ms revert=\d+ms$/,
+    );
+    expect(timingLines[0][2]).toMatchObject({
+      accountId: ACCOUNT, boardId: '5098', columnId: 'status_col', itemId: '777',
+    });
+  });
 });

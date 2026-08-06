@@ -31,6 +31,14 @@ revert throw (P2), fail-open missing timing (P2), tail append delayed behind not
 
 ## Remaining work (fresh session TODO, in order)
 
+> **STATUS 2026-08-06 (continuation session): items 1–4 DONE, item 5 committed on this
+> branch.** The three handler tests were written blind (test-writer subagent, contract
+> only) and each verified red via a targeted mutation: echo-counter removal, disarm
+> removal, fail-open-timing removal — all KILLED, plus a 4th kill on the stores.js
+> dead-pointer fallback. Suites: server 272/272, app root 878/878, eslint clean.
+> CHANGELOG 3.16.0 written, root package.json bumped (server stays 1.1.0). Item 6
+> (live re-test path: release vs draft test column) is still an open owner decision.
+
 1. **Add the three missing handler tests** in `server/tests/handleStatusChangeEvent.test.js`
    (red-first — verify red by temporarily reverting the specific source lines):
    a. Double revert, two echoes: two illegal changes to the same item processed before either echo;
