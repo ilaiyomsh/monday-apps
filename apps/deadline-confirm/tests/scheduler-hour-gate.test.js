@@ -1,15 +1,24 @@
-// TDD — §7.4: catch up a missed cron hour (owner decision 2026-08-05).
+// The cron tick runs a tenant at its EXACT sendHour and at no other hour
+// (owner decision 2026-08-06 — reverses §7.4's catch-up, round348).
 //
-// Today the hour filter is an exact match (`sendHour !== hour` -> skip). A tick
-// that never fires for a tenant's hour (platform hiccup, a retry landing an
-// hour late, §7.1's stream-isolation surprise) means that tenant gets nothing
-// for the WHOLE day: every later tick that hour also fails the exact match, and
-// no tick ever re-checks a past hour. Fix: once a tenant's hour has passed
-// today, every later tick is a catch-up candidate. Safety comes from the
-// EXISTING per-slot marker (skipAlreadySent, digest-run.js) — a catch-up
-// attempt against someone already fully sent mails nobody twice, and must not
-// re-appear in the operator summary / CSV report either (that noise is exactly
-// what §5.1's due-tenant fix already closed once, for a different cause).
+// WHY THE REVERSAL. Catch-up made every tick from sendHour to midnight
+// re-attempt the tenant, with the per-slot marker keeping it safe. It was safe,
+// and it was also noisy in a way the owner did not want: someone who became
+// eligible AFTER the scheduled hour (a users-board row filled in, a task's date
+// or status changed, a recipient-gate label flipped) got a digest an hour or two
+// later, and every such tick mailed the operator another summary + CSV. Measured
+// in production 2026-08-06: a 10:00 tick sent 4, and the 11:00 catch-up sent 1
+// more and reported again. The owner's rule is simpler — the digest is a
+// once-a-day event at a known hour, and whoever joined late waits for tomorrow.
+//
+// What this costs, stated plainly: a tick that never fires for a tenant's hour
+// (platform hiccup, §7.1 stream-isolation surprise) costs that tenant the day
+// again, recoverable only by the admin screen's resend. The platform's own retry
+// (maxRetries 3, 60s backoff — §2) still covers a tick that FAILED; it is a tick
+// that never ran at all that is now unrecoverable, as it was before round348.
+//
+// The per-slot marker (skipAlreadySent) stays exactly as it was: it is what makes
+// the platform's retries safe, which is a different problem from catch-up.
 
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
@@ -20,7 +29,9 @@ import { createRateLimiter } from '../src/helpers/rate-limit.js';
 
 const ACCOUNT_A = '111';
 const TODAY = '2026-07-19';
-const HOUR_10 = new Date('2026-07-19T10:05:00+03:00'); // sendHour 8 already passed today
+const HOUR_7 = new Date('2026-07-19T07:05:00+03:00'); // before sendHour 8
+const HOUR_8 = new Date('2026-07-19T08:05:00+03:00'); // the tenant's own hour
+const HOUR_10 = new Date('2026-07-19T10:05:00+03:00'); // sendHour 8 already passed
 const SLOT = '20260719';
 
 function fullConfig(sendHour = 8) {
@@ -188,84 +199,105 @@ async function harness({
 
 const tick = (app) => request(app).post('/mndy-cronjob/digest-send');
 
-describe('cron tick — §7.4 catch-up for a missed hour', () => {
-  it('sends the digest at hour 10 for a tenant configured for hour 8 whose tick never ran', async () => {
+describe('cron tick — the hour gate is an EXACT match', () => {
+  it('does NOT run a tenant configured for hour 8 when the tick fires at hour 10', async () => {
     const { app, send } = await harness({ now: HOUR_10 });
 
     const res = await tick(app);
 
     expect(res.status).toBe(200);
     expect(res.body.hour).toBe(10);
+    // Not "ran and sent nobody" — not listed at all. A tenant whose hour is not
+    // now is silent: no board reads, no summary audience, no report.
+    expect(res.body.tenants.find((t) => t.accountId === ACCOUNT_A)).toBeUndefined();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('runs the tenant at its own hour', async () => {
+    const { app, send } = await harness({ now: HOUR_8 });
+
+    const res = await tick(app);
+
+    expect(res.status).toBe(200);
+    expect(res.body.hour).toBe(8);
     const tenant = res.body.tenants.find((t) => t.accountId === ACCOUNT_A);
     expect(tenant).toMatchObject({ sent: 1, failed: 0, slot: SLOT });
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0][0].to).toBe('dana@example.com');
   });
 
-  it('does not re-mail a tenant already fully sent earlier today — the marker makes catch-up safe', async () => {
-    const { app, send } = await harness({
-      now: HOUR_10,
-      marker: { slot: SLOT, personIds: ['501'] }, // דנה already got it, e.g. at hour 8
-    });
+  it('stays silent before the hour arrives, exactly as it always did', async () => {
+    const { app, send } = await harness({ now: HOUR_7 });
 
     const res = await tick(app);
 
-    expect(res.status).toBe(200);
-    const tenant = res.body.tenants.find((t) => t.accountId === ACCOUNT_A);
-    expect(tenant).toMatchObject({ sent: 0, failed: 0, alreadySent: 1 });
+    expect(res.body.hour).toBe(7);
+    expect(res.body.tenants.find((t) => t.accountId === ACCOUNT_A)).toBeUndefined();
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('keeps a fully-caught-up tenant OUT of the operator summary — no hourly "nothing to do" noise', async () => {
+  it('someone who becomes eligible after the hour waits for tomorrow — no later tick picks them up', async () => {
+    // The production case that prompted the reversal: at the scheduled hour only
+    // one person qualified; by hour 10 a second one does. The later tick must not
+    // mail them (and must not report).
     const { app, send } = await harness({
       now: HOUR_10,
-      marker: { slot: SLOT, personIds: ['501'] },
+      marker: { slot: SLOT, personIds: ['501'] }, // דנה was mailed at hour 8
+      api: { getBoardItems: boardItemsTwoDouble() }, // רון became eligible since
       operatorEmail: 'ops@twyst.co.il',
-    });
-
-    const res = await tick(app);
-
-    // The tick DID attempt this tenant (proves catch-up ran — not "never touched",
-    // which would make the assertions below true for a reason that has nothing to
-    // do with the noise fix).
-    const tenant = res.body.tenants.find((t) => t.accountId === ACCOUNT_A);
-    expect(tenant).toMatchObject({ alreadySent: 1 });
-    // ...but nothing NEW happened this tick, so no operator summary either.
-    expect(res.body.summarySent).toBe(false);
-    expect(send).not.toHaveBeenCalled(); // neither the digest nor the operator summary
-  });
-
-  it('sends no per-employee CSV report for a catch-up tick that found nothing new', async () => {
-    const { app, send } = await harness({
-      now: HOUR_10,
-      marker: { slot: SLOT, personIds: ['501'] },
       senderAddress: 'sender-a@tenant.example',
     });
 
     const res = await tick(app);
 
-    const tenant = res.body.tenants.find((t) => t.accountId === ACCOUNT_A);
-    expect(tenant).toMatchObject({ alreadySent: 1 });
+    expect(send).not.toHaveBeenCalled(); // not the digest, not the summary, not the CSV
+    expect(res.body.summarySent).toBe(false);
     expect(res.body.reportsSent).toBe(0);
+    expect(res.body.tenants.find((t) => t.accountId === ACCOUNT_A)).toBeUndefined();
+  });
+
+  it('a tick that missed the hour does NOT recover it later in the day (the accepted cost)', async () => {
+    // Nobody was mailed at hour 8 (no marker at all) and the tick fires at 10:
+    // the day is simply lost for this tenant. Pinned so the cost is a decision on
+    // the record, not a surprise the next time someone reads the hour filter.
+    const { app, send } = await harness({ now: HOUR_10 });
+
+    await tick(app);
+
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('catches up a PARTIAL prior run — mails only whoever the marker does not already cover', async () => {
-    // A tick that died mid-loop at the scheduled hour (digest-run.js writes the
-    // marker after EVERY successful send, not once at the end) leaves exactly
-    // this shape: one recipient already covered, one not.
+  it('still mails at the scheduled hour whoever a partial earlier run missed', async () => {
+    // The marker keeps doing its job WITHIN the hour: a platform retry of a tick
+    // that died mid-loop mails only the recipients still uncovered.
     const { app, send } = await harness({
-      now: HOUR_10,
+      now: HOUR_8,
       marker: { slot: SLOT, personIds: ['501'] },
       api: { getBoardItems: boardItemsTwoDouble() },
     });
 
     const res = await tick(app);
 
-    expect(res.status).toBe(200);
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0][0].to).toBe('ron@example.com');
     const tenant = res.body.tenants.find((t) => t.accountId === ACCOUNT_A);
     expect(tenant).toMatchObject({ sent: 1, failed: 0, alreadySent: 1 });
+  });
+
+  it('reports at the scheduled hour even when the marker already covered everyone', async () => {
+    // At the tenant's OWN hour the summary is the expected reporting moment —
+    // that is the one case §5.1's due-filter must keep answering true for.
+    const { app, send } = await harness({
+      now: HOUR_8,
+      marker: { slot: SLOT, personIds: ['501'] },
+      operatorEmail: 'ops@twyst.co.il',
+    });
+
+    const res = await tick(app);
+
+    const tenant = res.body.tenants.find((t) => t.accountId === ACCOUNT_A);
+    expect(tenant).toMatchObject({ sent: 0, alreadySent: 1 });
+    expect(res.body.summarySent).toBe(true);
+    expect(send).toHaveBeenCalledTimes(1); // the operator summary only
   });
 });
