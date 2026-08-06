@@ -14,6 +14,7 @@ import { useViewport } from '@generated/hooks/useViewport.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
 import { useRelationItems } from '@generated/hooks/useRelationItems.js';
+import { CustomStatusCollector } from '@generated/components/CustomStatusCollector';
 import { collectedEquals } from './collectedEquals.js';
 import { getColumns } from '@api/board-config-store.js';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
@@ -208,6 +209,12 @@ export function TaskTable({
     setCustomRelationOptions((m) => (collectedEquals(m[alias], rel) ? m : { ...m, [alias]: rel }));
   }, []);
   const customRelationCols = customCols.filter((c) => c.type === 'board_relation' || c.type === 'connect_boards');
+  // round372 — label options per custom STATUS column (same collector shape).
+  const [customStatusOptions, setCustomStatusOptions] = useState({});
+  const reportStatusOptions = useCallback((alias, opts) => {
+    setCustomStatusOptions((m) => (collectedEquals(m[alias], opts) ? m : { ...m, [alias]: opts }));
+  }, []);
+  const customStatusCols = customCols.filter((c) => c.type === 'status' || c.type === 'color');
 
   // Width defs follow the live VISIBLE order; 'sel' is a fixed (non-resizable)
   // leading track, everything else resizes within the constants' clamps.
@@ -299,6 +306,9 @@ export function TaskTable({
       {onCustomChange && customRelationCols.map((c) => (
         <RelationItemsCollector key={c.alias} alias={c.alias} onItems={reportRelationItems} />
       ))}
+      {customStatusCols.map((c) => (
+        <CustomStatusCollector key={c.alias} alias={c.alias} onOptions={reportStatusOptions} />
+      ))}
       <div className={tableClass} dir="ltr" style={color ? { '--group-color': color } : undefined}>
         {/* header */}
         <div className={`${styles.taskRow} ${styles.taskHead}`} style={rowStyle}>
@@ -326,6 +336,7 @@ export function TaskTable({
               onCustomChange={onCustomChange && canTask('editTaskCustomColumns', task) ? onCustomChange : undefined}
               customDropdownOptions={customDropdownOptions}
               customRelationOptions={customRelationOptions}
+              customStatusOptions={customStatusOptions}
               onRenameTask={onRenameTask && canTask('editTaskName', task) ? onRenameTask : undefined}
               onDeleteTask={onDeleteTask}
               onRetryCreate={onRetryCreate}

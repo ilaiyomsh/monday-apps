@@ -51,3 +51,22 @@
 .fileLink:hover {
   text-decoration: underline;
 }
+
+/* round372 — custom STATUS column chip. Deliberately a compact inline pill rather
+   than the full-cell fill the built-in status column uses: this renderer also
+   serves the discussion-management details row, where the value sits in a text
+   line, not a grid cell. */
+.statusFill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  padding: 2px 10px;
+  border-radius: var(--border-radius-small, 4px);
+  color: var(--text-color-on-primary, #fff);
+  font-size: 13px;
+  font-weight: var(--font-weight-normal, 500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

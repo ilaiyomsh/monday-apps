@@ -215,9 +215,19 @@ function matchPersonCol(c, people) {
 export function customFilterDims(customCols) {
   return (customCols || []).map((c) => {
     const t = c.type;
+    /*
+     * round372 — a custom STATUS column filters as a value set, exactly like a
+     * dropdown. What differs is the value's SHAPE: parseValue gives a status its
+     * stable label ID (a number, and 0 is a real label), not the label text, so the
+     * option list must resolve ids → text via the column's status labels. The
+     * comparison itself needs no special case — customComparableValues stringifies
+     * the id and the Set holds id strings. 'color' is monday's legacy name for the
+     * same column type and is grouped with it in the mapping screen.
+     */
     const control = (t === 'people' || t === 'person' || t === 'multiple_person') ? 'person'
       : t === 'date' ? 'date'
-        : (t === 'dropdown' || t === 'board_relation' || t === 'connect_boards') ? 'values'
+        : (t === 'status' || t === 'color'
+          || t === 'dropdown' || t === 'board_relation' || t === 'connect_boards') ? 'values'
           : (t === 'text' || t === 'long_text') ? 'text'
             : null;
     return control ? { key: c.alias, control, title: c.title || c.alias } : null;
