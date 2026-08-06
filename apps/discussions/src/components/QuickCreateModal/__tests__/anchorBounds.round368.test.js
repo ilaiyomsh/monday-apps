@@ -2,12 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { computeBoundedAnchorStyle } from '../anchorBounds.js';
 
 /*
- * round368 §3 (owner spec) — the point-anchored quick-create card is 50% WIDER,
- * and every added pixel goes to the LEFT: the card's RIGHT edge must stay
- * exactly where it is today ("הנקודה הכי ימנית … תישאר גם הנקודה הכי ימנית").
+ * round368 §3 (owner spec) — the point-anchored quick-create card is WIDER, and
+ * every added pixel goes to the LEFT: the card's RIGHT edge must stay exactly
+ * where it is today ("הנקודה הכי ימנית … תישאר גם הנקודה הכי ימנית").
  * The right edge is therefore still the round243/266 placement (a 280px card
  * centered under the "+", clamped inside the agenda box) — only the left edge
  * moves outward.
+ *
+ * round369 — the owner raised the widening from +50% to +80% ("תרחיב את הפופאפ
+ * באג'נדה ב80% שמאלה"). Only the scale moves; the pinned-right-edge contract and
+ * the viewport-clamp behaviour are unchanged.
  */
 
 // Agenda box occupying x:[100,700] (width 600), y:[200,800] (height 600).
@@ -16,11 +20,11 @@ const anchorAt = (left, bottom, width = 24) => ({ left, bottom, width, top: bott
 const VW = 1400;
 
 describe('round368 — the card grows leftward, right edge pinned', () => {
-  it('is 1.5x the old width, with the same right edge', () => {
+  it('is 1.8x the old width, with the same right edge', () => {
     const r = computeBoundedAnchorStyle({ anchor: anchorAt(392, 300), bounds: BOUNDS, viewportWidth: VW });
     // old placement: width 280, left 264 ⇒ right edge 544
-    expect(r.width).toBe(420);
-    expect(r.left).toBe(124);
+    expect(r.width).toBe(504);
+    expect(r.left).toBe(40);
     expect(r.left + r.width).toBe(544);
   });
 
@@ -28,7 +32,7 @@ describe('round368 — the card grows leftward, right edge pinned', () => {
     const r = computeBoundedAnchorStyle({ anchor: anchorAt(690, 300), bounds: BOUNDS, viewportWidth: VW });
     // old right edge = maxLeft + 280 = 412 + 280 = 692
     expect(r.left + r.width).toBe(692);
-    expect(r.width).toBe(420);
+    expect(r.width).toBe(504);
   });
 
   it('the extra width may extend past the agenda box on the LEFT (that is the point)', () => {
@@ -40,7 +44,7 @@ describe('round368 — the card grows leftward, right edge pinned', () => {
   });
 
   it('never leaves the viewport: the left is clamped and the RIGHT edge still holds', () => {
-    const narrowVp = 400; // pad 8 ⇒ max 384px, so the 420px card cannot fit
+    const narrowVp = 400; // pad 8 ⇒ max 384px, so the 504px card cannot fit
     const r = computeBoundedAnchorStyle({ anchor: anchorAt(100, 300), bounds: BOUNDS, viewportWidth: narrowVp });
     expect(r.left).toBe(8);
     expect(r.left + r.width).toBe(388); // right edge unchanged; width absorbed the clamp
