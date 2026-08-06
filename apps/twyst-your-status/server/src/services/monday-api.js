@@ -20,9 +20,16 @@ import { normalizeStatusLabels } from '../../../src/domain/statusPolicy.js';
 export const API_VERSION = '2026-04';
 export const MONDAY_API_URL = 'https://api.monday.com/v2';
 
+// Selects the TYPED `settings` field, NOT legacy `settings_str` (round360):
+// settings_str is a stringified blob whose "labels" is a MAP {"0":"בעבודה",...},
+// which normalizeStatusLabels (typed-array shape only) turns into [] — the guard
+// then saw zero allowed labels and blocked EVERY transition on the column.
+// `settings` returns the array shape ({"labels":[{id,label,is_deactivated,...}]},
+// verified live on API 2026-04) and is the SAME field the client picker reads —
+// one source of truth for both sides of the guard.
 const GET_COLUMN_LABELS = `query GuardColumnLabels($boardId: [ID!], $columnId: [String!]) {
   boards(ids: $boardId) {
-    columns(ids: $columnId) { id settings_str }
+    columns(ids: $columnId) { id settings }
   }
 }`;
 
@@ -114,15 +121,22 @@ export function createMondayApi({ fetchImpl, logger } = {}) {
       return data.me;
     },
 
+    // Reads the typed `settings` JSON (see GET_COLUMN_LABELS comment for WHY it
+    // is not settings_str). On API 2026-04 it arrives as a parsed OBJECT; the
+    // string branch is defensive only. Missing/empty settings → [] (unchanged
+    // contract: the evaluator treats that as "no labels to allow").
     async getColumnLabels(token, boardId, columnId) {
       const data = await query(token, GET_COLUMN_LABELS, { boardId: [boardId], columnId: [columnId] });
       const column = first(first(data.boards)?.columns);
-      if (!column?.settings_str) return [];
+      if (!column?.settings) return [];
       try {
-        return normalizeStatusLabels(JSON.parse(column.settings_str));
+        const settings = typeof column.settings === 'string'
+          ? JSON.parse(column.settings)
+          : column.settings;
+        return normalizeStatusLabels(settings);
       } catch (err) {
         throw new MondayApiError(
-          `unparseable settings_str for column ${columnId}: ${String(err?.message ?? err)}`,
+          `unparseable settings for column ${columnId}: ${String(err?.message ?? err)}`,
         );
       }
     },

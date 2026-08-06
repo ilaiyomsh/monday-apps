@@ -87,6 +87,18 @@ const rawSecureStorage = safeBootInit(
 // /auth/gcp/login` HTML bodies, "accessing secure storage") retry instead of
 // bubbling up as 502s, and so a burst of same-key reads shares one round-trip.
 const secureStorage = createResilientSecureStorage(rawSecureStorage, { logger });
+// Boot warm-up (round360, review doc §6.1): one fire-and-forget read pre-pays the
+// SDK's GCP+Vault login ladder (3 hops, re-paid on every cold attempt) during
+// container start instead of under the first webhook. Never awaited — must not
+// delay listen — and never throws: a cold-start Vault hiccup here is a warn (the
+// resilient wrapper already retried), not a crash. Periodic re-warm is
+// deliberately NOT added: Cloud Run throttles CPU between requests, so
+// background timers are unreliable there.
+secureStorage.get('warmup:boot').catch((err) => {
+  logger.warn('secure storage boot warm-up failed (non-fatal)', 'boot', {
+    error: String(err?.message ?? err),
+  });
+});
 
 const api = createMondayApi({ logger });
 const oauthClient = createMondayOauthClient({ clientId: env.clientId, clientSecret: env.clientSecret, logger });

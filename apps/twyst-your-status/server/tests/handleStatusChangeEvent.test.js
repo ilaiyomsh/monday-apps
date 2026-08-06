@@ -179,10 +179,14 @@ describe('createStatusChangeHandler', () => {
     expect(appendedRecord(deps).reverted).toBe(false);
   });
 
-  it('skips the echo of a revert it just performed (same item/column, value == what it reverted TO, authored by the primary owner)', async () => {
-    // First: an illegal change reverts (autoRevert on) — the guard writes the
-    // previous label '0' as the primary owner. Then monday delivers that write
-    // back as an event (userId 50, value '0'): it must be skipped, not re-recorded.
+  it('skips the echo of a revert it just performed BEFORE ANY I/O: the echo delivery performs zero store/api calls', async () => {
+    // amend-intent round360: the echo check moved to the TOP of process(), before
+    // the token/rules reads. Processing latency (40s-4min per delivery, observed
+    // live) made the old post-rules check miss its own echo — the 60s TTL expired
+    // mid-flight, the echo was evaluated as a genuine change, and the guard
+    // reverted its own revert in an infinite oscillation. The locked behavior
+    // legitimately changed: an echo delivery now performs ZERO store/api calls
+    // (previously it read the reader token + rules before skipping).
     const deps = makeDeps();
     deps.rulesStore.getRules.mockResolvedValue(autoRules());
     deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
@@ -190,6 +194,7 @@ describe('createStatusChangeHandler', () => {
     const handle = createStatusChangeHandler(deps);
 
     await handle(makeEvent()); // 0→2 illegal → reverts to '0', marks the echo
+    await settle(); // the post-revert tail (notify+append) is detached — let it land
     expect(deps.api.revertStatus).toHaveBeenCalledTimes(1);
     expect(deps.bypassLog.append).toHaveBeenCalledTimes(1);
 
@@ -199,11 +204,114 @@ describe('createStatusChangeHandler', () => {
       value: { label: { index: 0, text: 'ממתין' } },
       previousValue: { label: { index: 2, text: 'בוצע' } },
     }));
+    await settle();
 
-    // No second evaluation, revert, or record for the echo.
+    // ZERO additional I/O for the echo: no token read, no rules read, no board
+    // reads, no evaluation, no revert, no record.
+    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledTimes(1);
+    expect(deps.rulesStore.getRules).toHaveBeenCalledTimes(1);
+    expect(deps.tokenStore.getOwnerToken).toHaveBeenCalledTimes(1);
+    expect(deps.api.getColumnLabels).toHaveBeenCalledTimes(1);
     expect(deps.evaluate).toHaveBeenCalledTimes(1);
     expect(deps.api.revertStatus).toHaveBeenCalledTimes(1);
     expect(deps.bypassLog.append).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT treat a matching-value change by a DIFFERENT user as the echo: it is evaluated, and the marker survives for the real echo', async () => {
+    // The marker now carries the revert's author (the primary owner). A genuine
+    // change by someone else to the same value must be evaluated like any other
+    // change and must NOT consume the marker — the real echo still skips after it.
+    const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue(autoRules());
+    deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
+    deps.api.getCurrentStatusLabelId.mockResolvedValue('2');
+    const handle = createStatusChangeHandler(deps);
+
+    await handle(makeEvent()); // reverts to '0', marks the echo for actor 50
+    await settle();
+    expect(deps.api.revertStatus).toHaveBeenCalledTimes(1);
+
+    // User 42 (NOT the primary owner) happens to set the same value '0'.
+    await handle(makeEvent({
+      userId: 42,
+      value: { label: { index: 0, text: 'ממתין' } },
+      previousValue: { label: { index: 2, text: 'בוצע' } },
+    }));
+    await settle();
+    expect(deps.evaluate).toHaveBeenCalledTimes(2); // evaluated, not skipped
+    // (cell re-read shows '2' ≠ new '0' → stale → no second revert/marker)
+
+    // The REAL echo (primary owner, value '0') still skips with zero further I/O.
+    await handle(makeEvent({
+      userId: 50,
+      value: { label: { index: 0, text: 'ממתין' } },
+      previousValue: { label: { index: 2, text: 'בוצע' } },
+    }));
+    await settle();
+    expect(deps.evaluate).toHaveBeenCalledTimes(2);
+    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledTimes(2); // events 1+2 only
+  });
+
+  it('honors the 10-minute echo TTL: an echo arriving 9:59 after the revert is skipped, past 10:00 it is evaluated', async () => {
+    // Trade-off pinned here: within the TTL a genuine owner change back to the
+    // reverted-to value is skipped ONCE (marker consumed on match); past the TTL
+    // the guard fails towards evaluating, never towards an eternal skip window.
+    const deps = makeDeps();
+    let currentTime = NOW;
+    deps.now = vi.fn(() => currentTime);
+    deps.rulesStore.getRules.mockResolvedValue(autoRules());
+    deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
+    deps.api.getCurrentStatusLabelId.mockResolvedValue('2');
+    const handle = createStatusChangeHandler(deps);
+
+    await handle(makeEvent()); // revert at t=NOW → marker expires at NOW+600_000
+    await settle();
+    expect(deps.api.revertStatus).toHaveBeenCalledTimes(1);
+
+    // 599_999ms later: processing was slow, but the echo still matches the marker.
+    currentTime = NOW + 599_999;
+    await handle(makeEvent({
+      userId: 50,
+      value: { label: { index: 0, text: 'ממתין' } },
+      previousValue: { label: { index: 2, text: 'בוצע' } },
+    }));
+    await settle();
+    expect(deps.evaluate).toHaveBeenCalledTimes(1); // skipped, not re-evaluated
+
+    // Second revert cycle; this time the echo arrives past the TTL.
+    await handle(makeEvent({ userId: 41 })); // 0→2 illegal again → reverts, re-marks
+    await settle();
+    expect(deps.api.revertStatus).toHaveBeenCalledTimes(2);
+
+    currentTime += 600_001; // marker expired 1ms ago
+    await handle(makeEvent({
+      userId: 50,
+      value: { label: { index: 0, text: 'ממתין' } },
+      previousValue: { label: { index: 2, text: 'בוצע' } },
+    }));
+    await settle();
+    expect(deps.evaluate).toHaveBeenCalledTimes(3); // 2 illegal changes + the expired echo
+  });
+
+  it('FAILS OPEN when column labels come back empty: logs an error, does not evaluate, revert, or record', async () => {
+    // getColumnLabels returning [] means the column is unreadable (token scope,
+    // deleted column, API hiccup) — the guard cannot classify the change, so it
+    // must let it stand (fail-open doctrine), never block on missing data.
+    const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue(autoRules());
+    deps.api.getColumnLabels.mockResolvedValue([]);
+    const handle = createStatusChangeHandler(deps);
+
+    await handle(makeEvent());
+
+    expect(deps.evaluate).not.toHaveBeenCalled();
+    expect(deps.bypassLog.append).not.toHaveBeenCalled();
+    expect(deps.api.getCurrentStatusLabelId).not.toHaveBeenCalled();
+    expectNoIntervention(deps);
+    expect(deps.logger.error).toHaveBeenCalledTimes(1);
+    const [failOpenMsg, , failOpenCtx] = deps.logger.error.mock.calls[0];
+    expect(failOpenMsg).toContain('failing open');
+    expect(failOpenCtx).toMatchObject({ boardId: '5098', columnId: 'status_col', itemId: '777' });
   });
 
   it('leaves the item untouched, records nothing, and fetches no owner token when the verdict is allowed', async () => {
@@ -583,6 +691,45 @@ describe('createStatusChangeHandler', () => {
     expect(input.requiredFieldValues).toEqual({ d: 'ערך' });
   });
 
+  it('issues the gated reads (teams, item context) CONCURRENTLY with getColumnLabels, not after it', async () => {
+    // The three board reads are independent; with 40s-4min deliveries observed
+    // live, serializing them was pure added latency. Gating stays: only reads
+    // the rules demand are issued at all — but demanded ones start together.
+    const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue({
+      version: 1,
+      hiddenLabelIds: [],
+      owners: { ownerIds: ['41', '50'], primaryOwnerId: '50' },
+      labels: {
+        2: {
+          allowedUserIds: [],
+          allowedTeamIds: ['20'], // demands teams
+          requiredColumnIds: ['d'], // demands item context
+          requiredPeopleColumnIds: [],
+          nextLabelIds: ['0'],
+        },
+      },
+    });
+    let releaseLabels;
+    deps.api.getColumnLabels.mockImplementation(
+      () => new Promise((resolve) => {
+        releaseLabels = () => resolve(structuredClone(COLUMN_LABELS));
+      }),
+    );
+    const handle = createStatusChangeHandler(deps);
+
+    const p = handle(makeEvent());
+    await settle();
+
+    // Labels are still parked — the gated reads must ALREADY be in flight.
+    expect(deps.api.getUserTeamIds).toHaveBeenCalledTimes(1);
+    expect(deps.api.getItemGuardContext).toHaveBeenCalledTimes(1);
+
+    releaseLabels();
+    await p;
+    expect(deps.evaluate).toHaveBeenCalledTimes(1);
+  });
+
   it('skips getUserTeamIds and getItemGuardContext entirely when no rule demands teams, people, or required columns', async () => {
     const deps = makeDeps();
     deps.rulesStore.getRules.mockResolvedValue({
@@ -608,61 +755,185 @@ describe('createStatusChangeHandler', () => {
     expect(deps.evaluate).toHaveBeenCalledTimes(1);
   });
 
-  it('serializes two events for the same board+item+column: the second makes no api or record progress until the first finishes', async () => {
+  it('serializes two events for the same board+item+column, releasing the lane after the REVERT: event 2 waits for event 1\'s revert, not for its notify/append tail', async () => {
+    // amend-intent round360: the lane used to hold until bypassLog.append settled;
+    // with 40s-4min deliveries observed live, the tail (notify + append) kept the
+    // lane hostage for no ordering benefit — the revert is the only write the next
+    // event must not race. After the revert lands (and the echo marker is set) the
+    // tail runs detached. This amended test asserts the new contract:
+    //   (a) event 2 makes NO progress before event 1's revert lands, and
+    //   (b) both bypass appends still happen (settled asynchronously, off-lane).
     const deps = makeDeps();
     deps.rulesStore.getRules.mockResolvedValue(autoRules());
     deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
+    deps.api.getCurrentStatusLabelId.mockResolvedValue('2');
 
-    const order = [];
-    let releaseFirstAppend;
-    const firstAppendGate = new Promise((resolve) => {
-      releaseFirstAppend = resolve;
-    });
-
-    deps.api.getCurrentStatusLabelId.mockImplementation(async () => {
-      order.push(`current-read-${deps.api.getCurrentStatusLabelId.mock.calls.length}`);
-      return '2';
-    });
+    let releaseFirstRevert;
+    const firstRevertGate = new Promise((resolve) => { releaseFirstRevert = resolve; });
     deps.api.revertStatus.mockImplementation(async () => {
-      order.push(`revert-${deps.api.revertStatus.mock.calls.length}`);
+      if (deps.api.revertStatus.mock.calls.length === 1) await firstRevertGate;
     });
-    deps.bypassLog.append.mockImplementation(async () => {
-      const n = deps.bypassLog.append.mock.calls.length;
-      order.push(`append-${n}`);
-      if (n === 1) await firstAppendGate; // hold event 1 at the very end of its handling
-    });
+
+    let releaseAppends;
+    const appendGate = new Promise((resolve) => { releaseAppends = resolve; });
+    deps.bypassLog.append.mockImplementation(async () => { await appendGate; });
 
     const handle = createStatusChangeHandler(deps);
-    const eventA = makeEvent({ userId: 41 });
-    const eventB = makeEvent({ userId: 42 }); // same boardId/pulseId/columnId
-
-    const p1 = handle(eventA).then(() => order.push('first-finished'));
-    const p2 = handle(eventB).then(() => order.push('second-finished'));
+    const flags = { p1: false, p2: false };
+    const p1 = handle(makeEvent({ userId: 41 })).then(() => { flags.p1 = true; });
+    const p2 = handle(makeEvent({ userId: 42 })).then(() => { flags.p2 = true; });
     await settle();
 
-    // Event 1 is parked inside its append; event 2 must not have started its own
-    // re-read, revert, or record yet.
-    expect(deps.api.getCurrentStatusLabelId).toHaveBeenCalledTimes(1);
+    // (a) Event 1 is parked INSIDE its revert; event 2 must not have started at all.
     expect(deps.api.revertStatus).toHaveBeenCalledTimes(1);
-    expect(deps.bypassLog.append).toHaveBeenCalledTimes(1);
+    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledTimes(1);
+    expect(deps.api.getCurrentStatusLabelId).toHaveBeenCalledTimes(1);
 
-    releaseFirstAppend();
-    await Promise.all([p1, p2]);
+    releaseFirstRevert();
+    await settle();
 
-    expect(deps.api.getCurrentStatusLabelId).toHaveBeenCalledTimes(2);
+    // Lane released after the revert: BOTH events completed their reverts and
+    // resolved even though every append is still parked (the tails are detached).
     expect(deps.api.revertStatus).toHaveBeenCalledTimes(2);
+    expect(flags.p1).toBe(true);
+    expect(flags.p2).toBe(true);
+    expect(deps.bypassLog.append).toHaveBeenCalledTimes(2); // both claimed, unresolved
+
+    // (b) Releasing the gate lets both appends settle; nothing was dropped.
+    releaseAppends();
+    await Promise.all([p1, p2]);
+    await settle();
     expect(deps.bypassLog.append).toHaveBeenCalledTimes(2);
 
-    // The first event finished strictly before the second event's re-read,
-    // revert, and record began.
-    const firstFinishedAt = order.indexOf('first-finished');
-    expect(firstFinishedAt).toBeGreaterThan(-1);
-    expect(firstFinishedAt).toBeLessThan(order.indexOf('current-read-2'));
-    expect(firstFinishedAt).toBeLessThan(order.indexOf('revert-2'));
-    expect(firstFinishedAt).toBeLessThan(order.indexOf('append-2'));
-
-    // Notifications land in event order: actor 41 first, then actor 42.
-    const notifiedUserIds = deps.api.notifyUser.mock.calls.map((call) => String(call[1]));
+    // Both actors were notified (order between detached tails is not guaranteed).
+    const notifiedUserIds = deps.api.notifyUser.mock.calls.map((call) => String(call[1])).sort();
     expect(notifiedUserIds).toEqual(['41', '42']);
+  });
+
+  it('still AWAITS the bypass append for a non-reverted blocked event: the lane holds until the record lands', async () => {
+    // Detach applies ONLY to the post-revert tail. A monitoring-mode (or
+    // stale-cell) blocked event has nothing to release early for, so its append
+    // stays on the lane — simplest correct rule, and the record cannot be lost
+    // behind an already-resolved handle() promise.
+    const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue(monitorRules()); // autoRevert off
+    deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
+
+    let releaseAppend;
+    const appendGate = new Promise((resolve) => { releaseAppend = resolve; });
+    deps.bypassLog.append.mockImplementation(async () => { await appendGate; });
+
+    const handle = createStatusChangeHandler(deps);
+    let resolved = false;
+    const p = handle(makeEvent()).then(() => { resolved = true; });
+    await settle();
+
+    expect(deps.bypassLog.append).toHaveBeenCalledTimes(1);
+    expect(resolved).toBe(false); // the lane is still holding the append
+
+    releaseAppend();
+    await p;
+    expect(resolved).toBe(true);
+  });
+
+  it('logs (never throws) when the detached post-revert tail fails: an append rejection lands in the tail catch', async () => {
+    const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue(autoRules());
+    deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
+    deps.api.getCurrentStatusLabelId.mockResolvedValue('2');
+    deps.bypassLog.append.mockRejectedValue(new Error('append blew up'));
+    const handle = createStatusChangeHandler(deps);
+
+    await handle(makeEvent()); // resolves — the tail is detached
+    await settle(); // let the detached rejection reach its catch
+
+    expect(deps.api.revertStatus).toHaveBeenCalledTimes(1);
+    const tailError = deps.logger.error.mock.calls.find(
+      ([msg]) => typeof msg === 'string' && msg.startsWith('post-revert tail failed'),
+    );
+    expect(tailError).toBeDefined();
+    expect(tailError[2]).toMatchObject({ boardId: '5098', itemId: '777' });
+  });
+
+  it('REDELIVERY: retries process exactly once after a transient storage failure, then succeeds with a warn (no error)', async () => {
+    const deps = makeDeps();
+    deps.tokenStore.getReaderToken
+      .mockRejectedValueOnce(new Error('An issue occurred while accessing secure storage'))
+      .mockResolvedValue({ token: READER_TOKEN, userId: '50' });
+    const handle = createStatusChangeHandler({ ...deps, retryDelayMs: 0 });
+
+    await handle(makeEvent());
+
+    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledTimes(2); // initial + one retry
+    expect(deps.evaluate).toHaveBeenCalledTimes(1); // the retry ran to a verdict
+    expect(deps.logger.warn).toHaveBeenCalledTimes(1); // the retry is announced
+    expect(deps.logger.warn.mock.calls[0][0]).toContain('retrying');
+    expect(deps.logger.error).not.toHaveBeenCalled();
+  });
+
+  it('REDELIVERY: gives up after the single retry — a second transient failure lands in the error log, never a third attempt', async () => {
+    const deps = makeDeps();
+    deps.tokenStore.getReaderToken.mockRejectedValue(
+      new Error('invalid json response body at vault-server'),
+    );
+    const handle = createStatusChangeHandler({ ...deps, retryDelayMs: 1 });
+
+    await handle(makeEvent());
+
+    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledTimes(2);
+    expect(deps.logger.warn).toHaveBeenCalledTimes(1);
+    expect(deps.logger.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('REDELIVERY: a non-transient failure is not retried — one attempt, straight to the error log', async () => {
+    const deps = makeDeps();
+    deps.tokenStore.getReaderToken.mockRejectedValue(new Error('boom'));
+    const handle = createStatusChangeHandler({ ...deps, retryDelayMs: 0 });
+
+    await handle(makeEvent());
+
+    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledTimes(1);
+    expect(deps.logger.warn).not.toHaveBeenCalled();
+    expect(deps.logger.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('TIMING: emits exactly ONE guard-timing info line per evaluated delivery, with per-step durations and ids', async () => {
+    const deps = makeDeps();
+    let t = 0;
+    deps.now = vi.fn(() => { t += 10; return t; }); // every clock read advances 10ms
+    deps.rulesStore.getRules.mockResolvedValue(autoRules());
+    deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
+    deps.api.getCurrentStatusLabelId.mockResolvedValue('2');
+    const handle = createStatusChangeHandler(deps);
+
+    await handle(makeEvent());
+    await settle();
+
+    const timingLines = deps.logger.info.mock.calls.filter(
+      ([msg]) => typeof msg === 'string' && msg.startsWith('guard timing'),
+    );
+    expect(timingLines).toHaveLength(1);
+    expect(timingLines[0][0]).toMatch(
+      /^guard timing total=\d+ms tokens=\d+ms rules=\d+ms gql=\d+ms reread=\d+ms revert=\d+ms$/,
+    );
+    expect(timingLines[0][2]).toMatchObject({
+      accountId: ACCOUNT, boardId: '5098', columnId: 'status_col', itemId: '777',
+    });
+    // The advancing clock must be reflected: every step above actually ran, so
+    // no bucket may read 0ms (proves real measurement, not hardcoded zeros).
+    expect(timingLines[0][0]).not.toContain('=0ms');
+  });
+
+  it('TIMING: emits no timing line for a skipped (non-evaluated) delivery', async () => {
+    const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue(null); // unguarded column → skip
+    const handle = createStatusChangeHandler(deps);
+
+    await handle(makeEvent());
+
+    const timingLines = deps.logger.info.mock.calls.filter(
+      ([msg]) => typeof msg === 'string' && msg.startsWith('guard timing'),
+    );
+    expect(timingLines).toHaveLength(0);
   });
 });
