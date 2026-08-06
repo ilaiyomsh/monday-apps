@@ -145,7 +145,7 @@ export function QuickCreateModal({
   // (never spilling outside the topics card) instead of clamping to the whole
   // viewport. The pure computeBoundedAnchorStyle does the geometry.
   const bounded = (anchor?.bounds && isDesktop)
-    ? computeBoundedAnchorStyle({ anchor, bounds: anchor.bounds })
+    ? computeBoundedAnchorStyle({ anchor, bounds: anchor.bounds, viewportWidth: window.innerWidth })
     : null;
   const anchorStyle = bounded
     ? { position: 'absolute', top: bounded.top, left: bounded.left, width: bounded.width, maxHeight: bounded.maxHeight, overflowY: 'auto', margin: 0 }

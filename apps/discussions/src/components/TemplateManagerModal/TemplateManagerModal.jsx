@@ -672,6 +672,11 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
           lead: typeLead,
           coordinator: typeCoordinator,
           participants: typeParticipants,
+          // round368 — the free-text externals belong in the PAYLOAD too: round367
+          // wired the editor state, the save gate and the dirty snapshot but not
+          // this literal, so every save silently dropped the names (owner-reported:
+          // "saved fine, nothing appeared in the create card").
+          externalParticipants: typeExternalParticipants,
           // item 18 — per-type default decider (מחליט = מנהל הדיון)
           deciderIsLead: typeDeciderIsLead,
           // round256 — edited-here ⇒ store the type's own template; else preserve
