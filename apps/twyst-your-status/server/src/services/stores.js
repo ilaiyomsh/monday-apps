@@ -26,7 +26,9 @@
  */
 
 export { unwrapStoredValue } from './stores/unwrapStoredValue.js';
-export { createTokenStore } from './stores/tokenStore.js';
+// REFRESH_CUSHION_MS was public before the barrel split (round360's caching
+// suite pins freshness against it) — keep it on the stable import path.
+export { createTokenStore, REFRESH_CUSHION_MS } from './stores/tokenStore.js';
 export { createRulesStore } from './stores/rulesStore.js';
 export { createBypassLog } from './stores/bypassLog.js';
 export { createEnrollmentStore } from './stores/enrollmentStore.js';
