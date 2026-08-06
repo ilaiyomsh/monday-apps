@@ -10,6 +10,19 @@ on:
     branches:
       - develop
       - main
+  # Manual escape hatch (added 2026-08-06 after a live incident): for ~6 hours
+  # GitHub stopped CREATING runs from webhook events in this repo — a push, a new
+  # PR, a close+reopen and a force-push all produced zero runs, while
+  # `workflow_dispatch` kept working. Every deploy workflow already had a dispatch
+  # trigger, so the draft could still be built by hand; `ci.yml` did NOT, which
+  # made the merge GATE the one thing with no manual path — and a PR cannot be
+  # merged responsibly without it. The gate is what blocks, so it needs a lever.
+  #
+  # Dispatching runs the workspace jobs against the chosen ref. The two
+  # base_ref-conditional guard steps (corridor / release) are inert here, since
+  # `github.base_ref` is empty outside a pull_request event — the version guards
+  # remain a PR-only check by design.
+  workflow_dispatch:
 
 jobs:
   # Version guards (docs/monday-cicd-spec.md, version layer 2026-07-14).
