@@ -40,6 +40,8 @@ const TASK_CAPS = [
   'editTaskAssignee',
   // round305 — the שותפים (partnersID) people column added to "המשימות שלי".
   'editTaskPartners',
+  // round366 — inline edits of owner-added custom columns in the task tables.
+  'editTaskCustomColumns',
   'editTaskName',
   'deleteTask',
 ];

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { Checkbox } from '@vibe/core';
 import { Plus } from 'lucide-react';
 import {
@@ -12,6 +12,7 @@ import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
 import { useRowOrder } from '@generated/hooks/useRowOrder.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
+import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
 import { getColumns } from '@api/board-config-store.js';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
@@ -19,6 +20,17 @@ import { TASKS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { useColumnRenameMenu } from '@generated/components/ColumnRenameMenu';
 import { customEntriesFor } from '@generated/utils/customColumns.js';
 import styles from './TaskTable.module.css';
+
+/*
+ * round366 — one options loader per custom DROPDOWN column (rules-of-hooks
+ * forbid a variable-length hook loop in the table body; per-row hooks are the
+ * round136 anti-pattern). Renders nothing; reports the board's label options up.
+ */
+function DropdownOptionsCollector({ alias, onOptions }) {
+  const opts = useDropdownOptions('tasks', alias);
+  useEffect(() => { onOptions(alias, opts); }, [alias, opts, onOptions]);
+  return null;
+}
 
 // Header titles per column key (name has none — it's the frozen first column).
 const TITLE = { name: '', assignee: 'אחראי', partners: 'שותפים', deadline: 'דד ליין', status: 'סטאטוס', priority: 'עדיפות', source: 'דיון מקור' };
@@ -37,6 +49,9 @@ export function TaskTable({
   // round306 — שותפים (partnersID) inline edit, gated per row by editTaskPartners.
   onPartnersChange,
   onDeadlineChange,
+  // round366 — inline edit of an owner-added custom column: (taskId, alias,
+  // value). Gated per row by editTaskCustomColumns; absent ⇒ read-only cells.
+  onCustomChange,
   onOpenNewTask,
   // Inline add (native monday "add item"): when provided, the footer add-row
   // becomes an inline text input — click reveals it, name + Enter creates the
@@ -158,6 +173,18 @@ export function TaskTable({
   const statusOpts = useStatusOptions();
   const priorityOpts = useStatusOptions('tasks', 'priorityID');
 
+  /*
+   * round366 — dropdown CUSTOM columns need their board label options for the
+   * inline editor. Hooks can't run in a variable-length loop, so each dropdown
+   * column mounts ONE collector component (per COLUMN, not per row — the
+   * round136 perf rule) that reports its options up into this map.
+   */
+  const [customDropdownOptions, setCustomDropdownOptions] = useState({});
+  const reportDropdownOptions = useCallback((alias, opts) => {
+    setCustomDropdownOptions((m) => (m[alias] === opts ? m : { ...m, [alias]: opts }));
+  }, []);
+  const customDropdownCols = customCols.filter((c) => c.type === 'dropdown');
+
   // Width defs follow the live VISIBLE order; 'sel' is a fixed (non-resizable)
   // leading track, everything else resizes within the constants' clamps.
   // round364 — a custom key has no entry in the width constants; without a
@@ -242,6 +269,9 @@ export function TaskTable({
   return (
     <div className={styles.taskTableScroll}>
       {renameMenu}
+      {onCustomChange && customDropdownCols.map((c) => (
+        <DropdownOptionsCollector key={c.alias} alias={c.alias} onOptions={reportDropdownOptions} />
+      ))}
       <div className={tableClass} dir="ltr" style={color ? { '--group-color': color } : undefined}>
         {/* header */}
         <div className={`${styles.taskRow} ${styles.taskHead}`} style={rowStyle}>
@@ -266,6 +296,8 @@ export function TaskTable({
               onAssigneeChange={onAssigneeChange && canTask('editTaskAssignee', task) ? onAssigneeChange : undefined}
               onPartnersChange={onPartnersChange && canTask('editTaskPartners', task) ? onPartnersChange : undefined}
               onDeadlineChange={onDeadlineChange && canTask('editTaskDeadline', task) ? onDeadlineChange : undefined}
+              onCustomChange={onCustomChange && canTask('editTaskCustomColumns', task) ? onCustomChange : undefined}
+              customDropdownOptions={customDropdownOptions}
               onRenameTask={onRenameTask && canTask('editTaskName', task) ? onRenameTask : undefined}
               onDeleteTask={onDeleteTask}
               onRetryCreate={onRetryCreate}

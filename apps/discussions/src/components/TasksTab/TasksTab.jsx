@@ -16,7 +16,9 @@ import { HideColumnsControl } from '@generated/components/MyTasksView/controls/H
 import {
   filterTasks, filterCount, serializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
+  customFilterDims, customComparableValues,
 } from '@generated/components/MyTasksView/controls/controls.js';
+import { customEntriesFor, customColumnIcon } from '@generated/utils/customColumns.js';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
@@ -81,6 +83,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     updateTaskAssignee,
     updateTaskPartners,
     updateTaskDeadline,
+    updateTaskColumn,
     updateTasksStatusBatch,
     updateTasksAssigneeBatch,
     updateTasksDeadlineBatch,
@@ -108,15 +111,38 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   // STATUS row (empty values ⇒ shows all) when no saved view exists; a saved
   // view's own rows win (incl. an explicitly empty set). State + mutators come
   // from the shared builder state machine (round137).
+  /*
+   * round366 — owner-added custom mappings join the filter as typed dims and
+   * the hide picker as rows. Derived synchronously off the published settings
+   * (useFilterBuilder seeds state in a lazy initializer).
+   */
+  const customTaskCols = useMemo(
+    () => customEntriesFor(getColumns('tasks'))
+      .filter(([, c]) => c?.id)
+      .map(([alias, c]) => ({ alias, type: c.type, title: c.title || alias })),
+    []
+  );
+  const customDims = useMemo(() => customFilterDims(customTaskCols), [customTaskCols]);
+  const filterColumns = useMemo(() => [
+    ...TASKS_FILTER_COLUMNS,
+    ...customDims.map((d) => ({
+      key: d.key,
+      type: d.control === 'values' ? 'status' : d.control,
+      alias: d.key,
+      ops: d.control === 'date' ? ['within', 'before', 'after'] : d.control === 'text' ? ['contains'] : ['is', 'isnot'],
+    })),
+  ], [customDims]);
+  const colName = (key) => FILTER_COL_NAME[key] || customTaskCols.find((c) => c.alias === key)?.title || key;
   const {
-    filter, filterRows, setFilterOp, toggleFilterVal, setDeadlineRange, setDeadlineDate,
+    filter, filterRows, setFilterOp, toggleFilterVal, setFilterText, setDeadlineRange, setDeadlineDate,
+    setDateColRange, setDateColDate,
     addFilterRow, removeFilterRow, retargetFilterRow, clearFilter,
-  } = useFilterBuilder({ columns: TASKS_FILTER_COLUMNS, defaultRows: ['status'], savedView });
+  } = useFilterBuilder({ columns: filterColumns, defaultRows: ['status'], savedView });
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const { colorById, labelById, orderById, doneId, options: statusOptions } = useStatusOptions();
   const { isMobile } = useViewport();
 
-  const fc = filterCount(filter);
+  const fc = filterCount(filter, customDims);
   // Sort handlers (session-only until an owner hits Save, like the other builders).
   const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstSortDir(col), active: true });
   const clearSort = () => setSort({ col: null, dir: null, active: false });
@@ -140,6 +166,8 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     taskCols.partnersID?.id && { key: 'partners', label: 'שותפים', icon: 'person' },
     { key: 'deadline', label: 'דד ליין', icon: 'date' },
     { key: 'status', label: 'סטאטוס', icon: 'status' },
+    // round366 — custom mappings are hideable like every other column.
+    ...customTaskCols.map((c) => ({ key: c.alias, label: c.title, icon: customColumnIcon(c.type) })),
   ].filter(Boolean);
   const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
   const [hiddenColumns, setHiddenColumns] = useState(
@@ -175,6 +203,28 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
   }, [items]);
 
+  // round366 — value options per custom dim, scanned off the loaded tasks
+  // (people by id+name; dropdown/relation by comparable value text).
+  const customFilterOptions = useMemo(() => {
+    const map = {};
+    for (const d of customDims) {
+      if (d.control === 'date' || d.control === 'text') continue;
+      const seen = new Map();
+      (items || []).forEach((t) => {
+        const raw = t[d.key];
+        if (d.control === 'person') {
+          (Array.isArray(raw) ? raw : []).forEach((p) => {
+            if (p && p.id != null && !seen.has(String(p.id))) seen.set(String(p.id), { id: String(p.id), label: p.name || String(p.id), color: null });
+          });
+        } else {
+          customComparableValues(raw).forEach((v) => { if (!seen.has(v)) seen.set(v, { id: v, label: v, color: null }); });
+        }
+      });
+      map[d.key] = [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
+    }
+    return map;
+  }, [customDims, items]);
+
   // Client pipeline: filter -> sort (both instant, over the loaded page). An
   // inactive sort returns the list unchanged, so default order is untouched.
   // Quick-filter battery (round 81): open / done / delayed counts over ALL loaded
@@ -196,11 +246,11 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   }, [search]);
   const filteredTasks = useMemo(
     () => {
-      let base = sortTasks(filterTasks(items, filter), sort, { orderById, labelById });
+      let base = sortTasks(filterTasks(items, filter, { custom: customDims }), sort, { orderById, labelById });
       if (debouncedSearch) base = base.filter((tk) => matchesSearch(tk.name, debouncedSearch));
       return quickStatus ? base.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : base;
     },
-    [items, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, debouncedSearch]
+    [items, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, debouncedSearch, customDims]
   );
 
   // Right-click a group header → shared color palette (round 77).
@@ -276,6 +326,11 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   const applyPartnersChange = useStableHandler(async (taskId, people) => {
     for (const id of resolveTargetIds(taskId, 'editTaskPartners')) await updateTaskPartners(id, people);
   });
+  // round366 — inline edit of a custom column (single-row; gated per row).
+  const applyCustomChange = useStableHandler(async (taskId, alias, value) => {
+    if (!allow('editTaskCustomColumns', taskId)) return;
+    await updateTaskColumn(taskId, alias, value);
+  });
   const applyDeadlineChange = useStableHandler(async (taskId, date) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskDeadline');
     if (targetIds.length === 0) return;
@@ -330,12 +385,13 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     return (opts || []).filter((o) => filter[col].values.has(String(o.id))).map((o) => ({ color: o.color, text: o.label }));
   };
   const renderFilterRow = (col, i, mobile, openId, setOpenId) => {
-    const fcfg = TASKS_FILTER_COLUMNS.find((c) => c.key === col);
+    const fcfg = filterColumns.find((c) => c.key === col);
+    if (!fcfg) return null;
     const colSeg = (
       <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
-        icon={FILTER_TYPE_ICON[fcfg.type]} text={FILTER_COL_NAME[col]}
-        options={TASKS_FILTER_COLUMNS.map((c) => ({
-          key: c.key, label: FILTER_COL_NAME[c.key], icon: FILTER_TYPE_ICON[c.type],
+        icon={FILTER_TYPE_ICON[fcfg.type] || 'text'} text={colName(col)}
+        options={filterColumns.map((c) => ({
+          key: c.key, label: colName(c.key), icon: FILTER_TYPE_ICON[c.type] || 'text',
           selected: c.key === col, disabled: c.key !== col && filterRows.includes(c.key),
         }))}
         onPick={(to) => retargetFilterRow(col, to)} />
@@ -347,26 +403,41 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
         onPick={(op) => setFilterOp(col, op)} />
     );
     let valueCtl = null;
-    if (col === 'deadline') {
-      const f = filter.deadline;
+    if (fcfg.type === 'date') {
+      // round366 — a custom DATE dim reuses the deadline control with per-col mutators.
+      const f = filter[col];
+      const onRange = col === 'deadline' ? setDeadlineRange : (r) => setDateColRange(col, r);
+      const onDate = col === 'deadline' ? setDeadlineDate : (d) => setDateColDate(col, d);
       if (f.op === 'within') {
         valueCtl = (
-          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="מתי"
+          <Segment id={`fval-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="מתי"
             icon={f.range ? rangeIcon(f.range) : 'date'} text={f.range ? rangeLabel(f.range) : 'בחרו טווח תאריכים'} placeholder={!f.range}
             options={DEADLINE_RANGES.map((r) => ({ key: r.key, label: r.label, icon: r.icon, selected: f.range === r.key }))}
-            onPick={setDeadlineRange} />
+            onPick={onRange} />
         );
       } else {
         valueCtl = (
           <div className={mobile ? bs.bDateWrapFull : bs.bDateWrap}>
-            <DatePickerPopover value={f.date || null} onChange={setDeadlineDate} />
+            <DatePickerPopover value={f.date || null} onChange={onDate} />
           </div>
         );
       }
-    } else {
-      const opts = col === 'person' ? personOptions : statusOptions;
+    } else if (fcfg.type === 'text') {
+      // round366 — free-text contains for a text custom column.
       valueCtl = (
-        <Segment id={`fval-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle={FILTER_COL_NAME[col]} multi
+        <input
+          type="text"
+          className={bs.bTextInput}
+          value={filter[col]?.text || ''}
+          placeholder="טקסט לחיפוש"
+          onChange={(e) => setFilterText(col, e.target.value)}
+          aria-label={`סינון ${colName(col)}`}
+        />
+      );
+    } else {
+      const opts = col === 'person' ? personOptions : col === 'status' ? statusOptions : (customFilterOptions[col] || []);
+      valueCtl = (
+        <Segment id={`fval-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle={colName(col)} multi
           chips={valueChips(col)}
           options={(opts || []).map((o) => ({ key: String(o.id), label: o.label, dot: o.color, selected: filter[col].values.has(String(o.id)) }))}
           onPick={(id) => toggleFilterVal(col, id)} />
@@ -402,7 +473,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     <>
       {filterRows.map((col, i) => renderFilterRow(col, i, mobile, openId, setOpenId))}
       {filterRows.length === 0 ? <div className={bs.bEmpty}>No filters — showing all tasks</div> : null}
-      {filterRows.length < TASKS_FILTER_COLUMNS.length
+      {filterRows.length < filterColumns.length
         ? <button type="button" className={bs.bAddLink} onClick={addFilterRow}>+ New filter</button>
         : null}
     </>
@@ -424,6 +495,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     onAssigneeChange: applyAssigneeChange,
     onPartnersChange: applyPartnersChange,
     onDeadlineChange: applyDeadlineChange,
+    onCustomChange: applyCustomChange,
     onRenameTask: applyRename,
     // Optimistic-create error recovery (temp row whose create failed) —
     // round136: stable wrappers so the memoized rows stay frozen.
@@ -450,7 +522,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
             applied={fc > 0} badge={fc}
             onClear={fc > 0 ? clearFilter : null}
             onSave={canSaveView ? () => {
-              saveView({ filter: serializeFilter(filter), filterRows });
+              saveView({ filter: serializeFilter(filter, customDims), filterRows });
               onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
             } : null}
             renderBody={renderFilterBody}

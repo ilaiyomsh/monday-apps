@@ -5,7 +5,7 @@ import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js
 import { MondayContext } from '@generated/contexts/MondayContext.jsx';
 import logger from '../utils/logger';
 import { useOptimisticRows, isTempId, isRealId, nextTempId } from './useOptimisticRows.js';
-import { customEntriesFor } from '../utils/customColumns.js';
+import { customEntriesFor, isCustomAlias } from '../utils/customColumns.js';
 
 // Undo window for deferred task deletion — must match the delete toast's
 // auto-hide duration so the real delete fires exactly when "בטל" disappears.
@@ -250,6 +250,26 @@ export function useTasks(discussionId, discussionTypeId = null) {
     } catch (err) { logger.error('useTasks', 'Error updating task', err); setItems(prev); }
   };
 
+  /*
+   * round366 — GENERIC single-column update for owner-added custom mappings
+   * (custom<N>ID). Same optimistic-patch/write/rollback contract as the
+   * dedicated updaters; serialization is formatValue's per-type job (BoardSDK
+   * resolves the alias off the published settings), so people arrays, Date
+   * objects, dropdown label text and plain text all pass through as-is.
+   */
+  const updateTaskColumn = async (taskId, alias, value) => {
+    let prev = [];
+    setItems((current) => {
+      prev = current;
+      return current.map((i) => (i.id === taskId ? { ...i, [alias]: value } : i));
+    });
+    if (!isRealId(taskId)) { enqueueEdit(taskId, alias, value); return; }
+    try {
+      const b = new משימות1Board();
+      await b.item(taskId).update({ [alias]: value }).execute();
+    } catch (err) { logger.error('useTasks', 'שגיאה בעדכון עמודה מותאמת', err); setItems(prev); }
+  };
+
   const updateTasksStatusBatch = async (taskIds, status) => {
     const ids = [...new Set((taskIds || []).map((id) => String(id)).filter(Boolean))];
     if (ids.length === 0) return;
@@ -488,6 +508,10 @@ export function useTasks(discussionId, discussionTypeId = null) {
         if ('responsibilityID' in edits) jobs.push(f.updateTaskAssignee(realId, edits.responsibilityID));
         if ('partnersID' in edits) jobs.push(f.updateTaskPartners(realId, edits.partnersID));
         if ('deadlineID' in edits) jobs.push(f.updateTaskDeadline(realId, edits.deadlineID));
+        // round366 — custom aliases queued on a temp row flush generically.
+        for (const key of Object.keys(edits)) {
+          if (isCustomAlias(key)) jobs.push(f.updateTaskColumn(realId, key, edits[key]));
+        }
         await Promise.allSettled(jobs);
       }
       forgetRow(tempId);
@@ -558,7 +582,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
   // lazily at flush time, so no stale closures and no createTask identity churn).
   flushersRef.current = {
     updateTaskName, updateTaskStatus, updateTaskPriority, updateTaskAssignee, updateTaskDeadline,
-    updateTaskPartners,
+    updateTaskPartners, updateTaskColumn,
   };
 
   return {
@@ -570,6 +594,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
     updateTaskAssignee,
     updateTaskPartners,
     updateTaskDeadline,
+    updateTaskColumn,
     updateTasksStatusBatch,
     updateTasksAssigneeBatch,
     updateTasksDeadlineBatch,

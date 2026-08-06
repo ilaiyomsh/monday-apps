@@ -569,6 +569,8 @@ export const CAPABILITY_DEFAULTS = {
   // personal (no-discussion) ctx the allowed item roles are narrowed by
   // CAP_ITEM_SELF_ROLES below (viewers must NOT inherit it).
   editTaskPartners: 'creatorLeadOwner',
+  // round366 — inline edits of owner-added custom columns in the task tables.
+  editTaskCustomColumns: 'creatorLeadOwner',
   editTaskName: 'creatorLeadOwner',
   deleteTask: 'creatorLeadOwner',
   // ---- decision tier ----
@@ -640,6 +642,7 @@ export const CAPABILITIES = [
   { id: 'editTaskAssignee', tier: 'task', group: 'taskFields', label: 'עריכת אחריות' },
   // round305 — the שותפים people column (partnersID).
   { id: 'editTaskPartners', tier: 'task', group: 'taskFields', label: 'עריכת שותפים' },
+  { id: 'editTaskCustomColumns', tier: 'task', group: 'taskFields', label: 'עריכת עמודות מותאמות' },
   { id: 'editTaskName', tier: 'task', group: 'taskFields', label: 'עריכת שם משימה' },
   { id: 'deleteTask', tier: 'task', group: 'taskFields', label: 'מחיקת משימה' },
   // ---- decision tier (one "שדות החלטה" card; delete is a row) ----
@@ -918,6 +921,7 @@ export const DEFAULT_PERMISSION_SEED = {
       editTaskAssignee: true,
       // round305 — the owner's spec grants שותפים to the task creator.
       editTaskPartners: true,
+      editTaskCustomColumns: true,
       editTaskName: true,
       deleteTask: true,
     },
@@ -932,6 +936,7 @@ export const DEFAULT_PERMISSION_SEED = {
       // round305 — the owner's spec grants שותפים to the task's responsible,
       // even though they may not reassign אחריות itself.
       editTaskPartners: true,
+      editTaskCustomColumns: true,
       editTaskName: false,
       deleteTask: false,
     },
@@ -946,6 +951,7 @@ export const DEFAULT_PERMISSION_SEED = {
       // round305 — editors are seeded FROM the discussion's lead/coordinator/
       // creator (item 19), the exact roles the owner's spec grants.
       editTaskPartners: true,
+      editTaskCustomColumns: true,
       editTaskName: true,
       deleteTask: true,
     },
