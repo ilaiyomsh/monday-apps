@@ -22,15 +22,35 @@ function clamp(v, lo, hi) {
  * Returns { left, top, width, maxHeight } (px) or null when either rect is
  * missing (caller then falls back to the viewport placement).
  */
-export function computeBoundedAnchorStyle({ anchor, bounds, cardWidth = 280, gap = 8, pad = 8, estHeight = 260 }) {
+export function computeBoundedAnchorStyle({
+  anchor, bounds, cardWidth = 280, widthScale = 1.5, gap = 8, pad = 8, estHeight = 260, viewportWidth,
+}) {
   if (!anchor || !bounds) return null;
-  // Width never exceeds the box's inner width.
-  const width = Math.max(0, Math.min(cardWidth, bounds.width - 2 * pad));
-  // Horizontal: center on the "+", clamped between the box's padded edges.
+  /*
+   * round368 §3 (owner spec) — the card is `widthScale`× wider and every added
+   * pixel goes LEFT: its RIGHT edge stays exactly where round243/266 put it.
+   * So the base placement is computed first (a cardWidth-wide card centered
+   * under the "+", clamped inside the agenda box), its right edge is frozen,
+   * and the card then grows leftward from there. Growing left may take it past
+   * the agenda box's left edge — deliberate; the viewport is the only hard stop,
+   * and even that clamp keeps the right edge fixed (the width absorbs it).
+   */
+  const baseWidth = Math.max(0, Math.min(cardWidth, bounds.width - 2 * pad));
   const centerX = anchor.left + anchor.width / 2;
   const minLeft = bounds.left + pad;
-  const maxLeft = bounds.right - width - pad;
-  const left = clamp(centerX - width / 2, minLeft, Math.max(minLeft, maxLeft));
+  const maxLeft = bounds.right - baseWidth - pad;
+  const baseLeft = clamp(centerX - baseWidth / 2, minLeft, Math.max(minLeft, maxLeft));
+  const rightEdge = baseLeft + baseWidth;
+
+  const maxWidth = Number.isFinite(viewportWidth)
+    ? Math.max(0, viewportWidth - 2 * pad)
+    : Infinity;
+  let width = Math.min(baseWidth * widthScale, maxWidth);
+  let left = rightEdge - width;
+  if (left < pad) {
+    left = pad;
+    width = Math.max(0, rightEdge - pad);
+  }
   // Vertical: open just under the "+", but keep the whole card inside the box —
   // slide up when needed, and never above the box's padded top.
   const maxHeight = Math.max(0, bounds.height - 2 * pad);

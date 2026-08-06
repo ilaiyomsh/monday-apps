@@ -46,14 +46,97 @@ function formatCreatedAt(nativeCreatedAt) {
 /*
  * round366 — a custom column's cell: typed EDITOR when onChange is provided
  * (permission-gated upstream in TaskTable), read-only CustomColumnValue
- * otherwise. file/board_relation have no inline editor (asset upload / item
- * linking are not writable from a table cell) and stay read-only by design.
+ * otherwise.
+ * round368 §4 — board_relation ("connected board") joined the editable types
+ * (owner request); `file` is the only one still read-only, since uploading an
+ * asset is not a table-cell interaction.
  */
-function CustomColumnCell({ col, value, onChange, dropdownOpts }) {
+function CustomColumnCell({ col, value, onChange, dropdownOpts, relationOpts }) {
   const [ddOpen, setDdOpen] = useState(false);
+  const [relOpen, setRelOpen] = useState(false);
+  const [relSearch, setRelSearch] = useState('');
   const t = col.type;
-  if (!onChange || t === 'file' || t === 'board_relation' || t === 'connect_boards') {
+  const isRelation = t === 'board_relation' || t === 'connect_boards';
+  // file has no inline editor (asset upload is not a table-cell interaction).
+  if (!onChange || t === 'file') {
     return <CustomColumnValue type={t} value={value} />;
+  }
+  /*
+   * round368 §4 (owner request) — a CONNECTED BOARD custom column is editable:
+   * pick items of the linked board to link, click a linked one to unlink. Writes
+   * REPLACE the whole set, so onChange always emits the full desired list; an
+   * empty list genuinely clears the column (see monday-client's sanitizer).
+   */
+  if (isRelation) {
+    const linked = Array.isArray(value?.linkedItems) ? value.linkedItems : [];
+    const linkedIds = new Set(linked.map((it) => String(it.id)));
+    const candidates = relationOpts?.items || [];
+    const allowMultiple = relationOpts?.allowMultiple !== false;
+    const q = relSearch.trim();
+    const shown = q ? candidates.filter((it) => it.name.includes(q)) : candidates;
+    const emit = (ids) => onChange({ linkedItems: [...ids].map((id) => ({ id })) });
+    const toggle = (id) => {
+      const next = new Set(linkedIds);
+      if (next.has(id)) next.delete(id);
+      else if (allowMultiple) next.add(id);
+      else { next.clear(); next.add(id); }
+      emit(next);
+      if (!allowMultiple) setRelOpen(false);
+    };
+    return (
+      <Dialog
+        open={relOpen}
+        showTrigger={['click']}
+        hideTrigger={['clickoutside', 'esc']}
+        onDialogDidShow={() => setRelOpen(true)}
+        onDialogDidHide={() => { setRelOpen(false); setRelSearch(''); }}
+        position="bottom"
+        zIndex={10000}
+        content={() => (
+          <DialogContentContainer>
+            <div className={styles.relMenu}>
+              <input
+                className={styles.relSearch}
+                value={relSearch}
+                placeholder="חיפוש פריט…"
+                onChange={(e) => setRelSearch(e.target.value)}
+                aria-label={`חיפוש ב${col.title}`}
+              />
+              {relationOpts?.loading && <div className={styles.relEmpty}>טוען פריטים…</div>}
+              {!relationOpts?.loading && shown.length === 0 && (
+                <div className={styles.relEmpty}>אין פריטים להצגה</div>
+              )}
+              {shown.slice(0, 100).map((it) => (
+                <button
+                  key={it.id}
+                  type="button"
+                  className={`${styles.relOption} ${linkedIds.has(it.id) ? styles.relOptionOn : ''}`}
+                  onClick={() => toggle(it.id)}
+                >
+                  <span className={styles.relCheck} aria-hidden="true">{linkedIds.has(it.id) ? '✓' : ''}</span>
+                  {it.name}
+                </button>
+              ))}
+              {linked.length > 0 && (
+                <button
+                  type="button"
+                  className={`${styles.relOption} ${styles.relClear}`}
+                  onClick={() => { emit(new Set()); setRelOpen(false); }}
+                >
+                  נקה את כל הקישורים
+                </button>
+              )}
+            </div>
+          </DialogContentContainer>
+        )}
+      >
+        <button type="button" className={styles.relTrigger} aria-label={`עריכת ${col.title}`}>
+          {linked.length
+            ? linked.map((it) => it.name || it.id).join(', ')
+            : <span className={styles.muted}>קשר פריט</span>}
+        </button>
+      </Dialog>
+    );
   }
   if (t === 'people' || t === 'person' || t === 'multiple_person') {
     return (
@@ -177,6 +260,8 @@ export const TaskTableRow = memo(function TaskTableRow({
   onCustomChange,
   // Board label options per custom DROPDOWN alias (hoisted in TaskTable).
   customDropdownOptions,
+  // round368 — candidate items per custom RELATION alias (hoisted in TaskTable).
+  customRelationOptions,
   rowStyle,
   // When provided (and the row is read-only, i.e. no inline rename), clicking the
   // task name opens its item card via this callback (Previous-tasks tab → Updates).
@@ -626,6 +711,7 @@ export const TaskTableRow = memo(function TaskTableRow({
           value={task?.[c.alias]}
           onChange={onCustomChange ? (value) => onCustomChange(task.id, c.alias, value) : null}
           dropdownOpts={customDropdownOptions?.[c.alias]}
+          relationOpts={customRelationOptions?.[c.alias]}
         />
       </div>
     );
