@@ -16,10 +16,10 @@ describe('computeBoundedAnchorStyle — confine the quick-create card in the age
     const r = computeBoundedAnchorStyle({ anchor: anchorAt(392, 300), bounds: BOUNDS });
     // round266 — the BASE card is 280 wide, centered on the "+": centerX = 404 →
     // base left 264, so its right edge is 544.
-    // round368 (owner spec) — the card is 1.5x wider and grows LEFT only, so the
-    // right edge stays 544 and the left moves out to 544 - 420 = 124.
-    expect(r.width).toBe(420);
-    expect(r.left).toBe(124);
+    // round368/369/370 (owner spec) — the card is 1.2x wider and grows LEFT only,
+    // so the right edge stays 544 and the left moves out to 544 - 336 = 208.
+    expect(r.width).toBe(336);
+    expect(r.left).toBe(208);
     expect(r.left + r.width).toBe(544);
     expect(r.top).toBe(308); // 300 + 8 gap
     expect(r.maxHeight).toBe(584); // 600 - 16
@@ -45,8 +45,8 @@ describe('computeBoundedAnchorStyle — confine the quick-create card in the age
   it('caps the BASE width to the box when the box is narrower than the card', () => {
     const narrow = { left: 0, top: 0, right: 200, bottom: 600, width: 200, height: 600 };
     const r = computeBoundedAnchorStyle({ anchor: anchorAt(50, 100), bounds: narrow, viewportWidth: 1400 });
-    // base width 184 at left 8 ⇒ right edge 192; round368 widens leftward to
-    // 1.5x = 276, which the viewport clamp then trims back to keep left >= pad.
+    // base width 184 at left 8 ⇒ right edge 192; round368/370 widens leftward to
+    // 1.2x = 220.8, which the viewport clamp then trims back to keep left >= pad.
     expect(r.left).toBe(8);
     expect(r.left + r.width).toBe(192);
     expect(r.width).toBe(184);
