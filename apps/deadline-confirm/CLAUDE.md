@@ -271,9 +271,9 @@ src/
   only — full secret never leaves the server).
 - **V6 scheduler — full account in `docs/scheduling.md`** (registered 2026-08-05;
   before that date NOTHING was sent automatically): `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`)
-  walks `ALLOWED_ACCOUNT_IDS`, runs tenants whose `digest.sendHour` has
-  arrived-or-passed the current Asia/Jerusalem hour (§7.4 catch-up below); then
-  optional operator summary to `OPERATOR_EMAIL`. The platform cron must be
+  walks `ALLOWED_ACCOUNT_IDS`, runs tenants whose `digest.sendHour` EQUALS the
+  current Asia/Jerusalem hour (§7.4 — no catch-up); then optional operator
+  summary to `OPERATOR_EMAIL`. The platform cron must be
   **hourly** (`0 * * * *` UTC) — the hour filter lives in the app, so a
   non-hourly expression means tenants on other hours never send at all. Job as
   stored: `retryConfig { maxRetries: 3, minBackoffDuration: 60 }`, `timeout: 300`,
@@ -293,20 +293,26 @@ src/
     old filter tested a `wrong_hour` skip reason no code produces, so an account
     that had merely never configured a digest counted as due on every tick — an
     hourly summary mail, measured.
-  - **§7.4 catch-up (round348).** An hour that has already passed today is a
-    catch-up candidate, not a skip — a tick that never fired for a tenant's exact
-    hour (or died mid-run) used to cost that tenant the whole day; now every
-    later tick re-attempts them, and the per-slot marker above is what makes that
-    safe (nobody already sent gets mailed twice). `due` for this purpose is NOT
-    "passed the hour gate": at the tenant's own scheduled hour it is always true
-    (even zero recipients is the expected reporting moment); on a later catch-up
-    hour it is true only when the tick actually sent or failed something —
-    otherwise every remaining hour of the day would re-report "nothing new" to
-    the operator summary AND the §5.2 CSV file, reintroducing the hourly-noise
-    bug above for a different reason. Cost: a tenant already fully sent today is
-    still re-checked against the boards every remaining hour (same board-read
-    overhead §7.3 measures for a tick that sends nobody anything) — accepted,
-    since there is no cheaper way to know "nothing left to do" without asking.
+  - **§7.4 — NO CATCH-UP. The hour gate is an EXACT match (owner decision
+    2026-08-06, reverses round348).** `if (sendHour !== hour) continue;` — any
+    other hour is a SILENT skip: the tenant is not listed, no boards are read, no
+    summary and no CSV. round348 had widened this so every tick from `sendHour`
+    to midnight re-attempted the tenant (safe, because the per-slot marker stops
+    a double send) — and that is exactly what was reverted. Safety was never the
+    objection: someone who became eligible AFTER the scheduled hour (a
+    users-board row completed, a task's date/status changed, a gate label
+    flipped) got a digest an hour later, and every such tick mailed the operator
+    another summary + CSV. Measured in production 2026-08-06 (10:00 sent 4;
+    the 11:00 catch-up sent 1 more and reported again). The rule is now: the
+    digest is a once-a-day event at a known hour, and **whoever joined late gets
+    it tomorrow**. `due` is therefore unconditionally true for a tenant that ran
+    — its own hour IS the reporting moment, even with zero recipients.
+    **Accepted cost, do not "fix" it back:** a tick that NEVER FIRED for a
+    tenant's hour costs that tenant the day, recoverable only from the admin
+    screen's resend. A tick that FAILED or timed out is still covered by the
+    platform's own retry (maxRetries 3 / 60s), and the per-slot marker is what
+    keeps those retries from re-mailing anyone — the marker solves retries, which
+    is a different problem from catch-up.
   - **Per-employee summary CSV (0.14.0, owner decision 2026-08-05 —
     `docs/scheduling.md` §5.2).** After a tick, each tenant that RAN gets a
     `multipart/mixed` mail — plain body + `digest-summary-<slot>.csv` — sent to

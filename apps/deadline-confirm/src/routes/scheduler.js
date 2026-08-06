@@ -1,16 +1,29 @@
 // T10/T11 — monday-code digest scheduler + D8 operator summary.
 // Dual path: /mndy-cronjob/digest-send (platform cron) and
 // /scheduler/digest-send (manual test). No session auth — monday signs the
-// cron request. Iterates env.allowedAccountIds; tenants whose sendHour has not
-// yet arrived this Asia/Jerusalem day are silent-skipped (not listed).
-// Tenants whose sendHour has ALREADY passed today are §7.4 CATCH-UP candidates
-// — every tick for the rest of the day re-attempts them, relying on the
-// per-slot marker (skipAlreadySent, digest-run.js) to make that safe: nobody
-// already sent gets mailed twice. A tick that never fired for a tenant's exact
-// hour (or died mid-run) used to cost that tenant the whole day; now the next
-// tick completes it. Incomplete tenants are listed with a skip reason and do
-// not raise. Gmail OAuth (T9b/T9c) is deferred — when emailSender is absent,
-// due tenants skip as email_not_configured.
+// cron request. Iterates env.allowedAccountIds and runs a tenant at its EXACT
+// sendHour in Asia/Jerusalem — any other hour is a silent skip (not listed, no
+// board reads). Incomplete tenants are listed with a skip reason and do not
+// raise. Gmail OAuth (T9b/T9c) is deferred — when emailSender is absent, due
+// tenants skip as email_not_configured.
+//
+// §7.4's CATCH-UP (round348) IS REVERSED (owner decision 2026-08-06). It made
+// every tick from sendHour to midnight re-attempt the tenant, safely — the
+// per-slot marker stopped anyone being mailed twice — but "safely" was not the
+// objection. Someone who became eligible AFTER the scheduled hour (a users-board
+// row filled in, a task's date or status changed, a recipient-gate label
+// flipped) received a digest an hour later, and each such tick mailed the
+// operator another summary + CSV. Measured in production 2026-08-06: the 10:00
+// tick sent 4, the 11:00 catch-up sent 1 more and reported again. The owner's
+// rule: the digest is a once-a-day event at a known hour, and whoever joined
+// late waits for tomorrow.
+//
+// The cost, on the record: a tick that NEVER FIRES for a tenant's hour costs
+// that tenant the day, recoverable only from the admin screen's resend. The
+// platform's own retry (maxRetries 3, 60s backoff — docs/scheduling.md §2) still
+// covers a tick that failed or timed out, and the per-slot marker is what keeps
+// those retries from re-mailing anyone. That marker is unchanged: it solves
+// retries, which is a different problem from catch-up.
 
 import express from 'express';
 import { hourInJerusalem, runDigestForAccount } from '../services/digest-run.js';
@@ -59,12 +72,11 @@ export function createSchedulerRouter({ storage, api, env, emailSender, todayIso
         }
 
         const sendHour = config.digest.sendHour ?? 8;
-        // §7.4 — an exact-hour match is the NORMAL tick; an hour that has
-        // already passed today is a catch-up attempt (their tick never fired,
-        // or died mid-run). Only an hour not yet reached is silent-skipped —
-        // no operator noise for a tenant whose time simply has not come yet.
-        const isScheduledHour = sendHour === hour;
-        if (hour < sendHour) {
+        // EXACT match, both directions (owner decision 2026-08-06, see header).
+        // A tenant whose hour is not now is skipped SILENTLY — not pushed with a
+        // reason: a listed tenant is summary audience (§5.1), and 23 hourly
+        // "not your hour" entries are the noise that fix already closed once.
+        if (sendHour !== hour) {
           continue;
         }
 
@@ -100,24 +112,23 @@ export function createSchedulerRouter({ storage, api, env, emailSender, todayIso
           recipients: result.results?.length ?? 0,
           skip: result.skip,
         });
-        // `due` marks the summary's audience (operator mail + CSV report) — NOT
-        // simply "past the sendHour gate" any more. At the tenant's own scheduled
-        // hour it is always true (the expected reporting moment, even for zero
-        // recipients). On a §7.4 catch-up hour it is true only when this tick
-        // actually did something (sent or failed): a catch-up attempt that found
-        // everyone already covered must stay silent, or the widened gate turns
-        // into the exact hourly-noise bug §5.1 already fixed once, every
-        // remaining hour of every day. It is stripped from the response so the
-        // wire shape stays what it was. `durationMs` is NOT stripped:
-        // `scheduler:run` prints the response, so the timeout question is
-        // answerable from one manual tick.
-        const due = isScheduledHour || (result.sent ?? 0) > 0 || (result.failed ?? 0) > 0;
-        tenants.push({ accountId, ...result, durationMs, due });
+        // `due` marks the summary's audience (operator mail + CSV report). With
+        // the exact-hour gate above, reaching this line IS the scheduled hour, so
+        // it is unconditionally true — a tenant that ran gets its report even
+        // with zero recipients, because its own hour is the expected reporting
+        // moment. (Under the reverted catch-up this had to be conditional on
+        // "did something", or every remaining hour of the day re-reported.) It is
+        // stripped from the response so the wire shape stays what it was.
+        // `durationMs` is NOT stripped: `scheduler:run` prints the response, so
+        // the timeout question is answerable from one manual tick.
+        tenants.push({ accountId, ...result, durationMs, due: true });
       }
 
       let summarySent = false;
       // "Due" means the sendHour matched and the run was actually attempted — NOT
-      // merely "appeared in the list". The old filter was `!t.skip || t.skip !==
+      // merely "appeared in the list": a tenant with no digest config, or whose
+      // config read failed, is pushed WITHOUT `due` and must stay out of the
+      // summary. The old filter was `!t.skip || t.skip !==
       // 'wrong_hour'`, which is true for every possible value: `wrong_hour` is a
       // skip reason no code produces, because the not-due branch `continue`s
       // without pushing. So an account that had simply never configured a digest

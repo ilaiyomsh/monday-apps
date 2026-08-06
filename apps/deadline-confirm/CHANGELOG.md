@@ -2,6 +2,42 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.16.1 — 2026-08-06 — the cron runs at the scheduled hour and at no other hour
+
+**Reverses §7.4's catch-up (round348, live since 0.16.0).** That change made
+every hourly tick from `sendHour` to midnight re-attempt a tenant, with the
+per-slot marker keeping it safe. It was safe. The objection was different:
+somebody who became eligible AFTER the scheduled hour — a users-board row
+completed, a task's date or status changed, a recipient-gate label flipped —
+received their digest an hour or two late, and each such tick mailed the operator
+another summary and another CSV.
+
+**Measured in production the first day it ran** (2026-08-06, account 14334098,
+slot 20260806): the 10:00 tick sent 4 digests; the 11:00 catch-up tick sent 1
+more (a person who was not eligible at 10:00), correctly suppressed 2 via the
+marker, found 2 with no tasks left — and mailed a second report. Nobody was
+mailed twice; there was simply a second send, and a second report, that the owner
+did not want.
+
+**The rule now:** `if (sendHour !== hour) continue;` — an exact match in both
+directions, and any other hour is a SILENT skip (the tenant is not listed, no
+boards are read, no summary, no CSV). The digest is a once-a-day event at a known
+hour; whoever joins late gets it tomorrow. `due` goes back to unconditionally
+true for a tenant that ran — reaching that line IS the scheduled hour, so a run
+with zero recipients still reports, which is the daily confirmation the operator
+expects.
+
+**What this costs, on the record so it is not "fixed" back by accident:** a tick
+that NEVER FIRES for a tenant's hour costs that tenant the day, recoverable only
+from the admin screen's resend. A tick that FAILED or timed out is still covered
+— the platform retries it (maxRetries 3, 60s backoff), and the per-slot marker is
+what keeps those retries from re-mailing anyone. The marker is untouched: it
+solves retries, which is a different problem from catch-up.
+
+`tests/scheduler-catchup.test.js` became `tests/scheduler-hour-gate.test.js` and
+now pins the opposite behaviour, including the late-joiner case verbatim from
+production and the accepted-cost case (a missed hour is not recovered).
+
 ## 0.15.0 — 2026-08-05 — the summary email's content is the operator's, not the code's
 
 **The problem was scope of control.** The digest settings screen could choose the
