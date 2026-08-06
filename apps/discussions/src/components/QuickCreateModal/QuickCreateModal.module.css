@@ -310,3 +310,40 @@
     border-radius: 12px 12px 0 0;
   }
 }
+
+/* ------------------------------------------------------------------ round368
+ * §3 (owner spec) — the card is 50% wider. The anchored (agenda-point) opens
+ * carry an INLINE width from computeBoundedAnchorStyle, which pins their right
+ * edge; the non-anchored (FAB) open is pinned to the inline-start = RIGHT edge
+ * by the overlay's flex, so widening the CSS width there also grows leftward.
+ * ------------------------------------------------------------------ */
+.modal {
+  width: min(480px, calc(100vw - 32px));
+}
+
+/* The משימה/החלטה toggle now matches the אחראי + דד ליין cells: one 40px-tall
+   control that spans the row (minus the × button), same corner radius and type
+   size as those two fields, so the three read as one family. */
+.topRow {
+  gap: 8px;
+}
+.topRowStart {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+}
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  height: 40px;
+  padding: 2px;
+  border-radius: var(--border-radius-small, 4px);
+  box-sizing: border-box;
+}
+.segBtn {
+  height: 100%;
+  padding: 0 10px;
+  font-size: 14px;
+  border-radius: var(--border-radius-small, 4px);
+}

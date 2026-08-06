@@ -12,22 +12,27 @@ describe('computeBoundedAnchorStyle — confine the quick-create card in the age
     expect(computeBoundedAnchorStyle({ anchor: anchorAt(300, 300), bounds: null })).toBeNull();
   });
 
-  it('opens centered under the "+" and just below it when there is room', () => {
+  it('opens under the "+" and just below it when there is room', () => {
     const r = computeBoundedAnchorStyle({ anchor: anchorAt(392, 300), bounds: BOUNDS });
-    // round266 — cardWidth is 280: centerX = 392 + 12 = 404 → left = 404 - 140 = 264
-    expect(r.width).toBe(280);
-    expect(r.left).toBe(264);
+    // round266 — the BASE card is 280 wide, centered on the "+": centerX = 404 →
+    // base left 264, so its right edge is 544.
+    // round368 (owner spec) — the card is 1.5x wider and grows LEFT only, so the
+    // right edge stays 544 and the left moves out to 544 - 420 = 124.
+    expect(r.width).toBe(420);
+    expect(r.left).toBe(124);
+    expect(r.left + r.width).toBe(544);
     expect(r.top).toBe(308); // 300 + 8 gap
     expect(r.maxHeight).toBe(584); // 600 - 16
   });
 
-  it('clamps horizontally so the card never crosses the box edges', () => {
-    // "+" hard against the box's right edge → card pinned to the right padded edge.
+  it('keeps the RIGHT edge inside the box at both extremes (round368: only the left grows out)', () => {
+    // "+" hard against the box's right edge → the base card's right padded edge…
     const r = computeBoundedAnchorStyle({ anchor: anchorAt(690, 300), bounds: BOUNDS });
-    expect(r.left).toBe(700 - 280 - 8); // maxLeft = right - width - pad = 412
-    // "+" against the left edge → pinned to the left padded edge.
+    expect(r.left + r.width).toBe(700 - 8); // base maxLeft 412 + 280 = 692
+    // "+" against the left edge → the base card sat at left 108 (right 388); the
+    // wider card keeps that right edge, so its left now reaches past the box.
     const l = computeBoundedAnchorStyle({ anchor: anchorAt(100, 300), bounds: BOUNDS });
-    expect(l.left).toBe(108); // minLeft = left + pad
+    expect(l.left + l.width).toBe(388);
   });
 
   it('slides the card UP when opening below the "+" would overflow the box bottom', () => {
@@ -37,10 +42,13 @@ describe('computeBoundedAnchorStyle — confine the quick-create card in the age
     expect(r.top).toBe(532);
   });
 
-  it('caps width to the box when the box is narrower than the card', () => {
+  it('caps the BASE width to the box when the box is narrower than the card', () => {
     const narrow = { left: 0, top: 0, right: 200, bottom: 600, width: 200, height: 600 };
-    const r = computeBoundedAnchorStyle({ anchor: anchorAt(50, 100), bounds: narrow });
-    expect(r.width).toBe(200 - 16); // 184
-    expect(r.left).toBe(8); // minLeft, since maxLeft collapses to minLeft
+    const r = computeBoundedAnchorStyle({ anchor: anchorAt(50, 100), bounds: narrow, viewportWidth: 1400 });
+    // base width 184 at left 8 ⇒ right edge 192; round368 widens leftward to
+    // 1.5x = 276, which the viewport clamp then trims back to keep left >= pad.
+    expect(r.left).toBe(8);
+    expect(r.left + r.width).toBe(192);
+    expect(r.width).toBe(184);
   });
 });

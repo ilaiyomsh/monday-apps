@@ -13,6 +13,7 @@ import { useRowOrder } from '@generated/hooks/useRowOrder.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
+import { useRelationItems } from '@generated/hooks/useRelationItems.js';
 import { getColumns } from '@api/board-config-store.js';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
@@ -29,6 +30,17 @@ import styles from './TaskTable.module.css';
 function DropdownOptionsCollector({ alias, onOptions }) {
   const opts = useDropdownOptions('tasks', alias);
   useEffect(() => { onOptions(alias, opts); }, [alias, opts, onOptions]);
+  return null;
+}
+
+/*
+ * round368 §4 — the same one-loader-per-COLUMN shape for a custom RELATION
+ * ("connected board") column: it reports the linked board's candidate items so
+ * the cell can add/remove links. Per column, never per row.
+ */
+function RelationItemsCollector({ alias, onItems }) {
+  const rel = useRelationItems('tasks', alias);
+  useEffect(() => { onItems(alias, rel); }, [alias, rel, onItems]);
   return null;
 }
 
@@ -184,6 +196,12 @@ export function TaskTable({
     setCustomDropdownOptions((m) => (m[alias] === opts ? m : { ...m, [alias]: opts }));
   }, []);
   const customDropdownCols = customCols.filter((c) => c.type === 'dropdown');
+  // round368 — candidate items per custom relation column (same collector shape).
+  const [customRelationOptions, setCustomRelationOptions] = useState({});
+  const reportRelationItems = useCallback((alias, rel) => {
+    setCustomRelationOptions((m) => (m[alias] === rel ? m : { ...m, [alias]: rel }));
+  }, []);
+  const customRelationCols = customCols.filter((c) => c.type === 'board_relation' || c.type === 'connect_boards');
 
   // Width defs follow the live VISIBLE order; 'sel' is a fixed (non-resizable)
   // leading track, everything else resizes within the constants' clamps.
@@ -272,6 +290,9 @@ export function TaskTable({
       {onCustomChange && customDropdownCols.map((c) => (
         <DropdownOptionsCollector key={c.alias} alias={c.alias} onOptions={reportDropdownOptions} />
       ))}
+      {onCustomChange && customRelationCols.map((c) => (
+        <RelationItemsCollector key={c.alias} alias={c.alias} onItems={reportRelationItems} />
+      ))}
       <div className={tableClass} dir="ltr" style={color ? { '--group-color': color } : undefined}>
         {/* header */}
         <div className={`${styles.taskRow} ${styles.taskHead}`} style={rowStyle}>
@@ -298,6 +319,7 @@ export function TaskTable({
               onDeadlineChange={onDeadlineChange && canTask('editTaskDeadline', task) ? onDeadlineChange : undefined}
               onCustomChange={onCustomChange && canTask('editTaskCustomColumns', task) ? onCustomChange : undefined}
               customDropdownOptions={customDropdownOptions}
+              customRelationOptions={customRelationOptions}
               onRenameTask={onRenameTask && canTask('editTaskName', task) ? onRenameTask : undefined}
               onDeleteTask={onDeleteTask}
               onRetryCreate={onRetryCreate}
