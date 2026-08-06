@@ -335,6 +335,8 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
   const headerMode = template?.headerMode || EXPORT_HEADER_MODES.CONFIG;
   const isConfig = headerMode !== EXPORT_HEADER_MODES.UPLOAD;
   const [expandedKey, setExpandedKey] = React.useState(null);
+  // round366 — the title card opens on demand, closed by default (owner request).
+  const [titleOpen, setTitleOpen] = React.useState(false);
   // Immediate over-quota alert on upload (replaces the old usage bar). The total
   // assets bundle (logos + uploaded .docx) must stay under the 6MB storage quota.
   const [sizeAlert, setSizeAlert] = useState(null);
@@ -647,10 +649,23 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
     );
   };
 
+  /*
+   * round366 (owner request) — the card is COLLAPSIBLE like the section rows:
+   * closed by default, the header row toggles it. The chevron mirrors the
+   * sections' open/closed affordance.
+   */
   const renderTitleCard = () => (
     <div className={styles.band}>
-      <Text type="text2" weight="medium" className={styles.bandLabel}>כותרת המסמך</Text>
-      {titleCfg.order.map((partKey, i) => (
+      <button
+        type="button"
+        className={styles.titleCardToggle}
+        onClick={() => setTitleOpen((o) => !o)}
+        aria-expanded={titleOpen}
+      >
+        <Text type="text2" weight="medium" className={styles.bandLabel}>כותרת המסמך</Text>
+        <ChevronDown size={15} className={`${styles.titleCardChevron} ${titleOpen ? styles.titleCardChevronOpen : ''}`} aria-hidden="true" />
+      </button>
+      {titleOpen && titleCfg.order.map((partKey, i) => (
         <React.Fragment key={partKey}>
           {i > 0 && (
             <div className={styles.ctrlRow}>
@@ -683,16 +698,18 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
           </div>
         </React.Fragment>
       ))}
-      <div className={styles.ctrlRow}>
-        <Text type="text3" color="secondary">יישור</Text>
-        <ButtonGroup
-          options={ALIGN_OPTIONS}
-          value={titleCfg.align}
-          onSelect={(v) => patchTitle({ align: v })}
-          size="small"
-          kind="secondary"
-        />
-      </div>
+      {titleOpen && (
+        <div className={styles.ctrlRow}>
+          <Text type="text3" color="secondary">יישור</Text>
+          <ButtonGroup
+            options={ALIGN_OPTIONS}
+            value={titleCfg.align}
+            onSelect={(v) => patchTitle({ align: v })}
+            size="small"
+            kind="secondary"
+          />
+        </div>
+      )}
     </div>
   );
 

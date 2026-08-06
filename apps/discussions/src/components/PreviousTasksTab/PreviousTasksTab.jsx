@@ -15,9 +15,11 @@ import { BuilderControl } from '@generated/components/MyTasksView/controls/Build
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
 import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
+import { customEntriesFor, customColumnIcon } from '@generated/utils/customColumns.js';
 import {
   filterTasks, filterCount, serializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
+  customFilterDims, customComparableValues,
 } from '@generated/components/MyTasksView/controls/controls.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
@@ -260,6 +262,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   } = usePreviousTasksData(discussion, byType, { onResetSelection: () => setSelectedIds(new Set()), scope });
   const {
     updateName, updateStatus, updatePriority, updateAssignee, updatePartners, updateDeadline,
+    updateColumn,
     updateStatusBatch, updateAssigneeBatch, updateDeadlineBatch,
   } = useMemo(() => createTaskUpdaters(setTasks), [setTasks]);
 
@@ -271,6 +274,24 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // "Save to this view" applies for everyone. The primary name column is never
   // hideable. The list mirrors the TaskTable columns actually shown here
   // (priority only when mapped; "דיון מקור"/source only in by-type mode).
+  // round366 — custom mappings join the filter as typed dims (see TasksTab).
+  const customTaskCols = useMemo(
+    () => customEntriesFor(getColumns('tasks'))
+      .filter(([, c]) => c?.id)
+      .map(([alias, c]) => ({ alias, type: c.type, title: c.title || alias })),
+    []
+  );
+  const customDims = useMemo(() => customFilterDims(customTaskCols), [customTaskCols]);
+  const filterColumns = useMemo(() => [
+    ...PREV_FILTER_COLUMNS,
+    ...customDims.map((d) => ({
+      key: d.key,
+      type: d.control === 'values' ? 'status' : d.control,
+      alias: d.key,
+      ops: d.control === 'date' ? ['within', 'before', 'after'] : d.control === 'text' ? ['contains'] : ['is', 'isnot'],
+    })),
+  ], [customDims]);
+  const colName = (key) => PREV_COL_NAME[key] || customTaskCols.find((c) => c.alias === key)?.title || key;
   const columnList = [
     { key: 'name', label: 'שם', icon: 'text', locked: true },
     showPriority && { key: 'priority', label: 'עדיפות', icon: 'status' },
@@ -280,6 +301,8 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     { key: 'deadline', label: 'דד ליין', icon: 'date' },
     { key: 'status', label: 'סטאטוס', icon: 'status' },
     byType && { key: 'source', label: 'דיון מקור', icon: 'relation' },
+    // round366 — custom mappings are hideable like every other column.
+    ...customTaskCols.map((c) => ({ key: c.alias, label: c.title, icon: customColumnIcon(c.type) })),
   ].filter(Boolean);
   const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
   const [hiddenColumns, setHiddenColumns] = useState(
@@ -395,6 +418,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       return;
     }
     for (const id of targetIds) await updateAssignee(id, people);
+  });
+  // round366 — inline edit of a custom column (single-row; gated per row).
+  const applyCustomChange = useStableHandler(async (taskId, alias, value) => {
+    if (!allow('editTaskCustomColumns', taskId)) return;
+    await updateColumn(taskId, alias, value);
   });
   const applyDeadlineChange = useStableHandler(async (taskId, date) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskDeadline');
@@ -521,13 +549,35 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // Default STATUS row when nothing saved; a saved view's own rows win.
   // State + mutators come from the shared builder state machine (round137).
   const {
-    filter, filterRows, setFilterOp, toggleFilterVal, setDeadlineRange, setDeadlineDate,
+    filter, filterRows, setFilterOp, toggleFilterVal, setFilterText, setDeadlineRange, setDeadlineDate,
+    setDateColRange, setDateColDate,
     addFilterRow, removeFilterRow, retargetFilterRow, clearFilter,
-  } = useFilterBuilder({ columns: PREV_FILTER_COLUMNS, defaultRows: ['status'], savedView });
-  const fc = filterCount(filter);
+  } = useFilterBuilder({ columns: filterColumns, defaultRows: ['status'], savedView });
+  const fc = filterCount(filter, customDims);
   // Sort handlers (session-only until an owner hits Save, like the other builders).
   const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstSortDir(col), active: true });
   const clearSort = () => setSort({ col: null, dir: null, active: false });
+
+  // round366 — value options per custom dim, scanned off the loaded tasks.
+  const customFilterOptions = useMemo(() => {
+    const map = {};
+    for (const d of customDims) {
+      if (d.control === 'date' || d.control === 'text') continue;
+      const seen = new Map();
+      (tasks || []).forEach((t) => {
+        const raw = t[d.key];
+        if (d.control === 'person') {
+          (Array.isArray(raw) ? raw : []).forEach((p) => {
+            if (p && p.id != null && !seen.has(String(p.id))) seen.set(String(p.id), { id: String(p.id), label: p.name || String(p.id), color: null });
+          });
+        } else {
+          customComparableValues(raw).forEach((v) => { if (!seen.has(v)) seen.set(v, { id: v, label: v, color: null }); });
+        }
+      });
+      map[d.key] = [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
+    }
+    return map;
+  }, [customDims, tasks]);
 
   // Assignee options = the distinct people present across the loaded tasks.
   const personOptions = useMemo(() => {
@@ -553,11 +603,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // inactive sort returns the list unchanged, so default order is untouched.
   const filteredTasks = useMemo(
     () => {
-      let base = sortTasks(filterTasks(tasks, filter), sort, { orderById, labelById });
+      let base = sortTasks(filterTasks(tasks, filter, { custom: customDims }), sort, { orderById, labelById });
       if (search.trim()) base = base.filter((tk) => matchesSearch(tk.name, search));
       return quickStatus ? base.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : base;
     },
-    [tasks, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, search]
+    [tasks, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, search, customDims]
   );
 
   // Groups carry { key, label, color, items } — status groups key by the stable
@@ -636,12 +686,13 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     return (opts || []).filter((o) => filter[col].values.has(String(o.id))).map((o) => ({ color: o.color, text: o.label }));
   };
   const renderFilterRow = (col, i, mobile, openId, setOpenId) => {
-    const fcfg = PREV_FILTER_COLUMNS.find((c) => c.key === col);
+    const fcfg = filterColumns.find((c) => c.key === col);
+    if (!fcfg) return null;
     const colSeg = (
       <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
-        icon={PREV_TYPE_ICON[fcfg.type]} text={PREV_COL_NAME[col]}
-        options={PREV_FILTER_COLUMNS.map((c) => ({
-          key: c.key, label: PREV_COL_NAME[c.key], icon: PREV_TYPE_ICON[c.type],
+        icon={PREV_TYPE_ICON[fcfg.type] || 'text'} text={colName(col)}
+        options={filterColumns.map((c) => ({
+          key: c.key, label: colName(c.key), icon: PREV_TYPE_ICON[c.type] || 'text',
           selected: c.key === col, disabled: c.key !== col && filterRows.includes(c.key),
         }))}
         onPick={(to) => retargetFilterRow(col, to)} />
@@ -653,26 +704,39 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         onPick={(op) => setFilterOp(col, op)} />
     );
     let valueCtl = null;
-    if (col === 'deadline') {
-      const f = filter.deadline;
+    if (fcfg.type === 'date') {
+      const f = filter[col];
+      const onRange = col === 'deadline' ? setDeadlineRange : (r) => setDateColRange(col, r);
+      const onDate = col === 'deadline' ? setDeadlineDate : (d) => setDateColDate(col, d);
       if (f.op === 'within') {
         valueCtl = (
-          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="מתי"
+          <Segment id={`fval-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="מתי"
             icon={f.range ? rangeIcon(f.range) : 'date'} text={f.range ? rangeLabel(f.range) : 'בחרו טווח תאריכים'} placeholder={!f.range}
             options={DEADLINE_RANGES.map((r) => ({ key: r.key, label: r.label, icon: r.icon, selected: f.range === r.key }))}
-            onPick={setDeadlineRange} />
+            onPick={onRange} />
         );
       } else {
         valueCtl = (
           <div className={mobile ? bs.bDateWrapFull : bs.bDateWrap}>
-            <DatePickerPopover value={f.date || null} onChange={setDeadlineDate} />
+            <DatePickerPopover value={f.date || null} onChange={onDate} />
           </div>
         );
       }
-    } else {
-      const opts = col === 'person' ? personOptions : statusOptions;
+    } else if (fcfg.type === 'text') {
       valueCtl = (
-        <Segment id={`fval-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle={PREV_COL_NAME[col]} multi
+        <input
+          type="text"
+          className={bs.bTextInput}
+          value={filter[col]?.text || ''}
+          placeholder="טקסט לחיפוש"
+          onChange={(e) => setFilterText(col, e.target.value)}
+          aria-label={`סינון ${colName(col)}`}
+        />
+      );
+    } else {
+      const opts = col === 'person' ? personOptions : col === 'status' ? statusOptions : (customFilterOptions[col] || []);
+      valueCtl = (
+        <Segment id={`fval-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle={colName(col)} multi
           chips={valueChips(col)}
           options={(opts || []).map((o) => ({ key: String(o.id), label: o.label, dot: o.color, selected: filter[col].values.has(String(o.id)) }))}
           onPick={(id) => toggleFilterVal(col, id)} />
@@ -708,7 +772,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     <>
       {filterRows.map((col, i) => renderFilterRow(col, i, mobile, openId, setOpenId))}
       {filterRows.length === 0 ? <div className={bs.bEmpty}>No filters — showing all tasks</div> : null}
-      {filterRows.length < PREV_FILTER_COLUMNS.length
+      {filterRows.length < filterColumns.length
         ? <button type="button" className={bs.bAddLink} onClick={addFilterRow}>+ New filter</button>
         : null}
     </>
@@ -901,7 +965,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
             applied={fc > 0} badge={fc}
             onClear={fc > 0 ? clearFilter : null}
             onSave={canSaveView ? () => {
-              saveView({ filter: serializeFilter(filter), filterRows });
+              saveView({ filter: serializeFilter(filter, customDims), filterRows });
               onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
             } : null}
             renderBody={renderFilterBody}
@@ -1092,6 +1156,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
                   onAssigneeChange={applyAssigneeChange}
                   onPartnersChange={applyPartnersChange}
                   onDeadlineChange={applyDeadlineChange}
+                  onCustomChange={applyCustomChange}
                   onRenameTask={updateName}
                   selectable={canSelect} selectedIds={selectedIds} onToggleSelect={toggleSelect}
                   selectAllChecked={groupAllSelected}

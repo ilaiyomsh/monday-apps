@@ -1,5 +1,19 @@
 import { useCallback, useState } from 'react';
-import { emptyFilter, deserializeFilter } from '../components/MyTasksView/controls/controls.js';
+import { emptyFilter, deserializeFilter, pristineFilterCol } from '../components/MyTasksView/controls/controls.js';
+
+/*
+ * round366 — custom-column dims (any column key beyond the four fixed ones)
+ * as [{ key, control }], derived from the view's column list. The column
+ * `type` vocabulary maps to the controls.js CONTROL vocabulary; 'status' and
+ * any unknown type behave as a value-set column.
+ */
+const FIXED_KEYS = new Set(['status', 'priority', 'person', 'deadline']);
+const controlOf = (type) => (type === 'person' ? 'person' : type === 'date' ? 'date' : type === 'text' ? 'text' : 'values');
+export function customDimsOfColumns(columns) {
+  return (columns || [])
+    .filter((c) => !FIXED_KEYS.has(c.key))
+    .map((c) => ({ key: c.key, control: controlOf(c.type) }));
+}
 
 /*
  * round137 (audit stage 4) — the ONE filter-panel state machine, extracted from
@@ -25,8 +39,10 @@ import { emptyFilter, deserializeFilter } from '../components/MyTasksView/contro
  * per-view module constants, so their deps never actually change).
  */
 export function useFilterBuilder({ columns, defaultRows = [], savedView = null }) {
+  // round366 — the non-fixed (custom) dims seed/restore their own typed keys.
+  const customDims = customDimsOfColumns(columns);
   const [filter, setFilter] = useState(() => (
-    savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()
+    savedView?.filter ? deserializeFilter(savedView.filter, customDims) : emptyFilter(customDims)
   ));
   const [filterRows, setFilterRows] = useState(() => (
     Array.isArray(savedView?.filterRows)
@@ -34,19 +50,31 @@ export function useFilterBuilder({ columns, defaultRows = [], savedView = null }
       : [...defaultRows]
   ));
 
-  // A column's pristine state — deadline has the date shape, the rest a Set.
-  const resetCol = (col) => (col === 'deadline'
-    ? { op: 'within', range: null, date: null }
-    : { op: 'is', values: new Set() });
+  // A column's pristine state, by its declared type ('deadline' keeps its
+  // hardcoded date shape for the fixed lists that predate typed columns).
+  const resetCol = (col) => {
+    if (col === 'deadline') return pristineFilterCol('date');
+    const def = columns.find((c) => c.key === col);
+    return pristineFilterCol(controlOf(def?.type));
+  };
+  // A custom key may be missing from a filter restored before the column
+  // existed — self-heal to pristine instead of crashing the mutator.
+  const colState = (f, col) => f[col] || resetCol(col);
 
-  const setFilterOp = useCallback((col, op) => setFilter((f) => ({ ...f, [col]: { ...f[col], op } })), []);
+  const setFilterOp = useCallback((col, op) => setFilter((f) => ({ ...f, [col]: { ...colState(f, col), op } })), []);
   const toggleFilterVal = useCallback((col, id) => setFilter((f) => {
-    const next = new Set(f[col].values);
+    const cur = colState(f, col);
+    const next = new Set(cur.values);
     if (next.has(id)) next.delete(id); else next.add(id);
-    return { ...f, [col]: { ...f[col], values: next } };
+    return { ...f, [col]: { ...cur, values: next } };
   }), []);
+  // round366 — free-text contains value for a text custom column.
+  const setFilterText = useCallback((col, text) => setFilter((f) => ({ ...f, [col]: { ...colState(f, col), text } })), []);
   const setDeadlineRange = useCallback((range) => setFilter((f) => ({ ...f, deadline: { op: 'within', range, date: null } })), []);
   const setDeadlineDate = useCallback((date) => setFilter((f) => ({ ...f, deadline: { ...f.deadline, date } })), []);
+  // round366 — a DATE custom column needs the same range/date mutators as deadline, per column.
+  const setDateColRange = useCallback((col, range) => setFilter((f) => ({ ...f, [col]: { op: 'within', range, date: null } })), []);
+  const setDateColDate = useCallback((col, date) => setFilter((f) => ({ ...f, [col]: { ...colState(f, col), date } })), []);
   const addFilterRow = useCallback(() => setFilterRows((rows) => {
     const next = columns.map((c) => c.key).find((k) => !rows.includes(k));
     return next ? [...rows, next] : rows;
@@ -61,14 +89,15 @@ export function useFilterBuilder({ columns, defaultRows = [], savedView = null }
     setFilter((f) => ({ ...f, [fromCol]: resetCol(fromCol), [toCol]: resetCol(toCol) }));
   }, []);
   const clearFilter = useCallback(() => {
-    setFilter(emptyFilter());
+    setFilter(emptyFilter(customDimsOfColumns(columns)));
     setFilterRows([...defaultRows]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- per-view module constant; keyed by content
-  }, [defaultRows.join('|')]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- per-view constants; keyed by content
+  }, [defaultRows.join('|'), columns]);
 
   return {
     filter, setFilter, filterRows, setFilterRows,
-    setFilterOp, toggleFilterVal, setDeadlineRange, setDeadlineDate,
+    setFilterOp, toggleFilterVal, setFilterText, setDeadlineRange, setDeadlineDate,
+    setDateColRange, setDateColDate,
     addFilterRow, removeFilterRow, retargetFilterRow, clearFilter,
   };
 }

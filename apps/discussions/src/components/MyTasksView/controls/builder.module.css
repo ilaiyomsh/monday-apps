@@ -228,3 +228,16 @@
   color: var(--secondary-text-color, #9699a6);
   white-space: nowrap;
 }
+
+/* round366 — free-text "contains" value input for custom text columns. */
+.bTextInput {
+  flex: 1 1 140px;
+  min-width: 120px;
+  padding: 6px 10px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 7px;
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  font-size: 13px;
+  font-family: inherit;
+}

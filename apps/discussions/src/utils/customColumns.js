@@ -79,6 +79,17 @@ export function customEntriesFor(columnsForBoard, types) {
     .sort(([a], [b]) => customIndex(a) - customIndex(b));
 }
 
+/**
+ * round366 — the hide-picker (BuilderIcon) icon name for a custom column type.
+ */
+export function customColumnIcon(type) {
+  if (type === 'people' || type === 'person' || type === 'multiple_person') return 'person';
+  if (type === 'date') return 'date';
+  if (type === 'dropdown') return 'status';
+  if (type === 'board_relation' || type === 'connect_boards') return 'relation';
+  return 'text';
+}
+
 export default {
   CUSTOM_COLUMN_BOARDS,
   CUSTOM_COLUMN_TYPE_GROUPS,
