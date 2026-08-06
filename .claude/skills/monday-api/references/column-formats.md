@@ -272,6 +272,16 @@ Legacy `text`/`value` are null on relation-family columns. Read typed fragments:
   Passing `defaults` as a JSON **string** (legacy `displayed_column` map form) is accepted with
   HTTP 200 but yields `settings_str: "{}"` — a silently blank, unconfigured mirror. Always read
   `settings_str` back and assert it is non-empty.
+- **Reconfiguring a mirror: `update_column(settings:)` takes the SAME top-level typed shape,
+  NOT the stored `settings_str`.** (Verified live 2026-08-06, round363 sandbox probes.) The
+  mutation validates against its own typed schema — `get_column_type_info(type: mirror)` is the
+  ground truth for it. Feeding back what the API *returns* (`settings_str`'s
+  `displayed_linked_columns` as a `{"<board_id>": [col_ids]}` MAP, or the legacy
+  `displayed_column` form) fails validation. Send the ARRAY form exactly as in the
+  `create_column` block above; the server stores it back as a map. Round-trip trap: **read
+  shape ≠ write shape** — never echo `settings_str` into `update_column`. Verified end-to-end:
+  after linking through the relation, `... on MirrorValue { display_value }` returns the source
+  value (`text` stays `null` on mirrors — see the display_value bullet above).
 
 ## Board / column identity operations
 
