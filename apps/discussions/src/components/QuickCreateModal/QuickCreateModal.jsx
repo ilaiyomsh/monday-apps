@@ -216,9 +216,10 @@ export function QuickCreateModal({
               </div>
             )}
           </div>
-          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="סגירה">
-            ×
-          </button>
+          {/* round370 (owner request) — no × here. The footer's "ביטול" is the
+              close affordance, and dropping the × lets the toggle span the card's
+              FULL width instead of stopping short of a button nobody needed.
+              Esc and an overlay click still close, as before. */}
         </div>
 
         <div className={styles.body}>

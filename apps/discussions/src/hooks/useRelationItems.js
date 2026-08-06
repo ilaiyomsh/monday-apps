@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
 import logger from '../utils/logger.js';
@@ -149,12 +149,27 @@ export function useRelationItems(boardKey, alias) {
     return () => { alive = false; };
   }, [boardKey, alias, key]);
 
-  return {
+  /*
+   * round370 §2 — MEMOIZED, and that is load-bearing, not tidiness. TaskTable's
+   * per-column collector reports this value up through an effect keyed on it:
+   *
+   *   const rel = useRelationItems('tasks', alias);
+   *   useEffect(() => { onItems(alias, rel); }, [alias, rel, onItems]);
+   *
+   * A fresh object literal per render made that effect fire on every render →
+   * setState on the table → re-render → new object → forever. The tab froze with
+   * nothing thrown and nothing logged (owner-reported: adding a custom relation
+   * column "תוקע את כל המסך"). `useDropdownOptions` returns its state object
+   * directly for exactly this reason, which is why dropdown columns never froze.
+   * Note the `|| []` too: an unmemoized default would leak a new array each time
+   * even if the wrapper were stable.
+   */
+  return useMemo(() => ({
     items: state?.items || [],
     allowMultiple: state?.allowMultiple !== false,
     boardId: state?.boardId || null,
     loading: !state,
-  };
+  }), [state]);
 }
 
 // Test/reset seam — the module cache would otherwise leak between test files.
