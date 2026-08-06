@@ -10,6 +10,7 @@ import {
 // (INEFFECTIVE_DYNAMIC_IMPORT) — the heavy `docx` lib stays lazy INSIDE
 // renderDocx. Only docx-preview is dynamically imported (its own chunk).
 import { buildDiscussionModel, renderDocx, injectSectionRtlIntoZip } from '../../utils/docxExport.js';
+import { composeExportTitle, titleAlign } from '../../utils/exportTitle.js';
 import { spliceBodyIntoTemplate } from '../../utils/docxTemplateMerge.js';
 // round202 — the page-geometry toolbox (pagination, page numbers, image-load
 // wait, floating-anchor re-anchoring) moved to a pure-DOM module so it is
@@ -511,8 +512,15 @@ export default function ExportPreview({ template, assets, model = null, modelKey
             <div className={`${styles.band} ${styles.bandNote}`}>הכותרות מגיעות מקובץ התבנית שהועלה</div>
           )}
           <div className={styles.body}>
-            {/* The docx always opens with a centered title; mirror it here. */}
-            <div className={styles.docTitle}>{`סיכום דיון: ${DOC_TITLE_SAMPLE}`}</div>
+            {/* round365 — the sketch composes the title from the template's
+                title config, like the real docx (the LIVE preview gets this
+                through the actual pipeline). */}
+            <div
+              className={styles.docTitle}
+              style={{ textAlign: titleAlign(template?.title) }}
+            >
+              {composeExportTitle(template?.title, { title: DOC_TITLE_SAMPLE, typesText: META_SAMPLE.typesText, dateText: '01.07.2026', leadText: META_SAMPLE.leadText })}
+            </div>
             {sections.map(renderSection)}
           </div>
           {isConfig ? renderBand('footer', true) : null}

@@ -126,6 +126,16 @@ export const DEFAULT_PREFERENCES = {
   // no asset hosting); null = no logo. Set only by owners in Settings → העדפות.
   logoUrl: null,
   /*
+   * round365 (owner request, approved mockup) — how much of a point row is
+   * reserved for the point TEXT before the actions cluster (＋ / תוצרים count /
+   * creator avatar / trash) begins. The row is [name flex:G][cluster][spacer
+   * flex:1]; historically G=1 parked the cluster mid-row and truncated long
+   * points. Stored as a PERCENT of the row (pointNameGrow converts to G).
+   * 50 reproduces the old middle; the shipped default is 60 — 20% more text
+   * room, per the owner's spec. Owner-configurable in Settings → העדפות.
+   */
+  pointTextShare: 60,
+  /*
    * round314 (owner request) — the three panes of the triple box carry OWNER-SET
    * titles. The defaults are the names the app shipped with, so an instance that
    * never touches this reads exactly as before. Per instance, like every other
@@ -194,6 +204,20 @@ export const DEFAULT_PREFERENCES = {
  * @param {object|null|undefined} preferences settings.preferences
  * @param {string} key a DEFAULT_PREFERENCES key
  */
+/*
+ * round365 — the point-row text share (see preferences.pointTextShare above)
+ * as the flex-grow the name cell needs against the spacer's flex:1:
+ * share% ⇒ G = share/(100-share) (50→1, 60→1.5). Clamped to the slider's
+ * range so a corrupt stored value can never push the cluster off the row.
+ */
+export const POINT_TEXT_SHARE_RANGE = { min: 40, max: 92 };
+export function pointNameGrow(share) {
+  const n = Number(share);
+  const base = Number.isFinite(n) && n > 0 ? n : DEFAULT_PREFERENCES.pointTextShare;
+  const s = Math.min(POINT_TEXT_SHARE_RANGE.max, Math.max(POINT_TEXT_SHARE_RANGE.min, base));
+  return s / (100 - s);
+}
+
 export function resolvePreference(preferences, key) {
   const stored = preferences?.[key];
   if (stored === undefined || stored === null || stored === '') return DEFAULT_PREFERENCES[key];
@@ -450,6 +474,23 @@ export const DEFAULT_EXPORT_TEMPLATE = {
   },
   // UPLOAD-mode: flag only; the template .docx bytes live in exportAssets.
   hasTemplateDocx: false,
+  /*
+   * round365 (owner spec, approved mockup) — the document TITLE, replacing the
+   * hardcoded `סיכום דיון: <שם>`. Three orderable parts: a fixed FREE TEXT, a
+   * discussion field, and an optional second field; positional separators
+   * between them; alignment (center by default). Rides the export-template
+   * cascade like every other field (system → type snapshot → per-export
+   * ephemeral edit in the dialog). Composition logic: utils/exportTitle.js.
+   */
+  title: {
+    free: 'סיכום דיון',
+    field2: 'discussionName',
+    field3: 'discussionDate',
+    order: ['free', 'field2', 'field3'],
+    sep12: 'dash',
+    sep23: 'space',
+    align: EXPORT_TEXT_ALIGN.CENTER,
+  },
 };
 
 /*

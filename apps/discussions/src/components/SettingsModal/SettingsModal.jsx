@@ -21,7 +21,7 @@ function Diskette({ size = 16 }) {
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, COLUMN_SCHEMA, DEFAULT_PREFERENCES, resolvePreference, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, COLUMN_SCHEMA, DEFAULT_PREFERENCES, resolvePreference, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField, POINT_TEXT_SHARE_RANGE } from '../../utils/mondayApi/boards.config.js';
 // round364 — owner-added custom column mappings (extra columns per type group
 // on the discussions/tasks boards). Pure logic lives in utils/customColumns.js.
 import { isCustomAlias, canAddCustomColumn, nextCustomAlias, makeCustomColumn, customEntriesFor } from '../../utils/customColumns.js';
@@ -162,6 +162,10 @@ export function seedExportTemplate(stored) {
   }
   base.header = { ...DEFAULT_EXPORT_TEMPLATE.header, ...(stored?.header || {}) };
   base.footer = { ...DEFAULT_EXPORT_TEMPLATE.footer, ...(stored?.footer || {}) };
+  // round365 — back-fill the document TITLE config into templates stored
+  // before the field existed (nested object: the top-level spread alone would
+  // leave a partial stored title missing its new sub-keys).
+  base.title = { ...DEFAULT_EXPORT_TEMPLATE.title, ...(stored?.title || {}) };
   return base;
 }
 
@@ -1615,6 +1619,32 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                         />
                         <Text type={"text2"} style={{ whiteSpace: 'nowrap' }}>
                           {`אג'נדה ${Math.round((preferences.defaultLayoutRatio ?? DEFAULT_PREFERENCES.defaultLayoutRatio) * 100)}% · תיבה משולשת ${100 - Math.round((preferences.defaultLayoutRatio ?? DEFAULT_PREFERENCES.defaultLayoutRatio) * 100)}%`}
+                        </Text>
+                      </div>
+                    </div>
+                  </div>
+                  {/* round365 (owner spec, approved mockup) — how much of a point row
+                      the TEXT gets before the actions cluster (＋/מונה/אווטאר/פח)
+                      begins. 50% reproduces the old mid-row cluster; the shipped
+                      default is 60% (+20% text room). Applied live in ניהול דיון. */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>רוחב הטקסט של נקודה (מיקום כפתורי הפעולה)</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, direction: 'rtl' }}>
+                        <input
+                          type="range"
+                          min={POINT_TEXT_SHARE_RANGE.min}
+                          max={POINT_TEXT_SHARE_RANGE.max}
+                          step={1}
+                          value={Number(preferences.pointTextShare ?? DEFAULT_PREFERENCES.pointTextShare)}
+                          onChange={(e) => setPreferences((p) => ({ ...p, pointTextShare: Number(e.target.value) }))}
+                          aria-label="רוחב הטקסט של נקודה באחוזים משורת הנקודה"
+                          style={{ flex: 1, minWidth: 140 }}
+                        />
+                        <Text type={"text2"} style={{ whiteSpace: 'nowrap' }}>
+                          {`טקסט ${Number(preferences.pointTextShare ?? DEFAULT_PREFERENCES.pointTextShare)}% · 50% = ההתנהגות הישנה (אמצע)`}
                         </Text>
                       </div>
                     </div>

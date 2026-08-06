@@ -4,6 +4,7 @@ import { CloseSmall, DropdownChevronDown, Edit } from '@vibe/icons';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
+import { pointNameGrow, resolvePreference } from '@generated/utils/mondayApi/boards.config.js';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { Plus, EyeOff, Trash2, GripHorizontal } from 'lucide-react';
@@ -853,6 +854,10 @@ export function TopicsTab({
   // discussion opens at; a per-discussion drag override still wins (loadLayout).
   const { settings } = useSettings();
   const defaultLayoutRatio = settings?.preferences?.defaultLayoutRatio;
+  // round365 (owner spec, approved mockup) — how much of a point row the TEXT
+  // gets before the actions cluster; applied as a CSS var the point rows read
+  // (TopicPointRow .nameCell). Owner sets it in Settings → העדפות.
+  const pointGrow = pointNameGrow(resolvePreference(settings?.preferences, 'pointTextShare'));
   const [layout, setLayout] = useState(() => ({
     ...DEFAULT_LAYOUT,
     ratio: clampRatio(defaultLayoutRatio != null ? defaultLayoutRatio : DEFAULT_LAYOUT.ratio),
@@ -1455,6 +1460,8 @@ export function TopicsTab({
           // below; here basis 0 + proportional grow keeps agenda = ratio × row.
           // A sole visible box (grow as the only child) still fills 100%.
           ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${layout.ratio} 1 0`, minWidth: 0 }),
+          // round365 — the point rows' text share (TopicPointRow reads this var).
+          '--point-name-grow': pointGrow,
         }}
       >
       {/* round218 (approved mockup) — the topics live in an "אג'נדה" CARD
