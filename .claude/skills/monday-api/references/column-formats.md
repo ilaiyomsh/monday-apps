@@ -295,6 +295,28 @@ Legacy `text`/`value` are null on relation-family columns. Read typed fragments:
 - Some system columns (subitems link, parent link) are non-deletable — rename, don't delete.
 - Verify a user id before assigning: `users(kind: all) { id name email }`.
 
+## Board views — typed API, `settings_str` is a red herring
+
+(Verified live 2026-08-06, round363 sandbox, board 18425374847.)
+
+- **Create/update table views via first-class mutations**: `create_view_table` /
+  `update_view_table` (typed `settings: TableViewSettingsInput`), plus generic
+  `create_view`/`update_view` (`type: ViewKind`, `settings: JSON`) and `delete_view`.
+  Full round-trip works: column order, hidden columns (`column_properties`),
+  `group_by` conditions with `hideEmptyGroups`, and `sort` (enum input lowercase
+  `asc`/`desc`, echoed back uppercase):
+  ```graphql
+  mutation { create_view_table(board_id: ..., name: "...",
+    settings: {columns: {column_order: ["name", "date_x"],
+                         column_properties: [{column_id: "formula_x", visible: false}]},
+               group_by: {conditions: [{columnId: "color_x"}], hideEmptyGroups: true}},
+    sort: [{column_id: "date_x", direction: desc}]) { id settings sort } }
+  ```
+- **Read views back through the NEW typed fields** `views { settings sort filter }` —
+  for views written this way, the legacy `settings_str`/`view_specific_data_str` stay
+  `"{}"` **even when the settings stuck**. An empty `settings_str` is NOT the
+  silently-dropped-settings signal it is for mirror `defaults`; assert on `settings`.
+
 ## Updates (comments) — HTML that actually round-trips
 
 Verified live (richer than the docs imply): `<h1>-<h3>`, `<p>`, `<strong>`, `<em>`, `<u>`,
