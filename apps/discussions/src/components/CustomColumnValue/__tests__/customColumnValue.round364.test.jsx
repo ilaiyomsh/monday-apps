@@ -40,14 +40,21 @@ describe('round364 — CustomColumnValue per type', () => {
     expect(screen.getByText('06/08/2026')).toBeTruthy();
   });
 
-  it('board_relation → clickable chips (openItemCard) capped at 3 with a +N overflow', () => {
+  /*
+   * round373 (owner spec) — this used to show up to THREE chips plus a "+N".
+   * A custom connected-board column must now look like the BUILT-IN one
+   * ("דיון מקור"), which renders exactly one full-width chip and folds every
+   * other link into the "+N" badge. The old expectation described a layout the
+   * app deliberately no longer has.
+   */
+  it('board_relation → ONE clickable chip (openItemCard) + a +N overflow, like the built-in column', () => {
     const linked = [1, 2, 3, 4, 5].map((n) => ({ id: String(n), name: `פריט ${n}` }));
     render(<CustomColumnValue type="board_relation" value={{ linkedItems: linked, ids: [], text: null }} />);
     expect(screen.getByText('פריט 1')).toBeTruthy();
-    expect(screen.queryByText('פריט 4')).toBe(null);
-    expect(screen.getByText('+2')).toBeTruthy();
-    fireEvent.click(screen.getByText('פריט 2'));
-    expect(executeMock).toHaveBeenCalledWith('openItemCard', { itemId: 2, kind: 'updates' });
+    expect(screen.queryByText('פריט 2')).toBe(null);
+    expect(screen.getByText('+4')).toBeTruthy();
+    fireEvent.click(screen.getByText('פריט 1'));
+    expect(executeMock).toHaveBeenCalledWith('openItemCard', { itemId: 1, kind: 'updates' });
   });
 
   it('file → a link per URL, named by the decoded path tail', () => {
