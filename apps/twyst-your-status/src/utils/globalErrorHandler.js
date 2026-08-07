@@ -54,6 +54,7 @@ let chunkErrorHandler = null;
  * Register the optional chunk-load handler (see seam contract above).
  * Pass a function, or null/undefined to clear it.
  * @param {(error: unknown) => boolean | null | undefined} fn
+ * @public error/observability boot layer (.error-guard) — platform-reached, knip must not report it.
  */
 export const setChunkErrorHandler = (fn) => {
     chunkErrorHandler = typeof fn === 'function' ? fn : null;
@@ -86,6 +87,7 @@ const tryHandleChunkError = (error) => {
  * and no downstream layer re-logs it.
  * @param {unknown} error
  * @param {{ functionName?: string }} [context]
+ * @public error/observability boot layer (.error-guard) — platform-reached, knip must not report it.
  */
 export const handleGlobalError = (error, context = {}) => {
     const functionName = context.functionName || 'GlobalErrorHandler';
@@ -205,5 +207,6 @@ const globalErrorHandlerExports = {
     setupGlobalErrorHandlers,
     setChunkErrorHandler
 };
+/** @public error/observability boot layer (.error-guard) — platform-reached, knip must not report it. */
 export default globalErrorHandlerExports;
 

@@ -233,7 +233,11 @@ upstream package: **`scripts/cleanup/README.md`**.
 
 - Stages: `bash scripts/cleanup/baseline.sh` → `/cleanup-audit` → 🚪 **human** sets batches
   to `approved` → `/cleanup-execute` → 🚪 human reads the commits → `/cleanup-verify`.
-  `approved` is a human-only word; no agent ever writes it.
+  `approved` is a human-only word — and since 2026-08-07 that is a mechanism, not a rule:
+  `guard-approval-word.sh` (repo-wide PreToolUse hook, all sessions) blocks any agent from
+  writing it, and `verify-approval.sh` aborts execution unless every approved line
+  `git blame`s to a human-committed change (no Claude author, no Claude trailer). The
+  owner approves in their own editor and commits it themselves.
 - **Scope is enforced, not advised, on BOTH write surfaces.** PreToolUse hooks on the
   `cleanup-executor` agent: `guard-protected-paths.sh` (`Edit|Write|MultiEdit`) and
   `guard-bash-ops.py` (`Bash` — deletions, redirects, in-place edits, `git` writes,
@@ -244,9 +248,14 @@ upstream package: **`scripts/cleanup/README.md`**.
   `.error-guard`. 82 fixtures: `bash scripts/cleanup/guard-protected-paths.test.sh` —
   extend them BEFORE extending the guard; the Bash surface was missed once and an
   unenforced guard is indistinguishable from one that passed.
-- **Gate per batch = this repo's blocking CI set narrowed to the app:** error-wiring audit,
-  eager-import audit, type-check, lint, build, full tests (both workspaces), error-kit
-  drift. Zero behaviour change; one batch = one revertable commit
+- **Gate per batch = this repo's blocking CI set narrowed to the app, plus the cleanup's
+  own mechanical checks:** finding reconciliation (`reconcile-plan.sh` — every non-struck
+  finding carries a truthful `- disposition:` bullet before a batch may flip to `done`),
+  toolchain pin (`check-toolchain.sh`, Node/pnpm majors = CI), error-wiring audit,
+  eager-import audit, type-check, lint, lint-capability audit (`lint-config-audit.sh` —
+  the effective eslint config must hold `no-undef`/`no-unused-vars` so a dangling
+  identifier is a lint error, not a shipped ReferenceError), build, full tests (both
+  workspaces), error-kit drift. Zero behaviour change; one batch = one revertable commit
   (`chore(twyst-your-status): cleanup … [batch-N]`); red gate → one fix attempt → revert the
   batch. Never edit a test to make a gate pass.
 - No stage pushes, merges or deploys; the PR into `develop` stays a human decision.

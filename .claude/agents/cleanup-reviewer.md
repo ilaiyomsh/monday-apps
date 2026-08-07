@@ -36,6 +36,15 @@ Review `git diff <base>..HEAD` commit by commit (`git log --oneline <base>..HEAD
    silently orphans every board already configured.
 7. **Out-of-scope edits** — any file outside `apps/twyst-your-status/` in the diff. This
    cleanup is scoped to that one app; anything else is a blocker regardless of merit.
+8. **Custody and accounting** — run both mechanical checks first and treat any failure as
+   a blocking issue, then spend your judgement where a grep cannot go:
+   `bash scripts/cleanup/verify-approval.sh` (an approval line committed by an agent —
+   Claude author or Claude trailer — is round 2's chain-of-custody failure) and
+   `bash scripts/cleanup/reconcile-plan.sh --all-done` (a done batch with a non-struck,
+   disposition-less finding is round 2's silent-skip failure). The scripts check the
+   record; you check whether the record is TRUE — spot-check `- disposition: applied`
+   lines against the actual diff, since a false "applied" is the one lie the scripts
+   cannot see.
 
 ## Output, exactly
 

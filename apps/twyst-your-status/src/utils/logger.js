@@ -361,6 +361,8 @@ const emit = (record) => {
  * @param {string} base - the event/signal name
  * @param {Object} [dims] - categorical/measured dims
  * @returns {string}
+ * @public error/observability boot layer (.error-guard) — reached from the platform and
+ *         from other packages' tests, not via local imports; knip must not report it.
  */
 export function encodeDims(base, dims) {
   if (!dims) return base;
@@ -692,6 +694,8 @@ if (typeof window !== 'undefined') {
   };
 }
 
+/** @public error/observability boot layer (.error-guard) — platform-reached, knip must not report it. */
 export default logger;
+/** @public error/observability boot layer (.error-guard) — platform-reached, knip must not report it. */
 export { LOG_LEVELS };
 

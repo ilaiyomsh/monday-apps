@@ -8,7 +8,7 @@ commit. A human approves the plan between stages. Zero behaviour change, ever.
 **Scope: `apps/twyst-your-status`, and nothing else.** That is not a convention here, it is
 enforced on **both** write surfaces of the `cleanup-executor` agent — `Edit|Write|MultiEdit`
 through `guard-protected-paths.sh`, and `Bash` through `guard-bash-ops.py` — both delegating
-to the one decision function in `lib-path-verdict.sh`. 82 fixtures cover them:
+to the one decision function in `lib-path-verdict.sh`. 108 fixtures cover them:
 `bash scripts/cleanup/guard-protected-paths.test.sh`. Onboarding a second app means a second
 copy of `cleanup-env.sh` with its own `APP_DIR`, never widening these globs.
 
@@ -18,6 +18,22 @@ copy of `cleanup-env.sh` with its own `APP_DIR`, never widening these globs.
 > scope guard never inspected. Nothing failed while the hole was open — an unenforced guard
 > looks exactly like a guard that passed. If you extend this package, extend the fixtures
 > first.
+
+## The 2026-08-07 redesign — every discipline rule that failed became a mechanism
+
+The first full run (shipped as 3.15.3) worked, but its two blocking findings and its
+costliest manual work all traced to rules that lived in prose. Each is now a script with
+an exit code; the run history that motivated each one is in the script's own header.
+
+| failure in the real run | mechanism now |
+|---|---|
+| An agent wrote `status: approved` (953f8ce); the whole approval chain was agent-authored | `guard-approval-word.sh` — repo-wide PreToolUse hook (all sessions, both write surfaces): no agent tool call can introduce the word. Fixtures: `guard-approval-word.test.sh` |
+| …and nothing at execute time checked who wrote it | `verify-approval.sh` — `git blame` on every approved line; a Claude author, a Claude trailer, or an uncommitted edit fails custody. The execute workflow aborts on it |
+| A-structure-07 silently skipped; batch 7 still flipped to `done` | per-finding `- disposition:` bullets written by the executor + `reconcile-plan.sh` as gate step 0 — a batch with an unaccounted finding cannot go green, and stage 3 re-audits all done batches |
+| The SPA lint could not see a dangling identifier, so the reviewer hand-scanned 41 files and two findings were struck for un-catchable `ReferenceError`s | the SPA config now holds `no-undef`/`no-unused-vars` + `react/jsx-uses-vars`/`jsx-no-undef`; `lint-config-audit.sh` fails any gate whose effective config loses them again |
+| The re-baseline nearly ran on Node 22 (container default) vs CI's Node 20 | `check-toolchain.sh` — Node/pnpm majors pinned in `cleanup-env.sh`, enforced as a precondition and a gate step |
+| jscpd's default `--max-lines 1000` silently skipped the 1,352-line `ColumnSettings.jsx` — the single biggest cleanup target was absent from the baseline scan | `--max-lines 5000` pinned in `CLEANUP_JSCPD_ARGS` |
+| Every audit re-verified the same boot-layer false positives (8 exports + 1 file, every run) | `@public` JSDoc tags on the guard-protected boot-layer exports (knip drops them at the source) + `useUiErrorSink.js` as a knip entry — the scanner report now equals the actionable space |
 
 ## The three commands
 
@@ -40,18 +56,29 @@ never widen it past what a human approved.
 
 | Path | Role |
 |---|---|
-| `scripts/cleanup/cleanup-env.sh` | single source of truth: the app, the commands, the gate, pinned scanner versions |
-| `scripts/cleanup/baseline.sh` | Stage 0. Branch rules, green gate, metrics → `.cleanup/baseline.json` |
-| `scripts/cleanup/lib-path-verdict.sh` | the ONE path decision both guards call — no rule can hold on one surface and not the other |
-| `scripts/cleanup/guard-protected-paths.sh` | `PreToolUse` scope guard on `Edit\|Write\|MultiEdit` |
+| `scripts/cleanup/cleanup-env.sh` | single source of truth: the app, the commands, the gate, pinned scanner versions AND toolchain majors |
+| `scripts/cleanup/baseline.sh` | Stage 0. Toolchain + branch rules, green gate, metrics → `.cleanup/baseline.json` |
+| `scripts/cleanup/check-toolchain.sh` | gate step: Node/pnpm majors must match the CI pins — unpinned runtimes make metrics incomparable |
+| `scripts/cleanup/lint-config-audit.sh` | gate step: each workspace's EFFECTIVE eslint config must hold `no-undef`/`no-unused-vars` (+ the react JSX pair for the SPA) at `error` |
+| `scripts/cleanup/verify-approval.sh` | execute-time custody: `git blame` every `status: approved` line; only human-committed approvals count |
+| `scripts/cleanup/reconcile-plan.sh` | accounting: `--batch N` before a done-flip, `--all-done` at verify — every non-struck finding needs a disposition |
+| `scripts/cleanup/guard-approval-word.sh` | repo-wide `PreToolUse` hook (`.claude/settings.json`, all sessions): no agent writes `status: approved`, on either write surface |
+| `scripts/cleanup/guard-approval-word.test.sh` | 24 fixtures for the approval-word guard |
+| `scripts/cleanup/lib-path-verdict.sh` | the ONE path decision both scope guards call — no rule can hold on one surface and not the other |
+| `scripts/cleanup/guard-protected-paths.sh` | `PreToolUse` scope guard on `Edit\|Write\|MultiEdit` (executor agent) |
 | `scripts/cleanup/guard-bash-ops.py` | `PreToolUse` scope guard on `Bash` — file deletions, redirects, in-place edits, `git` writes, package-manager scope |
-| `scripts/cleanup/guard-protected-paths.test.sh` | 82 fixtures across both surfaces — a guard that stops blocking looks exactly like one that passed |
+| `scripts/cleanup/guard-protected-paths.test.sh` | 108 fixtures across both surfaces — a guard that stops blocking looks exactly like one that passed |
 | `scripts/cleanup/post-edit-format.sh` | `PostToolUse` per-workspace `eslint --fix`. **No prettier** — see below |
 | `scripts/cleanup/prompts/*.md` | the three stage contracts (documentation + hand-run fallback) |
 | `.claude/agents/cleanup-*.md` | scanner, verifier, auditor, executor, reviewer |
 | `.claude/workflows/cleanup-{audit,execute,verify}.js` | the saved workflows the slash commands run |
-| `apps/twyst-your-status/knip.jsonc` + `server/knip.jsonc` | per-workspace scanner config |
+| `apps/twyst-your-status/knip.jsonc` + `server/knip.jsonc` | per-workspace scanner config (boot-layer noise pre-filtered — see redesign table) |
 | `apps/twyst-your-status/.cleanup/` | runtime state: `baseline.json`, `CLEANUP_PLAN.md`, `CLEANUP_REPORT.md`, `audit/`, `raw/` (gitignored) |
+
+**The full gate, in order** (authoritative command strings in `baseline.json` `commands`):
+per-batch — reconcile → toolchain → wiring → eager → typecheck → lint → lintcfg → build →
+tests → drift; stage 3 prepends a clean `install` and swaps reconcile for `--all-done`.
+Custody (`verify-approval.sh`) runs once, before any batch executes.
 
 ## How this differs from the upstream cleanup package
 
@@ -106,6 +133,13 @@ Every deviation is a monorepo fact, not a preference:
    release freeze may be in effect (`gh pr list --base main`).
 8. No deploys, ever, from any stage. Deploys happen only on GitHub Actions runners
    (CLAUDE.md golden rule 2); merging the PR is what deploys the draft.
+9. `status: approved` is written by a human, in their own editor, committed under their own
+   git identity. Enforced twice: `guard-approval-word.sh` (no agent can write it) and
+   `verify-approval.sh` (execute aborts unless every approved line blames to a human
+   commit). An agent transcribing the owner's words is NOT approval.
+10. Every non-struck finding in an executed batch gets a truthful `- disposition:` bullet.
+    A false `applied` is the one lie the scripts cannot catch — the stage-3 reviewer
+    spot-checks dispositions against the diff for exactly that reason.
 
 ## Troubleshooting
 

@@ -22,7 +22,6 @@
  * remote sink; it just must not also toast.
  */
 
-import React from 'react';
 import { ErrorBoundary, useErrorBoundary } from 'react-error-boundary';
 import logger from '../../utils/logger';
 import { dismissBootLoader } from '../../utils/bootLoader';
@@ -168,8 +167,10 @@ export const AppErrorBoundary = ({ children, scope = 'root', FallbackComponent, 
  * Note: for user-initiated actions you often want a toast (via the UI sink /
  * showErrorWithDetails) rather than replacing the whole subtree with a fallback
  * screen ג€” reserve showBoundary for errors that leave the subtree unusable.
+ * @public error/observability boot layer (.error-guard) — platform-reached, knip must not report it.
  */
 export const useAppErrorFunnel = useErrorBoundary;
 
+/** @public error/observability boot layer (.error-guard) — platform-reached, knip must not report it. */
 export default AppErrorBoundary;
 

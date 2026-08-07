@@ -12,7 +12,10 @@
  * `domainKind` when present, else 'error'.
  */
 
-/** Remap one record so its `kind` carries the domain discriminator error-kit ships. */
+/**
+ * Remap one record so its `kind` carries the domain discriminator error-kit ships.
+ * @public error/observability boot layer (.error-guard) — platform-reached, knip must not report it.
+ */
 export function toAxiomRecord(record) {
   const r = record || {};
   return { ...r, kind: r.domainKind ?? 'error' };

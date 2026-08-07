@@ -17,6 +17,13 @@ Precondition: a human has set the batches they want to `status: approved` in
 `apps/twyst-your-status/.cleanup/CLEANUP_PLAN.md`. Args can only **narrow** that set — they
 never override a status. No approved batch → the workflow stops and says so.
 
+**Custody, before anything runs.** `bash scripts/cleanup/verify-approval.sh` — every
+`status: approved` line must be blame-attributable to a HUMAN commit (no Claude author, no
+Claude trailer, not uncommitted). An agent transcribing the owner's words is not custody
+(round 2, commit 953f8ce); the workflow aborts on a non-zero exit. The preventive half is
+`guard-approval-word.sh`, a repo-wide PreToolUse hook under which no agent can write the
+word at all.
+
 **Selection.** Read the plan and `baseline.json`. Refuse to start on a dirty working tree:
 every batch must be its own revertable commit.
 
@@ -26,12 +33,18 @@ every batch must be its own revertable commit.
    `scripts/cleanup/guard-protected-paths.sh` as a `PreToolUse` hook, so an edit outside
    `apps/twyst-your-status/{src,server/src}` + the two `package.json` files is blocked at
    the tool call — including tests, config, build output, and the error/observability boot
-   layer. A blocked finding is skipped and reported, never worked around.
-2. A verifier agent runs the full gate: wiring audit → eager-import audit → typecheck →
-   lint (both workspaces) → build (both) → tests (both, full) → error-kit drift.
+   layer. A blocked finding is skipped and reported, never worked around. As it goes, it
+   appends one `- disposition: applied | skipped — reason | guard-blocked` bullet per
+   finding in the plan — the accounting the gate checks.
+2. A verifier agent runs the full gate: reconcile (`reconcile-plan.sh --batch N`, every
+   non-struck finding accounted) → toolchain (Node/pnpm majors = CI pins) → wiring audit →
+   eager-import audit → typecheck → lint (both workspaces) → lintcfg
+   (`lint-config-audit.sh`, the lint must be ABLE to see a dangling identifier) → build
+   (both) → tests (both, full) → error-kit drift.
 3. **Green** → `git add -A -- apps/twyst-your-status`, verify nothing outside the app is
    staged, commit `chore(twyst-your-status): cleanup <category> — <title> [batch-N]`, set
-   the batch to `done` in the plan, commit the plan change.
+   the batch to `done` in the plan (Edit tool — a shell round-trip mentioning the approval
+   word is blocked), commit the plan change.
 4. **Red** → ONE fix attempt by the same executor, limited to its own edits, then re-gate.
 5. **Still red** → revert scoped to the app (`git restore --staged --worktree --
    apps/twyst-your-status` then `git clean -fd -- apps/twyst-your-status`), mark the batch

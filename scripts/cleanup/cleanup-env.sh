@@ -27,6 +27,12 @@ CLEANUP_SRV_FILTER='./apps/twyst-your-status/server'
 
 CLEANUP_INSTALL_CMD='pnpm install --frozen-lockfile'
 
+# Toolchain pins — same majors as CI (CLAUDE.md: "Node 20, pnpm 10, match it locally").
+# check-toolchain.sh enforces these at every gate; recording the version without
+# enforcing it is how the 2026-08-07 re-baseline nearly ran on the container's Node 22.
+CLEANUP_NODE_MAJOR='20'
+CLEANUP_PNPM_MAJOR='10'
+
 # --- The gate. This is the repo's BLOCKING CI set (.github/workflows/ci.yml), narrowed
 # to what twyst-your-status can break, in fail-fast order. Cleanup is only ever "green"
 # against all of it.
@@ -42,6 +48,21 @@ CLEANUP_INSTALL_CMD='pnpm install --frozen-lockfile'
 #             behaviourally identical to @mapps/error-kit.
 #   type    — the app is plain JS; its type-check script is `echo no-typescript`. Kept in
 #             the gate anyway so the day someone adds TypeScript the gate already covers it.
+#   toolchain — check-toolchain.sh. Node/pnpm majors must match the CI pins above;
+#             metrics taken on a different runtime are not comparable to the baseline.
+#   lintcfg — lint-config-audit.sh. The EFFECTIVE eslint config of each workspace must
+#             hold no-undef/no-unused-vars (+ the react JSX pair for the SPA) at error —
+#             a gate that cannot see a dangling identifier certifies nothing about the
+#             move/split edits cleanup actually makes.
+#   custody — verify-approval.sh. Every `status: approved` line must be committed by a
+#             human identity (round 2: an agent transcribed the approval, commit 953f8ce).
+#   reconcile — reconcile-plan.sh. `done` is an accounting identity, not a declaration:
+#             every non-struck finding needs a disposition (round 2: A-structure-07 was
+#             silently skipped and the batch still flipped to done).
+CLEANUP_TOOLCHAIN_CMD='bash scripts/cleanup/check-toolchain.sh'
+CLEANUP_LINTCFG_CMD='bash scripts/cleanup/lint-config-audit.sh'
+CLEANUP_CUSTODY_CMD='bash scripts/cleanup/verify-approval.sh'
+CLEANUP_RECONCILE_CMD='bash scripts/cleanup/reconcile-plan.sh'
 CLEANUP_WIRING_CMD='node scripts/error-wiring-audit.mjs'
 CLEANUP_EAGER_CMD='node scripts/lib/eager-graph.mjs'
 CLEANUP_TYPECHECK_CMD='pnpm --filter "./apps/twyst-your-status" run type-check'
@@ -63,7 +84,11 @@ CLEANUP_KNIP_SPA_ARGS='--directory apps/twyst-your-status'
 CLEANUP_KNIP_SRV_ARGS='--directory apps/twyst-your-status/server'
 # Tests are excluded from duplication analysis: test files are not editable during
 # cleanup (test-guard locks them), so a clone between two suites is not actionable.
-CLEANUP_JSCPD_ARGS='apps/twyst-your-status/src apps/twyst-your-status/server/src --min-tokens 50 --ignore **/*.test.js,**/*.test.jsx,**/dev-harness/**,**/test-utils/**'
+# --max-lines 5000: jscpd's DEFAULT silently skips any file over 1000 lines — verified
+# on the first run, where the 1,352-line ColumnSettings.jsx (the single biggest cleanup
+# target) was absent from the baseline scan and the before/after clone counts were not
+# like-for-like. A scanner that skips the worst file must never be the default again.
+CLEANUP_JSCPD_ARGS='apps/twyst-your-status/src apps/twyst-your-status/server/src --min-tokens 50 --max-lines 5000 --ignore **/*.test.js,**/*.test.jsx,**/dev-harness/**,**/test-utils/**'
 
 # LOC metric: git-tracked, non-test source lines. Deliberately not cloc — one less
 # network dependency, and `git ls-files` is gitignore-aware by construction.

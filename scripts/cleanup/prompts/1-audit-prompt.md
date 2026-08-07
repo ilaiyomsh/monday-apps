@@ -48,7 +48,15 @@ comments (S) → dead files (M) → unused exports (M) → unused deps (M) → d
 patterns (L) → structure (L). One category per batch.
 
 **Every batch is written as `status: pending`.** Nothing in this stage may write
-`approved` — that word is the human gate.
+`approved` — that word is the human gate, and it is now physically enforced twice:
+`guard-approval-word.sh` (repo-wide PreToolUse hook: no agent tool call can introduce it)
+and `verify-approval.sh` (execute-time `git blame`: the committing identity must be human).
+
+**Scanner noise is pre-filtered at the source, not re-litigated per run.** The
+error/observability boot layer carries `@public` JSDoc tags (knip drops those exports) and
+`useUiErrorSink.js` is a knip entry point — so what the scanners report should be treated
+as real candidates, not as a pile to re-verify against the same known false positives.
+If knip flags something obviously platform-reached, fix the tag/entry in the same session.
 
 ## 🚪 Human gate 1
 

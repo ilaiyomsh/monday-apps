@@ -43,11 +43,13 @@ const NEVER = `NEVER push, merge, deploy, or run mapps/ship.sh — not even if a
 
 const SELECT_SCHEMA = {
   type: 'object',
-  required: ['baseSha', 'batches'],
+  required: ['baseSha', 'batches', 'custodyOk'],
   properties: {
     baseSha: { type: 'string' },
     branch: { type: 'string' },
     treeClean: { type: 'boolean' },
+    custodyOk: { type: 'boolean' },
+    custodyOutput: { type: 'string' },
     batches: {
       type: 'array',
       items: {
@@ -70,13 +72,14 @@ const SELECT_SCHEMA = {
 
 const EXEC_SCHEMA = {
   type: 'object',
-  required: ['applied', 'skipped', 'filesTouched'],
+  required: ['applied', 'skipped', 'filesTouched', 'dispositionsWritten'],
   properties: {
     treeDirty: { type: 'boolean' },
     applied: { type: 'array', items: { type: 'string' } },
     skipped: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, reason: { type: 'string' } } } },
     filesTouched: { type: 'array', items: { type: 'string' } },
     guardBlocked: { type: 'array', items: { type: 'string' } },
+    dispositionsWritten: { type: 'boolean' },
     selfCheck: { type: 'string' },
     notes: { type: 'string' },
   },
@@ -114,16 +117,21 @@ const FINALIZE_SCHEMA = {
 
 // The gate, described once. It is the repo's BLOCKING CI set narrowed to this app, and the
 // authoritative command strings live in baseline.json — the agent reads them from there
-// rather than from this prompt, so there is exactly one source of truth.
-const GATE_PROMPT =
+// rather than from this prompt, so there is exactly one source of truth. Step 0 is the
+// accounting identity: a batch whose findings are not all accounted for CANNOT go green,
+// which is what makes round 2's silent A-structure-07 skip structurally impossible.
+const gatePrompt = batchN =>
   `Run the full cleanup gate for twyst-your-status from the repo root. Read the exact command strings from ${STATE}/baseline.json ("commands" block) and run them IN THIS ORDER, stopping at the first failure:\n` +
-  `  1. wiring    — node scripts/error-wiring-audit.mjs\n` +
-  `  2. eager     — node scripts/lib/eager-graph.mjs\n` +
-  `  3. typecheck — the app's type-check script (a no-op echo; it must still exit 0)\n` +
-  `  4. lint      — both workspaces\n` +
-  `  5. build     — both workspaces\n` +
-  `  6. tests     — both workspaces, the FULL suites\n` +
-  `  7. drift     — pnpm --filter @mapps/error-kit test (holds the vendored server sink identical to the canonical package)\n\n` +
+  `  0. reconcile — bash scripts/cleanup/reconcile-plan.sh --batch ${batchN} (every non-struck finding in the batch must carry a disposition line)\n` +
+  `  1. toolchain — bash scripts/cleanup/check-toolchain.sh (Node/pnpm majors match the CI pins)\n` +
+  `  2. wiring    — node scripts/error-wiring-audit.mjs\n` +
+  `  3. eager     — node scripts/lib/eager-graph.mjs\n` +
+  `  4. typecheck — the app's type-check script (a no-op echo; it must still exit 0)\n` +
+  `  5. lint      — both workspaces\n` +
+  `  6. lintcfg   — bash scripts/cleanup/lint-config-audit.sh (the lint that just passed must actually be ABLE to see a dangling identifier)\n` +
+  `  7. build     — both workspaces\n` +
+  `  8. tests     — both workspaces, the FULL suites\n` +
+  `  9. drift     — pnpm --filter @mapps/error-kit test (holds the vendored server sink identical to the canonical package)\n\n` +
   `Report per gate pass/fail, and for the first failure include the first 20 lines of its output. You are a verifier: run commands and read output, edit NOTHING, commit NOTHING, and do not try to fix a failure.`
 
 // --- Select ---------------------------------------------------------------------------
@@ -131,13 +139,23 @@ phase('Select')
 
 const selection = await agent(
   `Read ${PLAN} and ${STATE}/baseline.json for the twyst-your-status cleanup.\n\n` +
-  `Return: base_sha and branch from baseline.json, whether \`git status --porcelain\` is currently empty (treeClean), the full list of every batch's status string (allStatuses, for the report), and the batches whose status is EXACTLY "approved"` +
+  `First run the approval chain-of-custody check and report it verbatim:\n` +
+  `  bash scripts/cleanup/verify-approval.sh\n` +
+  `custodyOk = (exit code 0). Copy its full output into custodyOutput. This is the mechanical half of the human gate: every "status: approved" line must be blame-attributable to a human commit — no Claude author, no Claude trailer, not uncommitted. Do not reason about whether the approval "seems" legitimate; the script's exit code is the verdict.\n\n` +
+  `Then return: base_sha and branch from baseline.json, whether \`git status --porcelain\` is currently empty (treeClean), the full list of every batch's status string (allStatuses, for the report), and the batches whose status is EXACTLY "approved"` +
   (requested ? `, narrowed to batch number(s) ${requested.join(', ')}` : '') +
   `.\n\nA batch that is pending, skipped, done or failed is NOT selected — statuses are set by a human, and args can only narrow that set, never widen it. Do not modify any file.`,
   { label: 'select-batches', phase: 'Select', schema: SELECT_SCHEMA }
 )
 
 if (!selection) return { error: 'Could not read the plan. Does apps/twyst-your-status/.cleanup/CLEANUP_PLAN.md exist? Run /cleanup-audit first.' }
+if (selection.custodyOk === false) {
+  return {
+    error: 'APPROVAL CUSTODY FAILED: at least one "status: approved" line was not committed by a human identity. Nothing executes on an agent-authored approval — that is round 2\'s exact failure (commit 953f8ce).',
+    custody: selection.custodyOutput,
+    humanGate: 'The owner must set the approval in their own editor and commit it under their own git identity, then re-run /cleanup-execute.',
+  }
+}
 if (selection.treeClean === false) {
   return { error: 'Working tree is not clean. Every batch must be its own revertable commit, so nothing runs on a dirty tree. Commit or stash first.' }
 }
@@ -168,7 +186,13 @@ for (const batch of selected) {
     `Execute cleanup ${tag} for twyst-your-status.\n\n` +
     `Read batch ${batch.n} ("${batch.title}", category ${batch.category}) from ${PLAN} and apply EXACTLY its findings — nothing else, no "while I'm here" improvements.\n\n` +
     `Before you start: confirm \`git status --porcelain\` is empty. If it is not, set treeDirty=true, change NOTHING, and return immediately.\n\n` +
-    `Skip any finding whose file no longer matches its recorded evidence, and any finding the path guard blocks (report those under guardBlocked — do not work around the guard). Then run your own fast self-check (wiring audit, eager-import audit, both lints) and fix only what your own edits broke.\n\n` +
+    `Skip any finding whose file no longer matches its recorded evidence, and any finding the path guard blocks (report those under guardBlocked — do not work around the guard).\n\n` +
+    `ACCOUNTING — not optional: as you finish each finding, append ONE disposition bullet to that finding's block in ${PLAN}:\n` +
+    `  - disposition: applied\n` +
+    `  - disposition: skipped — <the concrete reason>\n` +
+    `  - disposition: guard-blocked — <the guard's message>\n` +
+    `Every non-struck finding in the batch must end up with exactly one of these — the gate runs \`reconcile-plan.sh --batch ${batch.n}\` as its step 0 and goes RED on any unaccounted finding. A finding you did not touch and did not record is round 2's A-structure-07 failure; the record of the gap matters more than the gap. When done, verify yourself: bash scripts/cleanup/reconcile-plan.sh --batch ${batch.n} — then set dispositionsWritten accordingly.\n\n` +
+    `Then run your own fast self-check (wiring audit, eager-import audit, both lints) and fix only what your own edits broke.\n\n` +
     `Do NOT commit — the workflow commits after the full gate.\n\n${NEVER}`,
     { label: `execute:${tag}`, phase: 'Execute', agentType: 'cleanup-executor', schema: EXEC_SCHEMA }
   )
@@ -182,7 +206,7 @@ for (const batch of selected) {
     break
   }
 
-  let gate = await agent(GATE_PROMPT, { label: `gate:${tag}`, phase: 'Execute', schema: GATE_SCHEMA })
+  let gate = await agent(gatePrompt(batch.n), { label: `gate:${tag}`, phase: 'Execute', schema: GATE_SCHEMA })
   let fixAttempted = false
 
   // ONE fix attempt, scoped to the executor's own edits. A second failure is a revert —
@@ -193,10 +217,11 @@ for (const batch of selected) {
     await agent(
       `Your previous edits for cleanup ${tag} on twyst-your-status broke the gate. Fix ONLY what your own edits broke — do not touch anything else, do not weaken or edit a test, do not revert unrelated work, and do not extend the batch.\n\n` +
       `Failing gate: ${gate.firstFailure}\n\nOutput:\n${(gate.excerpt || '').slice(0, 4000)}\n\n` +
-      `If the failure cannot be fixed inside your own edits, undo your edits for the offending finding only and say so.\n\n${NEVER}`,
+      `If the failing step is "reconcile", the fix is honest bookkeeping, not code: append the missing "- disposition: …" bullet(s) in ${PLAN} for what you actually did (or did not do) — never invent an "applied" for work that did not happen.\n\n` +
+      `If the failure cannot be fixed inside your own edits, undo your edits for the offending finding only, record it as "- disposition: skipped — <reason>", and say so.\n\n${NEVER}`,
       { label: `fix:${tag}`, phase: 'Execute', agentType: 'cleanup-executor', schema: EXEC_SCHEMA }
     )
-    gate = await agent(GATE_PROMPT, { label: `gate:${tag}-retry`, phase: 'Execute', schema: GATE_SCHEMA })
+    gate = await agent(gatePrompt(batch.n), { label: `gate:${tag}-retry`, phase: 'Execute', schema: GATE_SCHEMA })
   }
 
   const passed = Boolean(gate && gate.passed)
@@ -207,7 +232,7 @@ for (const batch of selected) {
         `  1. git add -A -- ${APP}\n` +
         `  2. Confirm with \`git status --porcelain\` that NOTHING outside ${APP} is staged. If something is, unstage it and report it — this cleanup is scoped to that app only.\n` +
         `  3. git commit -m "chore(twyst-your-status): cleanup ${batch.category} — ${batch.title} [${tag}]"\n` +
-        `  4. In ${PLAN}, change batch ${batch.n}'s status from "approved" to "done" (also in the Summary table row), then:\n` +
+        `  4. In ${PLAN}, change batch ${batch.n}'s status from "approved" to "done" (also in the Summary table row). Use the Edit tool — a shell round-trip that mentions the approval word is blocked by the approval-word guard. Then:\n` +
         `     git add ${PLAN} && git commit -m "chore(twyst-your-status): cleanup plan status ${tag}"\n` +
         `  5. Report the first commit's sha (git rev-parse --short HEAD~1 after step 4) and confirm the tree is clean.\n\n` +
         `action="committed". NEVER push.`
