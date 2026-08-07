@@ -692,6 +692,10 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     'discussionTypeID',
     'summaryFileID',
     'previousDiscussionID',
+    // round380 — פרויקט: the owner maps this to their own two-way connect-boards
+    // column pointing at the PROJECTS board. Nothing provisions it (that board is
+    // not this app's), so mapping it by hand is the only way it gets set.
+    'projectLinkID',
     'tasksBoardLinkID',
     'topicsBoardLinkID',
     'decisionsBoardLinkID', // לוח החלטות — two-way pair of the decisions board's discussionLinkID

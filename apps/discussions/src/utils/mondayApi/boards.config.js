@@ -48,8 +48,30 @@ export const PREVIOUS_TASKS_MODES = {
  */
 export const CREATE_DISCUSSION_MODES = {
   TEMPLATE: 'template',
+  // round380 — the third path, offered ONLY when isProjectModeReady() says so:
+  // the projectDiscussions preference is on AND projectLinkID is mapped.
+  PROJECT: 'project',
   ADHOC: 'adhoc',
 };
+
+/*
+ * round380 — may the create card offer "דיון על פרויקט"?
+ *
+ * TWO independent conditions, and the second is not optional: the preference is
+ * the owner's intent, the mapped column is whether the app can actually write the
+ * link. The projects board belongs to the account, not to this app — nothing
+ * provisions it — so a preference turned on before the column is mapped is the
+ * normal intermediate state, not an error. Offering the path there would produce a
+ * discussion whose project silently went nowhere, so the option hides instead.
+ *
+ * Pure and exported: the create card, the side-menu project filter and the
+ * previous-discussions resolver must all agree on one answer, exactly as
+ * hasActiveFilters is the single answer for the list's paging decisions.
+ */
+export function isProjectModeReady(preferences, columns) {
+  if (resolvePreference(preferences, 'projectDiscussions') !== true) return false;
+  return !!columns?.projectLinkID?.id;
+}
 /*
  * round205 — the owner-selectable APP COMPONENTS (Settings → העדפות, owners
  * only): every major surface a board owner may hide for the whole instance.
@@ -128,6 +150,15 @@ export const DEFAULT_PREFERENCES = {
    */
   createDiscussionMode: CREATE_DISCUSSION_MODES.TEMPLATE,
   templateAutoName: true,
+  /*
+   * round380 — "דיון על פרויקט": OFF by default, on the owner's instruction. Off is
+   * also what makes this round a no-op for every existing instance — with the flag
+   * down, isProjectModeReady is false and the create card, the side-menu filter and
+   * the previous-discussions resolver behave byte-for-byte as before.
+   *
+   * Turning it on is necessary but not sufficient: projectLinkID must be mapped too.
+   */
+  projectDiscussions: false,
   // round296 — default width split of the ניהול-דיון row: the AGENDA box's share
   // (0..1, clamped [0.25,0.75] by discussionLayout). 0.6 ⇒ agenda 60% / triple
   // box 40% (owner request). Owner-configurable in Settings → העדפות. A per-
@@ -1117,6 +1148,23 @@ export const COLUMN_SCHEMA = {
     // typeColors), NOT on the column, since dropdown labels have no color.
     discussionTypeID: { type: 'dropdown', title: 'סוג' },
     previousDiscussionID: { type: 'board_relation', title: 'דיון קודם' },
+    /*
+     * round380 — פרויקט: a TWO-WAY connect-boards column to the account's own
+     * PROJECTS board (owner decision: two-way). It is the third creation path in
+     * the create card ("דיון על פרויקט"), behind the projectDiscussions preference.
+     *
+     * The projects board is NOT one of this app's boards: provisioning never
+     * creates it and never touches it, so this column has no seeded id — the owner
+     * creates and connects it in monday, then maps it here. Unmapped ⇒ the whole
+     * project path hides even when the preference is on (see isProjectModeReady).
+     *
+     * Two-way matters beyond tidiness: it is what lets "previous discussions of
+     * this project" resolve from the PROJECT item's own linked_items in one query.
+     * A `board_relation` cannot be filtered server-side by linked item id (verified
+     * against the live API — the column type publishes no filter guidelines), so
+     * without the reverse link there would be no bounded way to ask the question.
+     */
+    projectLinkID: { type: 'board_relation', title: 'פרויקט' },
     // Two-way pair with the decisions board's discussionLinkID — decisions are
     // READ from the discussion side via this relation's linked_items (a
     // board_relation can't be server-filtered by item id).
