@@ -1,11 +1,39 @@
+/*
+ * round376 (owner spec, mockup approved) — the card is anchored to the TOP, not
+ * centered.
+ *
+ * `align-items: center` was the single cause of BOTH reported symptoms: a short
+ * card (before a discussion type is picked) got centered and therefore landed
+ * low on screen, and when picking a type made it taller, centering forced it to
+ * grow SYMMETRICALLY — the top edge rose while the bottom fell. Anchoring the
+ * top edge means growth has only one direction left: downward. No JS placement
+ * and no measuring; the browser does it.
+ *
+ * The overlay — NOT the card body — is the scroll container. That is deliberate:
+ * the in-card pickers (`.dropdownMenu`, the people/date popovers) are
+ * `position: absolute` DESCENDANTS of the card, so putting `overflow-y` on
+ * `.content` or `.modal` would clip the discussion-type menu the moment the card
+ * is tall. Scrolling the overlay keeps every popup whole and simply lets a very
+ * tall card be scrolled to. `.content` must stay `overflow: visible`.
+ *
+ * The top offset is a clamp, not a constant: on a short viewport the card sits
+ * close to the edge (24px), on a large one it breathes (up to 64px).
+ *
+ * MOBILE IS UNAFFECTED — the max-width:768px block below deliberately keeps the
+ * bottom-sheet treatment (`align-items: flex-end` + its own max-height), and its
+ * `padding` shorthand resets the offsets set here.
+ */
 .overlay {
   position: fixed;
   inset: 0;
   z-index: 4000;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 16px;
+  padding-top: clamp(24px, 6vh, 64px);
+  padding-bottom: clamp(24px, 6vh, 64px);
+  overflow-y: auto;
   background: rgba(0, 0, 0, 0.35);
 }
 
