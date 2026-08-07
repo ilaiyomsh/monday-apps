@@ -43,6 +43,20 @@ const UNCREATABLE_TYPES = new Set(['formula', 'mirror', 'subtasks']);
 const EXEMPT = {
   discussions: new Set([
     'discussionTypeID',      // managed dropdown (ensureManagedTypeColumn)
+    /*
+     * round380 — פרויקט connects to the ACCOUNT'S OWN projects board, which this app
+     * does not create, does not know the id of, and must never touch. A connect-boards
+     * column can only be created once its TARGET board is known, so provisioning it
+     * would mean either guessing a board or creating a column connected to nothing.
+     *
+     * This is therefore a permanent exemption, not the "not yet judged" limbo below:
+     * the owner creates and connects the column in monday and maps it in Settings, and
+     * `isProjectModeReady` keeps the whole project path hidden until they have. That
+     * gate is what makes an unprovisioned column safe here — unlike round340's
+     * taskNotesID/priorityID, where the same "don't be presumptuous" reasoning left
+     * two features with nothing to map and no way to appear.
+     */
+    'projectLinkID',
   ]),
   topics: new Set([
     'discussionLinkID',      // reflection of discussions.topicsBoardLinkID
