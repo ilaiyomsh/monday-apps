@@ -1,0 +1,38 @@
+{
+  // knip config for the discussions workspace (client-only SPA, ONE workspace).
+  //
+  // Scoped to this directory: the cleanup workflow runs knip with
+  // `--directory apps/discussions`, so a scan can never reach another app in the
+  // monorepo. `.jsonc` and not `.json`: knip validates its config against a strict
+  // schema and rejects unknown keys, so comments are the only way to keep the
+  // rationale next to the config (same note as the twyst-your-status configs).
+  //
+  // PATH ALIASES ARE LOAD-BEARING. This app imports through vite aliases everywhere —
+  // index.jsx itself imports `@generated/App.jsx` — and knip resolves aliases from
+  // THIS mapping, not from vite.config.js. Dropping one turns every module reached
+  // only through it into a phantom "unused file".
+  "paths": {
+    "@generated/*": ["src/*"],
+    "@components/*": ["src/components/*"],
+    "@api/*": ["src/utils/mondayApi/*"]
+  },
+  // Entry points knip already infers on its own are NOT repeated (it reports redundant
+  // patterns as configuration hints): index.html → src/index.jsx, vite.config.js,
+  // eslint.config.js, and src/setupTests.js via vite's test.setupFiles. Listed below is
+  // what static imports do NOT reach:
+  //   src/**/*.test.* + __tests__/** — the suites are entry points, not dead files
+  //   src/hooks/useUiErrorSink.js — error/observability boot layer: the sink is
+  //     registered by convention at boot; guard-protected, so a finding here is
+  //     non-actionable by construction (same reasoning as the twyst-your-status entry)
+  "entry": [
+    "src/**/*.test.{js,jsx}",
+    "src/**/__tests__/**/*.{js,jsx}",
+    "src/hooks/useUiErrorSink.js"
+  ],
+  "project": ["src/**/*.{js,jsx}"],
+  // KNOWN FALSE POSITIVE, do not "fix" by removing the dependency: the app imports
+  // `@mapps/error-kit/browser` (a subpath export, src/index.jsx attachAxiomSink), which
+  // knip 5 does not credit to the bare package name — same verified behaviour as the
+  // twyst-your-status workspace. Removing it would take the Axiom error pipeline down.
+  "ignoreDependencies": ["@mapps/error-kit"]
+}

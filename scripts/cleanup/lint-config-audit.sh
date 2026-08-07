@@ -75,6 +75,9 @@ check_workspace() { # $1 = workspace dir, $2 = sample glob dir, $3 = "jsx"|"js"
 }
 
 check_workspace "$CLEANUP_SPA_DIR" "$CLEANUP_SPA_DIR/src" jsx || fail=1
-check_workspace "$CLEANUP_SRV_DIR" "$CLEANUP_SRV_DIR/src" js  || fail=1
+# Client-only apps (e.g. discussions) have no server workspace — nothing to audit there.
+if [ -n "${CLEANUP_SRV_DIR:-}" ]; then
+  check_workspace "$CLEANUP_SRV_DIR" "$CLEANUP_SRV_DIR/src" js || fail=1
+fi
 
 exit "$fail"

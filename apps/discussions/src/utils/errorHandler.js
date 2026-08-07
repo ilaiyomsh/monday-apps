@@ -309,6 +309,7 @@ export const extractOperationName = (query) => {
  * monday מצרף את פרטי העמודה תחת error_data; שמות המפתחות משתנים בין גרסאות, לכן
  * מנסים כמה שמות נפוצים. מחזיר null כשאין מידע.
  */
+/** @public error/observability boot layer — platform/convention-reached, guard-protected; knip must not report it. */
 export const extractColumnName = (errorData) => {
     if (!errorData || typeof errorData !== 'object') return null;
     return (
@@ -560,5 +561,6 @@ const errorHandlerExports = {
     ERROR_MESSAGES,
     HTTP_STATUS_TO_ERROR_CODE
 };
+/** @public error/observability boot layer — platform/convention-reached, guard-protected; knip must not report it. */
 export default errorHandlerExports;
 

@@ -225,11 +225,14 @@ packages/shared                     EMPTY STUB — see below
   The same scripts serve Codex via `.codex/hooks.json` + `.codex/hooks/codex-adapter.py`
   — fix hook behaviour in `.claude/hooks/` only, never in a forked Codex copy.
 
-### Cleanup workflow — `twyst-your-status` ONLY
+### Cleanup workflow — registered apps only (`twyst-your-status`, `discussions`)
 
-Staged, human-gated dead-code/duplication cleanup. Deterministic scanners find candidates;
-subagents only verify, judge and execute. Runbook, file map and every deviation from the
-upstream package: **`scripts/cleanup/README.md`**.
+Staged, human-gated dead-code/duplication cleanup, ONE registered app per run —
+`CLEANUP_APP=<app>` for `baseline.sh`, `{"app":"<app>"}` for the three slash commands
+(default: twyst-your-status). An unregistered app fails CLOSED on both guard surfaces.
+Deterministic scanners find candidates; subagents only verify, judge and execute. Runbook,
+file map, the onboarding recipe for app N+1, and every deviation from the upstream
+package: **`scripts/cleanup/README.md`**.
 
 - Stages: `bash scripts/cleanup/baseline.sh` → `/cleanup-audit` → 🚪 **human** sets batches
   to `approved` → `/cleanup-execute` → 🚪 human reads the commits → `/cleanup-verify`.
@@ -239,13 +242,15 @@ upstream package: **`scripts/cleanup/README.md`**.
   `git blame`s to a human-committed change (no Claude author, no Claude trailer). The
   owner approves in their own editor and commits it themselves.
 - **Scope is enforced, not advised, on BOTH write surfaces.** PreToolUse hooks on the
-  `cleanup-executor` agent: `guard-protected-paths.sh` (`Edit|Write|MultiEdit`) and
-  `guard-bash-ops.py` (`Bash` — deletions, redirects, in-place edits, `git` writes,
-  package-manager scope), both delegating to one decision function
-  (`lib-path-verdict.sh`). They block everything outside
-  `apps/twyst-your-status/{src,server/src}` + the two `package.json` files, and inside it
-  block tests, config, build output, docs, and the error/observability boot layer named in
-  `.error-guard`. 82 fixtures: `bash scripts/cleanup/guard-protected-paths.test.sh` —
+  per-app executor agents (`cleanup-executor`, `cleanup-executor-discussions`):
+  `guard-protected-paths.sh` (`Edit|Write|MultiEdit`) and `guard-bash-ops.py` (`Bash` —
+  deletions, redirects, in-place edits, `git` writes, package-manager scope), both
+  delegating to one decision function (`lib-path-verdict.sh`) that reads the ACTIVE app's
+  allowlist + protected boot layer from `scripts/cleanup/env/<app>.sh`. They block
+  everything outside the active app's `src` dirs + its `package.json` manifest(s), and
+  inside it block tests, config, build output, docs, and the error/observability boot
+  layer. One app per run — under `CLEANUP_APP=discussions` the twyst tree closes.
+  133 fixtures: `bash scripts/cleanup/guard-protected-paths.test.sh` —
   extend them BEFORE extending the guard; the Bash surface was missed once and an
   unenforced guard is indistinguishable from one that passed.
 - **Gate per batch = this repo's blocking CI set narrowed to the app, plus the cleanup's
@@ -259,8 +264,9 @@ upstream package: **`scripts/cleanup/README.md`**.
   (`chore(twyst-your-status): cleanup … [batch-N]`); red gate → one fix attempt → revert the
   batch. Never edit a test to make a gate pass.
 - No stage pushes, merges or deploys; the PR into `develop` stays a human decision.
-  Extending this to another app means a second `cleanup-env.sh` with its own `APP_DIR` —
-  never widened globs.
+  Extending to app N+1 means a new `scripts/cleanup/env/<app>.sh` with its own `APP_DIR`,
+  registration in the dispatcher + workflows + a per-app executor agent, and fixtures
+  FIRST — never widened globs (recipe: `scripts/cleanup/README.md`).
 
 ## Secrets & env
 

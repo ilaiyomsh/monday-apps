@@ -1,16 +1,36 @@
-# Cleanup workflow — twyst-your-status only
+# Cleanup workflow — registered apps only (twyst-your-status, discussions)
 
 A staged, multi-agent code cleanup under human gates. Deterministic scanners (knip, jscpd,
 eslint) find candidates; LLM subagents only **verify** findings, **judge** gray areas, and
 **execute** approved batches. Tests are the ground truth. Every batch is one revertable
 commit. A human approves the plan between stages. Zero behaviour change, ever.
 
-**Scope: `apps/twyst-your-status`, and nothing else.** That is not a convention here, it is
-enforced on **both** write surfaces of the `cleanup-executor` agent — `Edit|Write|MultiEdit`
-through `guard-protected-paths.sh`, and `Bash` through `guard-bash-ops.py` — both delegating
-to the one decision function in `lib-path-verdict.sh`. 108 fixtures cover them:
-`bash scripts/cleanup/guard-protected-paths.test.sh`. Onboarding a second app means a second
-copy of `cleanup-env.sh` with its own `APP_DIR`, never widening these globs.
+**Scope: exactly ONE registered app per run, never a union.** `CLEANUP_APP` (default
+`twyst-your-status`) selects the app's env file under `scripts/cleanup/env/<app>.sh`; the
+dispatcher (`cleanup-env.sh`) refuses an unregistered name FAIL-CLOSED — on both guard
+surfaces an unknown app blocks everything. The scope is enforced on **both** write surfaces
+of the per-app executor agents (`cleanup-executor`, `cleanup-executor-discussions`) —
+`Edit|Write|MultiEdit` through `guard-protected-paths.sh`, and `Bash` through
+`guard-bash-ops.py` — both delegating to the one decision function in `lib-path-verdict.sh`,
+which reads the active app's allowlist AND its protected boot-layer list from the env file.
+133 fixtures cover them, including the cross-app isolation cases (under
+`CLEANUP_APP=discussions` the twyst tree closes): `bash scripts/cleanup/guard-protected-paths.test.sh`.
+
+**Onboarding app N+1** (exactly what the discussions onboarding did):
+1. `scripts/cleanup/env/<app>.sh` — the app's facts: dirs, filters, gate commands, bundle
+   dir (read the deploy workflow — `dist/` vs `build/`), protected boot-layer files. A
+   client-only app leaves `CLEANUP_SRV_*` EMPTY and every consumer skips the server half.
+   Watch the test script: if `test` is a watch-mode alias, point the env at `test:run`.
+2. Register the app: the `case` line in `cleanup-env.sh` + the `APPS` tables in the three
+   workflows + a per-app executor agent (`.claude/agents/cleanup-executor-<app>.md`, same
+   body, hooks prefixed `CLEANUP_APP=<app>`).
+3. `apps/<app>/knip.jsonc` — entry points, and the app's vite aliases under `"paths"`
+   (knip resolves aliases from ITS config, not vite's — a missing alias makes every module
+   reached through it a phantom "unused file").
+4. Extend `guard-protected-paths.test.sh` with the new app's cases FIRST, then run
+   `CLEANUP_APP=<app> bash scripts/cleanup/baseline.sh` — `lint-config-audit.sh` will
+   refuse an app whose eslint cannot see a dangling identifier; fix the app's lint config
+   before anything else (discussions only needed `react/jsx-no-undef` added).
 
 > The Bash half was **missing** from the first version of this package, and a pre-approval
 > refutation pass is what found it: a dead-file batch deletes with `rm`, which no Edit hook
@@ -46,6 +66,15 @@ bash scripts/cleanup/baseline.sh     # Stage 0 — branch, green gate, metrics s
 /cleanup-verify                      # Stage 3 — clean-install gate, metrics, adversarial review
 ```
 
+For an app other than the default, select it everywhere the same way:
+
+```bash
+CLEANUP_APP=discussions bash scripts/cleanup/baseline.sh
+/cleanup-audit  {"app":"discussions"}          # + optional "target" as usual
+/cleanup-execute {"app":"discussions"}         # + optional "batches"
+/cleanup-verify {"app":"discussions"}
+```
+
 `/cleanup-audit` takes an optional target inside the app —
 `/cleanup-audit {"target":"apps/twyst-your-status/src/components/OnClickDialog"}`.
 **Pilot one subdirectory on the first run** to calibrate noise and cost.
@@ -56,7 +85,9 @@ never widen it past what a human approved.
 
 | Path | Role |
 |---|---|
-| `scripts/cleanup/cleanup-env.sh` | single source of truth: the app, the commands, the gate, pinned scanner versions AND toolchain majors |
+| `scripts/cleanup/cleanup-env.sh` | fail-closed dispatcher: `CLEANUP_APP` → `env/<app>.sh` (unknown app = everything blocked) |
+| `scripts/cleanup/env/<app>.sh` | per-app single source of truth: dirs, filters, gate commands, scanner+toolchain pins, bundle dir, protected boot layer |
+| `scripts/cleanup/env/lib-metrics.sh` | shared cleanup_loc / cleanup_bundle_kb / cleanup_file_count, server-workspace-optional |
 | `scripts/cleanup/baseline.sh` | Stage 0. Toolchain + branch rules, green gate, metrics → `.cleanup/baseline.json` |
 | `scripts/cleanup/check-toolchain.sh` | gate step: Node/pnpm majors must match the CI pins — unpinned runtimes make metrics incomparable |
 | `scripts/cleanup/lint-config-audit.sh` | gate step: each workspace's EFFECTIVE eslint config must hold `no-undef`/`no-unused-vars` (+ the react JSX pair for the SPA) at `error` |
@@ -67,10 +98,10 @@ never widen it past what a human approved.
 | `scripts/cleanup/lib-path-verdict.sh` | the ONE path decision both scope guards call — no rule can hold on one surface and not the other |
 | `scripts/cleanup/guard-protected-paths.sh` | `PreToolUse` scope guard on `Edit\|Write\|MultiEdit` (executor agent) |
 | `scripts/cleanup/guard-bash-ops.py` | `PreToolUse` scope guard on `Bash` — file deletions, redirects, in-place edits, `git` writes, package-manager scope |
-| `scripts/cleanup/guard-protected-paths.test.sh` | 108 fixtures across both surfaces — a guard that stops blocking looks exactly like one that passed |
+| `scripts/cleanup/guard-protected-paths.test.sh` | 133 fixtures across both surfaces and both apps (incl. cross-app isolation + unknown-app fail-closed) — a guard that stops blocking looks exactly like one that passed |
 | `scripts/cleanup/post-edit-format.sh` | `PostToolUse` per-workspace `eslint --fix`. **No prettier** — see below |
 | `scripts/cleanup/prompts/*.md` | the three stage contracts (documentation + hand-run fallback) |
-| `.claude/agents/cleanup-*.md` | scanner, verifier, auditor, executor, reviewer |
+| `.claude/agents/cleanup-*.md` | scanner, verifier, auditor, reviewer (app-agnostic) + one executor per app (`cleanup-executor`, `cleanup-executor-discussions`) |
 | `.claude/workflows/cleanup-{audit,execute,verify}.js` | the saved workflows the slash commands run |
 | `apps/twyst-your-status/knip.jsonc` + `server/knip.jsonc` | per-workspace scanner config (boot-layer noise pre-filtered — see redesign table) |
 | `apps/twyst-your-status/.cleanup/` | runtime state: `baseline.json`, `CLEANUP_PLAN.md`, `CLEANUP_REPORT.md`, `audit/`, `raw/` (gitignored) |

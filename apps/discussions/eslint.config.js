@@ -82,6 +82,11 @@ export default [
       // runtime this repo compiles with, the React import itself) are uses.
       'react/jsx-uses-vars': 'error',
       'react/jsx-uses-react': 'error',
+      // The write-side twin of jsx-uses-vars: an UNDEFINED JSX tag (a component whose
+      // import was lost in a move/split) is a runtime ReferenceError that core no-undef
+      // cannot see — JSX identifiers are not ordinary references. Required by the
+      // cleanup gate's lint-capability audit (scripts/cleanup/lint-config-audit.sh).
+      'react/jsx-no-undef': 'error',
       // The repo rule: never console.* in app code — everything goes through
       // logger.* or it skips the toast funnel and dedup. The single sanctioned
       // exception (the index.jsx version banner) carries an inline disable

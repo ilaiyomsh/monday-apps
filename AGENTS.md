@@ -207,11 +207,14 @@ apps.
   `apps/axis/docs/FOLLOW-UPS.md` with a re-enable plan. Standing debt: planner lint
   268, day-off lint 8.
 
-### Cleanup workflow — `twyst-your-status` ONLY
+### Cleanup workflow — registered apps only (`twyst-your-status`, `discussions`)
 
-Staged, human-gated dead-code/duplication cleanup: deterministic scanners find candidates,
-subagents only verify, judge and execute. Runbook and every deviation from the upstream
-package: **`scripts/cleanup/README.md`**.
+Staged, human-gated dead-code/duplication cleanup, ONE registered app per run —
+`CLEANUP_APP=<app>` for `baseline.sh`, `{"app":"<app>"}` for the three stages (default:
+twyst-your-status); an unregistered app fails CLOSED on both guard surfaces. Deterministic
+scanners find candidates, subagents only verify, judge and execute. Runbook, the
+onboarding recipe for app N+1, and every deviation from the upstream package:
+**`scripts/cleanup/README.md`**.
 
 - Stages: `bash scripts/cleanup/baseline.sh` → audit → 🚪 **human** sets batches to
   `approved` → execute → 🚪 human reads the commits → verify. `approved` is a human-only
@@ -228,10 +231,12 @@ package: **`scripts/cleanup/README.md`**.
 - **Scope is enforced, not advised, on BOTH write surfaces.**
   `guard-protected-paths.sh` (`Edit|Write|MultiEdit`) and `guard-bash-ops.py` (`Bash` —
   deletions, redirects, in-place edits, `git` writes, package-manager scope) share one
-  decision function (`lib-path-verdict.sh`). They block everything outside
-  `apps/twyst-your-status/{src,server/src}` + the two `package.json` files, and inside it
-  block tests, config, build output, docs, and the error/observability boot layer named in
-  `.error-guard`. 82 fixtures: `bash scripts/cleanup/guard-protected-paths.test.sh`.
+  decision function (`lib-path-verdict.sh`) that reads the ACTIVE app's allowlist +
+  protected boot layer from `scripts/cleanup/env/<app>.sh` (selected by `CLEANUP_APP`).
+  They block everything outside the active app's `src` dirs + its `package.json`
+  manifest(s), and inside it block tests, config, build output, docs, and the
+  error/observability boot layer. One app per run — under `CLEANUP_APP=discussions` the
+  twyst tree closes. 133 fixtures: `bash scripts/cleanup/guard-protected-paths.test.sh`.
   **Under Codex the Bash guard is the half that actually fires** — shell-command hooks work,
   while `apply_patch` coverage is version-dependent (`.codex/README.md`), so treat the
   Edit-surface rules as self-enforced and never delete a file any way but
@@ -246,8 +251,10 @@ package: **`scripts/cleanup/README.md`**.
   workspaces), error-kit drift. Zero behaviour change; one batch = one revertable commit
   (`chore(twyst-your-status): cleanup … [batch-N]`); red gate → one fix attempt → revert.
   Never edit a test to make a gate pass.
-- No stage pushes, merges or deploys. Extending this to another app means a second
-  `cleanup-env.sh` with its own `APP_DIR` — never widened globs.
+- No stage pushes, merges or deploys. Extending to app N+1 means a new
+  `scripts/cleanup/env/<app>.sh` with its own `APP_DIR`, registration in the dispatcher +
+  workflows + a per-app executor agent, and fixtures FIRST — never widened globs
+  (recipe: `scripts/cleanup/README.md`).
 
 ## Error handling & observability
 

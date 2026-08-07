@@ -205,6 +205,95 @@ checksh allow 'wc -l apps/twyst-your-status/src/App.jsx'                        
 checksh block 'grep -rn x apps/twyst-your-status/src && rm CLAUDE.md'            "second segment in a chain"
 checksh block 'cd apps/twyst-your-status && rm ../../AGENTS.md'                   "escape via relative path"
 
+# =============================================================================
+# Multi-app dispatch (CLEANUP_APP). ONE app per run: under CLEANUP_APP=discussions the
+# discussions tree opens and the twyst tree CLOSES — the scope never widens to a union.
+# An unknown app fails CLOSED on both surfaces (the env refuses to load, so the verdict
+# function has no allowlist and the pnpm filter set is empty).
+# =============================================================================
+echo ""
+echo "cleanup guard fixtures — multi-app dispatch (CLEANUP_APP=discussions)"
+
+check_d() { # Edit surface under CLEANUP_APP=discussions
+  local expected="$1" path="$2" label="$3" out code actual
+  out=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$path" \
+        | CLEANUP_APP=discussions bash "$GUARD" 2>&1)
+  code=$?
+  actual=allow; [ "$code" -eq 2 ] && actual=block
+  if [ "$actual" = "$expected" ]; then
+    pass=$((pass + 1)); printf '  ok    %-5s %s\n' "$expected" "$label"
+  else
+    fail=$((fail + 1))
+    printf '  FAIL  expected %s, got %s (exit %s) — %s\n     path: %s\n     out:  %s\n' \
+      "$expected" "$actual" "$code" "$label" "$path" "$out"
+  fi
+}
+checksh_d() { # Bash surface under CLEANUP_APP=discussions
+  local expected="$1" cmd="$2" label="$3" out code actual
+  out=$(printf '%s' "$(jq -nc --arg c "$cmd" '{tool_name:"Bash",tool_input:{command:$c}}')" \
+        | CLEANUP_APP=discussions python3 "$BASH_GUARD" 2>&1)
+  code=$?
+  actual=allow; [ "$code" -eq 2 ] && actual=block
+  if [ "$actual" = "$expected" ]; then
+    pass=$((pass + 1)); printf '  ok    %-5s %s\n' "$expected" "$label"
+  else
+    fail=$((fail + 1))
+    printf '  FAIL  expected %s, got %s (exit %s) — %s\n     cmd: %s\n     out: %s\n' \
+      "$expected" "$actual" "$code" "$label" "$cmd" "$out"
+  fi
+}
+
+# --- the discussions tree opens...
+check_d allow "apps/discussions/src/App.jsx"                                  "discussions source"
+check_d allow "apps/discussions/src/utils/mondayApi/BoardSDK.js"              "discussions API layer"
+check_d allow "apps/discussions/package.json"                                 "discussions manifest (unused-deps batch)"
+check_d allow "apps/discussions/.cleanup/CLEANUP_PLAN.md"                     "discussions cleanup state"
+# --- ...and the twyst tree CLOSES (one app per run, never a union)
+check_d block "apps/twyst-your-status/src/domain/statusPolicy.js"             "twyst source is out of scope under discussions"
+check_d block "apps/twyst-your-status/package.json"                           "twyst manifest is out of scope under discussions"
+# --- the same protection classes hold inside discussions
+check_d block "apps/discussions/src/utils/logger.js"                          "discussions logger boot layer"
+check_d block "apps/discussions/src/utils/globalErrorHandler.js"              "discussions global handlers"
+check_d block "apps/discussions/src/utils/lazyRetry.js"                       "discussions chunk-load recovery"
+check_d block "apps/discussions/src/hooks/useUiErrorSink.js"                  "discussions UI error sink"
+check_d block "apps/discussions/src/components/ErrorBoundary/ErrorBoundary.jsx" "discussions root boundary"
+check_d block "apps/discussions/src/components/ErrorBoundary/ErrorBoundary.test.jsx" "discussions boundary test"
+check_d block "apps/discussions/src/utils/__tests__/exportGate.test.js"       "discussions test file"
+check_d block "apps/discussions/eslint.config.js"                             "discussions lint config"
+check_d block "apps/discussions/vite.config.js"                               "discussions build config"
+check_d block "apps/discussions/CHANGELOG.md"                                 "discussions changelog"
+check_d block "apps/discussions/CLAUDE.md"                                    "discussions app docs"
+
+# --- Bash surface under discussions: filters swap, scope swaps
+checksh_d allow 'rm apps/discussions/src/utils/columnOrder.js'                "delete a dead discussions module"
+checksh_d block 'rm apps/twyst-your-status/src/hooks/useQuery.js'             "delete in twyst under discussions"
+checksh_d block 'rm apps/discussions/src/utils/logger.js'                     "delete the discussions logger"
+checksh_d allow 'pnpm remove --filter "./apps/discussions" some-dep'          "sanctioned discussions dependency removal"
+checksh_d block 'pnpm remove --filter "./apps/twyst-your-status" some-dep'    "twyst workspace under discussions"
+checksh_d allow 'pnpm --filter "./apps/discussions" lint'                     "gate command: discussions lint"
+
+# --- unknown app fails CLOSED on both surfaces
+check_u() {
+  local out code actual
+  out=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"apps/discussions/src/App.jsx"}}' \
+        | CLEANUP_APP=no-such-app bash "$GUARD" 2>&1)
+  code=$?
+  actual=allow; [ "$code" -eq 2 ] && actual=block
+  if [ "$actual" = "block" ]; then
+    pass=$((pass + 1)); printf '  ok    block unknown CLEANUP_APP fails closed (Edit surface)\n'
+  else
+    fail=$((fail + 1)); printf '  FAIL  unknown CLEANUP_APP allowed an edit (exit %s): %s\n' "$code" "$out"
+  fi
+}
+check_u
+out=$(printf '%s' "$(jq -nc '{tool_name:"Bash",tool_input:{command:"pnpm remove --filter \"./apps/discussions\" x"}}')" \
+      | CLEANUP_APP=no-such-app python3 "$BASH_GUARD" 2>&1); code=$?
+if [ "$code" -eq 2 ]; then
+  pass=$((pass + 1)); printf '  ok    block unknown CLEANUP_APP fails closed (Bash surface)\n'
+else
+  fail=$((fail + 1)); printf '  FAIL  unknown CLEANUP_APP allowed a dependency change (exit %s): %s\n' "$code" "$out"
+fi
+
 echo ""
 echo "cleanup guard fixtures: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1

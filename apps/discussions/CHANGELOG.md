@@ -2,6 +2,17 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2.23.3 — 2026-08-07
+
+הצטרפות לחבילת הניקוי (cleanup workflow) כאפליקציה רשומה שנייה. **אפס שינוי התנהגותי** —
+שלוש תוספות בלבד: (1) חוק lint אחד, `react/jsx-no-undef` — תג JSX לא-מוגדר (import שאבד
+במהלך split/refactor) נתפס מעכשיו ב-lint במקום להישלח כ-ReferenceError; (2) `knip.jsonc`
+חדש עם מיפוי ה-aliases של vite‏ (`@generated`/`@components`/`@api`) ו-ignore מנומק
+ל-`@mapps/error-kit` (subpath import — false positive מאומת של knip 5); (3) תגי `@public`
+(הערות JSDoc בלבד) על 8 exports של שכבת ה-boot של השגיאות, שסורק הניקוי סימן כ"מתים"
+והם מוגנים ממילא. שער הניקוי המלא ירוק על האפליקציה; ה-baseline הראשון נכתב תחת
+`.cleanup/baseline.json`.
+
 ## 2.22.0 — 2026-08-06
 
 round372 — עמודות סטאטוס מותאמות (שינוי ספק של הבעלים, הופך את ההחלטה

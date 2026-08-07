@@ -55,7 +55,24 @@ GIT_READ = {
     "blame", "describe", "shortlog", "grep", "config", "remote", "tag", "for-each-ref",
     "merge-base", "name-rev", "symbolic-ref", "count-objects", "verify-pack", "branch",
 }
-SANCTIONED_PNPM_FILTERS = {"./apps/twyst-your-status", "./apps/twyst-your-status/server"}
+# The sanctioned pnpm workspace filters come from the ACTIVE app's env file (CLEANUP_APP
+# selects it; guards and env agree by construction). Fail-closed: if the env refuses to
+# load (unknown app, missing file), the set is empty and every dependency change is
+# blocked — an unresolvable scope must never widen to "anything goes".
+def _sanctioned_pnpm_filters() -> set:
+    out = subprocess.run(
+        ["bash", "-c",
+         '. "$1/scripts/cleanup/cleanup-env.sh" && '
+         'printf "%s\\n%s\\n" "$CLEANUP_SPA_FILTER" "$CLEANUP_SRV_FILTER"',
+         "_", ROOT],
+        capture_output=True, text=True, env=dict(os.environ),
+    )
+    if out.returncode != 0:
+        return set()
+    return {f.strip() for f in out.stdout.splitlines() if f.strip()}
+
+
+SANCTIONED_PNPM_FILTERS = _sanctioned_pnpm_filters()
 PNPM_OK = {"lint", "test", "build", "exec", "install", "dlx", "run", "--filter", "-r"}
 EVAL_FLAGS = {"-e", "--eval", "-p", "--print", "-c", "-"}
 UNRESOLVABLE = re.compile(r"[*?\[]|\$\(|`|\$\{|\$[A-Za-z_]")
@@ -191,13 +208,13 @@ def main() -> None:
 
         if verb == "pnpm":
             if any(a in ("remove", "uninstall", "add") for a in rest):
+                allowed = ", ".join(sorted(SANCTIONED_PNPM_FILTERS)) or "(none — the cleanup env failed to load)"
                 if "--filter" not in rest:
-                    block("a dependency change must name its workspace: "
-                          "`pnpm remove --filter \"./apps/twyst-your-status\" <pkg>`.")
+                    block(f"a dependency change must name its workspace: "
+                          f"`pnpm remove --filter \"<workspace>\" <pkg>` — sanctioned: {allowed}.")
                 f = rest[rest.index("--filter") + 1] if rest.index("--filter") + 1 < len(rest) else ""
                 if f.strip("\"'") not in SANCTIONED_PNPM_FILTERS:
-                    block(f"`--filter {f}` is outside this cleanup's scope. Only "
-                          f"./apps/twyst-your-status and ./apps/twyst-your-status/server.")
+                    block(f"`--filter {f}` is outside this cleanup's scope. Sanctioned: {allowed}.")
                 continue
             if not any(a in PNPM_OK for a in rest):
                 block(f"`pnpm {' '.join(rest[:2])}` is not one of the sanctioned forms "

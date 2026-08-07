@@ -50,6 +50,7 @@ export const handleResourceError = (event, win) => {
 /**
  * טיפול בשגיאה גלובלית
  */
+/** @public error/observability boot layer — platform/convention-reached, guard-protected; knip must not report it. */
 export const handleGlobalError = (error, context = {}) => {
     // נקודת הרישום היחידה במסלול הגלובלי. logger.emit מטביע __loggedId על השגיאה
     // (חוזה log-once §3.1) ומפעיל את ה-UI sink שמציג את הטוסט.
@@ -169,5 +170,6 @@ const globalErrorHandlerExports = {
     handleGlobalError,
     setupGlobalErrorHandlers
 };
+/** @public error/observability boot layer — platform/convention-reached, guard-protected; knip must not report it. */
 export default globalErrorHandlerExports;
 
