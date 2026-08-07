@@ -1,11 +1,11 @@
 {
-  "date": "2026-08-07T10:52:18+00:00",
+  "date": "2026-08-07T11:50:32+00:00",
   "toolchain": {
     "node": "v20.20.2",
     "pnpm": "10.33.0"
   },
   "app": "twyst-your-status",
-  "base_sha": "abee94e3e28127b63f7331dc2a159e3cf0e66595",
+  "base_sha": "cd00ce6125889036daac796ea9edd672337d5743",
   "branch": "claude/twyst-status-cleanup-37o0n1",
   "scope": {
     "app_dir": "apps/twyst-your-status",

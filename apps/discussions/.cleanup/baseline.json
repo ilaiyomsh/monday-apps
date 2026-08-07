@@ -1,11 +1,11 @@
 {
-  "date": "2026-08-07T11:43:27+00:00",
+  "date": "2026-08-07T11:48:47+00:00",
   "toolchain": {
     "node": "v20.20.2",
     "pnpm": "10.33.0"
   },
   "app": "discussions",
-  "base_sha": "96702c0c165cf953d8782434a1466c099cb72274",
+  "base_sha": "cd00ce6125889036daac796ea9edd672337d5743",
   "branch": "claude/twyst-status-cleanup-37o0n1",
   "scope": {
     "app_dir": "apps/discussions",
@@ -39,14 +39,14 @@
     "bundle_kb": "3848",
     "clones": "290",
     "duplication_pct": "5.68",
-    "knip_unused_files": 183,
-    "knip_unused_exports": 624,
-    "knip_unused_dependencies": 20
+    "knip_unused_files": 1,
+    "knip_unused_exports": 182,
+    "knip_unused_dependencies": 2
   },
   "tests": "green",
   "raw": {
     "knip_spa": "knip-spa-baseline.json",
-    "knip_srv": "knip-srv-baseline.json",
+    "knip_srv": null,
     "jscpd": "jscpd-baseline/jscpd-report.json"
   }
 }
