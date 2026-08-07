@@ -1,12 +1,12 @@
 {
-  "date": "2026-08-05T19:09:27+00:00",
+  "date": "2026-08-07T09:10:17+00:00",
   "toolchain": {
     "node": "v20.20.2",
     "pnpm": "10.33.0"
   },
   "app": "twyst-your-status",
-  "base_sha": "63ea3627a4b683693a68b9e17335f8d7751187f9",
-  "branch": "claude/twystyourstatus-cleanup-workflow-ud6gpw",
+  "base_sha": "6e168f1fc7b9c6b02a0e8d05333493f5993c6c56",
+  "branch": "claude/twyst-status-cleanup-37o0n1",
   "scope": {
     "app_dir": "apps/twyst-your-status",
     "spa_dir": "apps/twyst-your-status",
@@ -30,13 +30,13 @@
     "jscpd": "pnpm dlx jscpd@4.2.5 apps/twyst-your-status/src apps/twyst-your-status/server/src --min-tokens 50 --ignore **/*.test.js,**/*.test.jsx,**/dev-harness/**,**/test-utils/**"
   },
   "metrics": {
-    "loc": 15086,
-    "source_files": 87,
+    "loc": 15718,
+    "source_files": 110,
     "bundle_kb": "716",
-    "clones": "6",
-    "duplication_pct": "0.38",
+    "clones": "3",
+    "duplication_pct": "0.12",
     "knip_unused_files": 1,
-    "knip_unused_exports": 16,
+    "knip_unused_exports": 15,
     "knip_unused_dependencies": 0
   },
   "tests": "green",
