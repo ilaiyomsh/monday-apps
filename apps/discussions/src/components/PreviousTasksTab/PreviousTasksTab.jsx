@@ -127,16 +127,25 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // Load-time grouping/filter = the shared saved view (empty default otherwise);
   // in-session changes are local until someone with permission hits Save.
   /*
+   * round375 — `settings` is destructured HERE, above the custom-column memo that
+   * depends on it. The memo was hoisted in round373 (the saved-view initializers
+   * validate against its output), and reading `settings` from a `const` declared
+   * further down threw a TDZ ReferenceError that took out the whole tab.
+   */
+  const { settings } = useSettings();
+  /*
    * round373 — owner-added custom mappings are resolved FIRST because they now
    * feed the SORT and GROUP option lists too, and the saved-view seeding below
    * validates against those lists in a lazy initializer. Resolving them later
    * would silently drop a saved view that points at a custom column.
    */
+  // round375 — react to a mapping change instead of capturing once per mount
+  // (see the TasksTab comment: empty deps made the toolbar and the table disagree).
   const customTaskCols = useMemo(
-    () => customEntriesFor(getColumns('tasks'))
+    () => customEntriesFor(settings?.columns?.tasks || getColumns('tasks'))
       .filter(([, c]) => c?.id)
       .map(([alias, c]) => ({ alias, type: c.type, title: c.title || alias })),
-    []
+    [settings?.columns?.tasks]
   );
   const customSortOpts = useMemo(
     () => customSortDims(customTaskCols).map((d) => ({ value: d.key, label: d.title, icon: d.icon, dirs: d.dirs })),
@@ -165,7 +174,6 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // Mode: resolve previous tasks via the linked previous discussion (default) or
   // by the current discussion's TYPE (taskTypeID written on each task). Owner sets
   // this in Settings (settings.preferences.previousTasksMode).
-  const { settings } = useSettings();
   // round340 — through resolvePreference, so an instance with nothing stored gets the
   // SHIPPED default (now 'auto') instead of a fallback hardcoded at this call site.
   const mode = resolvePreference(settings?.preferences, 'previousTasksMode');

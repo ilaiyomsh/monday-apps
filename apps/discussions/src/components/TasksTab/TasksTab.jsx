@@ -27,6 +27,7 @@ import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { useStableHandler } from '@generated/hooks/useStableHandler.js';
 import { useBatchTargets } from '@generated/hooks/useBatchTargets.js';
@@ -103,11 +104,23 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
    * column is only restorable if that column is already in the option list when
    * the lazy initializers run.
    */
+  /*
+   * round375 BUG — this memo used to have EMPTY deps, so the custom columns were
+   * captured once per MOUNT. That is what made a newly mapped column show up in
+   * the table but stay missing from the Sort/Group/Filter toolbar: the per-group
+   * TaskTable instances remount whenever the group set changes and re-read the
+   * config store, while TasksTab itself does not — so the table saw the new
+   * column and the toolbar kept a stale, shorter list. Depending on the live
+   * settings object (its identity changes on updateSettings) makes both sides
+   * agree, and a mapping change take effect without a reload.
+   */
+  const { settings } = useSettings();
+  const taskColumnsConfig = settings?.columns?.tasks;
   const customTaskCols = useMemo(
-    () => customEntriesFor(getColumns('tasks'))
+    () => customEntriesFor(taskColumnsConfig || getColumns('tasks'))
       .filter(([, c]) => c?.id)
       .map(([alias, c]) => ({ alias, type: c.type, title: c.title || alias })),
-    []
+    [taskColumnsConfig]
   );
   // round373 — the builder option lists = the fixed columns + every drivable
   // custom column, so a custom row in the Sort/Group panel is indistinguishable
