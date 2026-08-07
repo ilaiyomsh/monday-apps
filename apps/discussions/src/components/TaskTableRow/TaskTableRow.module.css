@@ -473,6 +473,25 @@
 .statusOption:hover {
   filter: brightness(0.95);
 }
+/* round373 — the explicit "clear" row, shown only when the cell HAS a value.
+   It is styled as a plain menu row rather than a colour pill so it never reads
+   as one of the column's labels. Shared by the built-in status/priority columns
+   and every custom status column (one StatusCell renders all of them). */
+.statusClear {
+  height: 34px;
+  border: none;
+  border-radius: var(--border-radius-small, 4px);
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  font-weight: var(--font-weight-normal, 400);
+  font-size: 14px;
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+.statusClear:hover {
+  background: var(--allgrey-background-color, #f6f7fb);
+  color: var(--primary-text-color, #323338);
+}
 
 
 /* Whole-row drag-reorder (native monday feel) — the entire body row is the drag
@@ -497,30 +516,6 @@
 }
 
 /* round366 — custom-column inline editors. */
-.customDateWrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-width: 0;
-}
-.customClearX {
-  position: absolute;
-  inset-inline-end: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--secondary-text-color, #676879);
-  cursor: pointer;
-  opacity: 0;
-}
-.customDateWrap:hover .customClearX { opacity: 1; }
 .customDdTrigger {
   max-width: 100%;
   overflow: hidden;
@@ -559,22 +554,25 @@
 
 /* round368 §4 — custom CONNECTED BOARD cell: linked names as the trigger, a
    searchable item list as the editor (✓ = linked; clicking toggles). */
+/* round373 — the trigger is now just a transparent full-width host for the
+   base connected-board chip, so an editable custom relation cell and the
+   read-only built-in one occupy the cell identically. */
 .relTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   border: none;
   background: transparent;
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 0;
   font-size: 13px;
   font-family: inherit;
   color: var(--primary-text-color, #323338);
   cursor: pointer;
-  text-align: start;
 }
-.relTrigger:hover { background: var(--allgrey-background-color, #f6f7fb); }
 .relMenu {
   display: flex;
   flex-direction: column;
