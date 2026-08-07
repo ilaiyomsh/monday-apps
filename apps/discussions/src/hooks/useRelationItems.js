@@ -58,10 +58,28 @@ export function parseRelationSettings(column) {
   return { boardIds: ids, allowMultiple };
 }
 
+/*
+ * One candidate row of the picker. `group` is what lets the panel render monday's
+ * grouped "Choose items" layout — section titles plus the per-item colour bar.
+ * `Item.group` is NULLABLE in the schema (a subitem has none), so the group is
+ * normalized to null rather than a half-filled object: the panel then puts the
+ * item in its "ungrouped" section instead of rendering an empty title.
+ */
+export function toCandidate(item) {
+  const g = item?.group;
+  return {
+    id: String(item?.id),
+    name: item?.name || String(item?.id),
+    group: g?.id
+      ? { id: String(g.id), title: g.title || '', color: g.color || '' }
+      : null,
+  };
+}
+
 async function loadRelationItems(boardKey, alias) {
   const col = (getColumns(boardKey) || {})[alias];
   const hostBoardId = getBoardId(boardKey);
-  if (!col?.id || !hostBoardId) return { items: [], allowMultiple: true, boardId: null };
+  if (!col?.id || !hostBoardId) return { items: [], boardName: '', allowMultiple: true, boardId: null };
 
   const settingsData = await api(
     `query ($boardId: [ID!], $colIds: [String!]) {
@@ -75,7 +93,7 @@ async function loadRelationItems(boardKey, alias) {
   const linkedBoardId = boardIds[0] || null;
   if (!linkedBoardId) {
     logger.warn(MODULE, `לעמודת הקישור ${alias} אין לוח מקושר בהגדרות monday`);
-    return { items: [], allowMultiple, boardId: null };
+    return { items: [], boardName: '', allowMultiple, boardId: null };
   }
 
   /*
@@ -87,20 +105,24 @@ async function loadRelationItems(boardKey, alias) {
   const items = [];
   const first = await api(
     `query ($boardId: ID!, $limit: Int!) {
-      boards(ids: [$boardId]) { items_page(limit: $limit) { cursor items { id name } } }
+      boards(ids: [$boardId]) {
+        name
+        items_page(limit: $limit) { cursor items { id name group { id title color } } }
+      }
     }`,
     { boardId: String(linkedBoardId), limit: PAGE },
     'useRelationItems.items'
   );
+  const boardName = first?.boards?.[0]?.name || '';
   let pageData = first?.boards?.[0]?.items_page;
   let page = 0;
   while (pageData) {
-    for (const it of pageData.items || []) items.push({ id: String(it.id), name: it.name || String(it.id) });
+    for (const it of pageData.items || []) items.push(toCandidate(it));
     page += 1;
     if (!pageData.cursor || page >= MAX_PAGES) break;
     const next = await api(
       `query ($cursor: String!, $limit: Int!) {
-        next_items_page(cursor: $cursor, limit: $limit) { cursor items { id name } }
+        next_items_page(cursor: $cursor, limit: $limit) { cursor items { id name group { id title color } } }
       }`,
       { cursor: pageData.cursor, limit: PAGE },
       'useRelationItems.itemsNext'
@@ -108,8 +130,13 @@ async function loadRelationItems(boardKey, alias) {
     pageData = next?.next_items_page || null;
   }
 
-  items.sort((a, b) => a.name.localeCompare(b.name, 'he'));
-  return { items, allowMultiple, boardId: String(linkedBoardId) };
+  /*
+   * round378 — the candidates keep monday's BOARD order (group by group, position
+   * within a group), because the picker now renders them grouped exactly like
+   * monday's "Choose items" panel and a name-sort here would shuffle the sections.
+   * Alphabetical is still reachable: the panel's own sort toggle applies it.
+   */
+  return { items, boardName, allowMultiple, boardId: String(linkedBoardId) };
 }
 
 /*
@@ -134,7 +161,7 @@ export function useRelationItems(boardKey, alias) {
     if (!promise) {
       promise = loadRelationItems(boardKey, alias).catch((err) => {
         logger.error(MODULE, `טעינת הפריטים של עמודת הקישור ${alias} נכשלה`, err);
-        return { items: [], allowMultiple: true, boardId: null };
+        return { items: [], boardName: '', allowMultiple: true, boardId: null };
       });
       inflight.set(key, promise);
     }
@@ -166,6 +193,7 @@ export function useRelationItems(boardKey, alias) {
    */
   return useMemo(() => ({
     items: state?.items || [],
+    boardName: state?.boardName || '',
     allowMultiple: state?.allowMultiple !== false,
     boardId: state?.boardId || null,
     loading: !state,

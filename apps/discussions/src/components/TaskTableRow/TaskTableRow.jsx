@@ -9,6 +9,7 @@ import { isValidStatus } from '@generated/constants/statusConfig';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { CustomColumnValue } from '@generated/components/CustomColumnValue';
 import { StatusCell } from '@generated/components/StatusCell';
+import { RelationPicker } from '@generated/components/RelationPicker';
 import { customColumnKind } from '@generated/utils/customColumns.js';
 import { NotesEditor } from '@generated/components/NotesEditor';
 import grid from '../TaskTable/TaskTable.module.css';
@@ -69,7 +70,6 @@ function customCellClass(type) {
 function CustomColumnCell({ col, value, onChange, dropdownOpts, relationOpts, statusOpts }) {
   const [ddOpen, setDdOpen] = useState(false);
   const [relOpen, setRelOpen] = useState(false);
-  const [relSearch, setRelSearch] = useState('');
   const t = col.type;
   const isRelation = t === 'board_relation' || t === 'connect_boards';
   const isStatus = t === 'status' || t === 'color';
@@ -116,8 +116,6 @@ function CustomColumnCell({ col, value, onChange, dropdownOpts, relationOpts, st
     const linkedIds = new Set(linked.map((it) => String(it.id)));
     const candidates = relationOpts?.items || [];
     const allowMultiple = relationOpts?.allowMultiple !== false;
-    const q = relSearch.trim();
-    const shown = q ? candidates.filter((it) => it.name.includes(q)) : candidates;
     const emit = (ids) => onChange({ linkedItems: [...ids].map((id) => ({ id })) });
     const toggle = (id) => {
       const next = new Set(linkedIds);
@@ -133,44 +131,27 @@ function CustomColumnCell({ col, value, onChange, dropdownOpts, relationOpts, st
         showTrigger={['click']}
         hideTrigger={['clickoutside', 'esc']}
         onDialogDidShow={() => setRelOpen(true)}
-        onDialogDidHide={() => { setRelOpen(false); setRelSearch(''); }}
+        onDialogDidHide={() => setRelOpen(false)}
         position="bottom"
         zIndex={10000}
         content={() => (
           <DialogContentContainer>
-            <div className={styles.relMenu}>
-              <input
-                className={styles.relSearch}
-                value={relSearch}
-                placeholder="חיפוש פריט…"
-                onChange={(e) => setRelSearch(e.target.value)}
-                aria-label={`חיפוש ב${col.title}`}
-              />
-              {relationOpts?.loading && <div className={styles.relEmpty}>טוען פריטים…</div>}
-              {!relationOpts?.loading && shown.length === 0 && (
-                <div className={styles.relEmpty}>אין פריטים להצגה</div>
-              )}
-              {shown.slice(0, 100).map((it) => (
-                <button
-                  key={it.id}
-                  type="button"
-                  className={`${styles.relOption} ${linkedIds.has(it.id) ? styles.relOptionOn : ''}`}
-                  onClick={() => toggle(it.id)}
-                >
-                  <span className={styles.relCheck} aria-hidden="true">{linkedIds.has(it.id) ? '✓' : ''}</span>
-                  {it.name}
-                </button>
-              ))}
-              {linked.length > 0 && (
-                <button
-                  type="button"
-                  className={`${styles.relOption} ${styles.relClear}`}
-                  onClick={() => { emit(new Set()); setRelOpen(false); }}
-                >
-                  נקה את כל הקישורים
-                </button>
-              )}
-            </div>
+            {/*
+              * round378 — the panel is monday's own "Choose items" layout
+              * (RelationPicker): board name, search, and the candidates as
+              * coloured GROUP sections. It owns its search and sort state, so the
+              * cell only supplies data and the two write callbacks.
+              */}
+            <RelationPicker
+              boardName={relationOpts?.boardName || ''}
+              candidates={candidates}
+              linkedIds={linkedIds}
+              loading={!!relationOpts?.loading}
+              allowMultiple={allowMultiple}
+              columnTitle={col.title}
+              onToggle={toggle}
+              onClearAll={() => { emit(new Set()); setRelOpen(false); }}
+            />
           </DialogContentContainer>
         )}
       >

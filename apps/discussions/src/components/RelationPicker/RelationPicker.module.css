@@ -1,0 +1,200 @@
+/*
+ * round378 — monday's "Choose items" panel, mirrored for RTL.
+ *
+ * Every horizontal edge here is a LOGICAL property (inset-inline-start,
+ * padding-inline-*, margin-inline-*). The owner's reference is monday's LTR
+ * dropdown, where the group colour bar and the search icon sit on the LEFT; in
+ * this Hebrew app they belong on the RIGHT, and logical properties are what make
+ * that the same rule rather than a second stylesheet.
+ *
+ * Pixel values are read off the reference screenshot: 32px search box, 36px item
+ * rows, a 4px group bar, 6px between rows.
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  max-width: 88vw;
+  padding: 4px 6px 6px;
+  font-family: var(--font-family);
+  text-align: start;
+}
+
+/* header — title on the inline-start, the sort toggle on the inline-end */
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+}
+.headTitle {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--primary-text-color, #323338);
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.iconBtn:hover { background: var(--allgrey-background-color, #f6f7fb); }
+.iconBtn svg { width: 18px; height: 18px; }
+
+/* the LINKED board's name — monday shows it above the search box */
+.boardName {
+  margin: 10px 2px 8px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--primary-text-color, #323338);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 4px;
+  background: #ffffff;
+}
+.searchBox:focus-within {
+  border-color: var(--primary-color, #0073ea);
+}
+.searchIcon {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding-inline-start: 8px;
+  color: var(--secondary-text-color, #676879);
+}
+.searchIcon svg { width: 16px; height: 16px; }
+.searchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding-inline: 8px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--primary-text-color, #323338);
+}
+.searchInput::placeholder { color: var(--secondary-text-color, #676879); }
+
+.list {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-block: 4px;
+}
+.section { display: flex; flex-direction: column; }
+
+/* group header — coloured by the group itself, exactly like monday */
+.groupTitle {
+  margin: 8px 2px 6px;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 400;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/*
+ * An item row. The group colour arrives as the `--group-color` custom property so
+ * one rule paints every bar; the bar itself is a pseudo-element pinned to the
+ * inline-start edge, full height, with only that side's corners rounded — the
+ * same strip shape the base connected-board chip uses.
+ */
+.item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  margin-bottom: 6px;
+  padding-inline-start: 16px;
+  padding-inline-end: 10px;
+  border: none;
+  border-radius: 4px;
+  background: var(--allgrey-background-color, #f5f6f8);
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--primary-text-color, #323338);
+  text-align: start;
+  cursor: pointer;
+}
+.item::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-start-start-radius: 4px;
+  border-end-start-radius: 4px;
+  background: var(--group-color, #579bfc);
+}
+.item:hover { background: var(--primary-background-hover-color, #eceff8); }
+.itemName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* linked — monday marks the picked items; the check sits on the inline-end */
+.itemOn { font-weight: 500; }
+.itemCheck {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: var(--primary-color, #0073ea);
+}
+.itemCheck svg { width: 16px; height: 16px; }
+
+.empty {
+  padding: 10px 4px;
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+}
+
+.clearAll {
+  margin-top: 2px;
+  padding: 8px 4px;
+  border: none;
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--negative-color, #d83a52);
+  text-align: start;
+  cursor: pointer;
+}
+.clearAll:hover { background: var(--allgrey-background-color, #f6f7fb); }
