@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore, useMemo } from 'react';
 import { Text, Button, Flex, Avatar } from '@vibe/core';
 import { CloseSmall, Search } from '@vibe/icons';
 import { דיונים1Board } from '@api/BoardSDK.js';
@@ -17,7 +17,11 @@ import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { PREVIOUS_TASKS_MODES, CREATE_DISCUSSION_MODES, resolvePreference } from '@generated/utils/mondayApi/boards.config.js';
+import { PREVIOUS_TASKS_MODES, CREATE_DISCUSSION_MODES, resolvePreference, isProjectModeReady } from '@generated/utils/mondayApi/boards.config.js';
+import { useRelationItems } from '@generated/hooks/useRelationItems.js';
+import {
+  availableCreateModes, canAutoName, isFormRevealed, projectLinkValue, CREATE_MODE_LABEL,
+} from './createModeRules.js';
 import { buildAutoName, formatNameDate, syncTrailingDate } from '@generated/utils/autoDiscussionName.js';
 import { createTopicsFromTemplate, linkTemplateTopics, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
 import { parseExternalParticipants, formatExternalParticipants } from '@generated/utils/externalParticipants.js';
@@ -189,6 +193,16 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
   const [isPreviousDropdownOpen, setIsPreviousDropdownOpen] = useState(false);
   const [previousSearch, setPreviousSearch] = useState('');
   const [templateId, setTemplateId] = useState('none');
+  /*
+   * round381 — the PROJECT path's own subject. `projectId` is what gets written to
+   * projectLinkID; `projectName` is kept beside it so the trigger and the auto name
+   * do not have to re-find the item in the candidate list (which is paged and may
+   * still be loading when the card reopens on a prefill).
+   */
+  const [projectId, setProjectId] = useState(null);
+  const [projectName, setProjectName] = useState('');
+  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
+  const [projectSearch, setProjectSearch] = useState('');
   const [isParticipantTemplateMenuOpen, setIsParticipantTemplateMenuOpen] = useState(false);
   // "סוג" (discussion type) — a SINGLE-select DROPDOWN column (alias
   // discussionTypeID). `discussionType` holds the type's label TEXT (or null).
@@ -224,7 +238,37 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
   // once the path is usable (ADHOC immediately; TEMPLATE after a template was
   // picked). Edit mode keeps the full card. TEMPLATE mode never shows דיון קודם.
   const templateMode = !isEdit && createMode === CREATE_DISCUSSION_MODES.TEMPLATE;
-  const formRevealed = isEdit || isDuplicate || !templateMode || typeChosen;
+  /*
+   * round381 — the third path. `projectReady` is the SAME gate the side-menu filter
+   * and the previous-tasks resolution use: the preference is on AND projectLinkID is
+   * mapped. With either missing the toggle shows the original two paths, so an
+   * instance that never turns this on cannot tell this round happened.
+   */
+  const projectReady = isProjectModeReady(
+    settings?.preferences,
+    settings?.columns?.discussions || getColumns('discussions')
+  );
+  const projectMode = !isEdit && projectReady && createMode === CREATE_DISCUSSION_MODES.PROJECT;
+  const projectChosen = !!projectId;
+  // Candidates for the picker — the same cached, paged, group-aware reader the
+  // custom connected-board cells use, so a big projects board pages identically.
+  const projectOpts = useRelationItems(projectReady ? 'discussions' : null, projectReady ? 'projectLinkID' : null);
+  // Plain substring search over the loaded candidates — the same match the
+  // connected-board picker uses, and Hebrew has no better collated substring.
+  const projectCandidates = useMemo(() => {
+    const q = projectSearch.trim().toLowerCase();
+    const list = projectOpts.items || [];
+    return q ? list.filter((it) => (it.name || '').toLowerCase().includes(q)) : list;
+  }, [projectOpts.items, projectSearch]);
+
+  // ONE reveal rule for both folding paths (see createModeRules): each mode names
+  // its own subject and the rule is shared, so they cannot drift apart.
+  const formRevealed = isFormRevealed({
+    isEdit,
+    isDuplicate,
+    mode: createMode,
+    subjectChosen: projectMode ? projectChosen : typeChosen,
+  });
   const hidePreviousDiscussion =
     templateMode
     || previousTasksMode === PREVIOUS_TASKS_MODES.DISCUSSION_TYPE
@@ -550,6 +594,28 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
   };
 
   /*
+   * round381 — picking the project. It mirrors picking a type: close the menu, keep
+   * the name beside the id, and write the auto name through the SHARED gate so a
+   * name the user typed is never overwritten (canAutoName, see createModeRules).
+   */
+  const pickProject = (item) => {
+    setProjectId(String(item.id));
+    setProjectName(item.name || String(item.id));
+    setIsProjectDropdownOpen(false);
+    setProjectSearch('');
+    if (canAutoName({
+      isEdit,
+      mode: createMode,
+      autoNameEnabled: resolvePreference(settings?.preferences, 'templateAutoName'),
+      name,
+      lastAutoDate: lastAutoDateRef.current,
+    })) {
+      setName(buildAutoName(item.name || String(item.id), date));
+      lastAutoDateRef.current = formatNameDate(date);
+    }
+  };
+
+  /*
    * round367 — switching the toggle half. To ADHOC: the discussion is typeless
    * (type + stashed agenda cleared) and a still-auto name is cleared to the
    * clean empty state; a user-typed name survives the switch. To TEMPLATE: the
@@ -561,6 +627,19 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
     if (nextMode === CREATE_DISCUSSION_MODES.ADHOC) {
       setDiscussionType(null);
       setTypeTopics(null);
+      if (lastAutoDateRef.current && name.endsWith(lastAutoDateRef.current)) setName('');
+      lastAutoDateRef.current = '';
+    }
+    /*
+     * round381 — leaving the project path drops its subject, the mirror of ADHOC
+     * dropping the type: a project left behind would be WRITTEN by a submit from
+     * another path, linking a discussion to a project the user had switched away
+     * from. A still-auto name is cleared with it; a typed name survives.
+     */
+    if (nextMode !== CREATE_DISCUSSION_MODES.PROJECT && projectId) {
+      setProjectId(null);
+      setProjectName('');
+      setIsProjectDropdownOpen(false);
       if (lastAutoDateRef.current && name.endsWith(lastAutoDateRef.current)) setName('');
       lastAutoDateRef.current = '';
     }
@@ -735,6 +814,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
           discussionDateID: date ? composeLocalDate(date, time) : null,
           ...pendingPeople,
           ...(typeIsSubmittable ? { discussionTypeID: discussionType } : {}),
+          /*
+           * round381 — the project link, written ONLY when the project path actually
+           * produced one. Omitting the key on every other path is deliberate: a
+           * board_relation write of an empty list CLEARS the column, so sending it
+           * unconditionally would wipe the link on an edit of a project discussion.
+           */
+          ...(projectId ? { projectLinkID: projectLinkValue(projectId) } : {}),
         };
         // Template inputs are captured here (submit-time) so the form reset below
         // can't affect the staged writes.
@@ -1239,26 +1325,93 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
                 right = מתבנית (default per preference), left = מזדמן. Always
                 switchable; not shown when editing an existing discussion. */}
             {!isEdit && (
+              /* round381 — the toggle is now BUILT from availableCreateModes, so the
+                 project path appears between מתבנית and מזדמן exactly when the app can
+                 carry it, and an instance with the feature off renders the same two
+                 buttons round367 shipped. */
               <div className={styles.modeToggle} role="tablist" aria-label="אופן יצירת הדיון">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={createMode === CREATE_DISCUSSION_MODES.TEMPLATE}
-                  className={`${styles.modeToggleBtn} ${createMode === CREATE_DISCUSSION_MODES.TEMPLATE ? styles.modeToggleActive : ''}`}
-                  onClick={() => switchCreateMode(CREATE_DISCUSSION_MODES.TEMPLATE)}
-                >
-                  דיון מתבנית
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={createMode === CREATE_DISCUSSION_MODES.ADHOC}
-                  className={`${styles.modeToggleBtn} ${createMode === CREATE_DISCUSSION_MODES.ADHOC ? styles.modeToggleActive : ''}`}
-                  onClick={() => switchCreateMode(CREATE_DISCUSSION_MODES.ADHOC)}
-                >
-                  דיון מזדמן
-                </button>
+                {availableCreateModes(projectReady).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="tab"
+                    aria-selected={createMode === mode}
+                    className={`${styles.modeToggleBtn} ${createMode === mode ? styles.modeToggleActive : ''}`}
+                    onClick={() => switchCreateMode(mode)}
+                  >
+                    {CREATE_MODE_LABEL[mode]}
+                  </button>
+                ))}
               </div>
+            )}
+
+            {/* round381 — the PROJECT subject cell. Deliberately the SAME
+                .customDropdown markup the type cell uses (owner: "ממש כמו שבמקרה של
+                דיון מתבנית נפתח תא עם כל התבניות"), so the two folding paths look
+                identical and the card's cell standard (round368 §2) holds. */}
+            {projectMode && (
+            <div className={`${styles.row} ${styles.rowSingle}`}>
+              <div className={styles.field}>
+                <Text type="text2" className={styles.label}>פרויקט</Text>
+                <div className={styles.customDropdown}>
+                  <button
+                    type="button"
+                    className={styles.dropdownTrigger}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsProjectDropdownOpen((prev) => !prev);
+                      setIsTypeDropdownOpen(false);
+                      setIsPreviousDropdownOpen(false);
+                      setIsTimeDropdownOpen(false);
+                      setIsParticipantTemplateMenuOpen(false);
+                      setProjectSearch('');
+                    }}
+                    aria-expanded={isProjectDropdownOpen}
+                    aria-haspopup="listbox"
+                  >
+                    {projectId ? (
+                      <span className={styles.dropdownValue}>{projectName}</span>
+                    ) : (
+                      <span className={`${styles.dropdownValue} ${styles.dropdownPlaceholder}`}>בחרו פרויקט</span>
+                    )}
+                    <span className={styles.dropdownChevron} aria-hidden="true">▾</span>
+                  </button>
+                  {isProjectDropdownOpen && (
+                    <div className={styles.dropdownMenu} role="listbox" onPointerDown={(e) => e.stopPropagation()}>
+                      <div className={styles.dropdownSearchRow}>
+                        <input
+                          className={styles.dropdownSearch}
+                          value={projectSearch}
+                          placeholder="חיפוש פרויקט"
+                          aria-label="חיפוש פרויקט"
+                          autoFocus
+                          onChange={(e) => setProjectSearch(e.target.value)}
+                        />
+                      </div>
+                      {projectOpts.loading && <div className={styles.dropdownEmpty}>טוען פרויקטים…</div>}
+                      {!projectOpts.loading && projectCandidates.length === 0 && (
+                        <div className={styles.dropdownEmpty}>
+                          {projectOpts.items.length === 0 ? 'אין פרויקטים בלוח המקושר' : 'לא נמצאו פרויקטים מתאימים'}
+                        </div>
+                      )}
+                      {projectCandidates.map((it) => (
+                        <button
+                          key={it.id}
+                          type="button"
+                          role="option"
+                          aria-selected={String(it.id) === String(projectId)}
+                          className={`${styles.dropdownItem} ${String(it.id) === String(projectId) ? styles.dropdownItemSelected : ''}`}
+                          onClick={() => pickProject(it)}
+                        >
+                          {it.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
             )}
 
             {/* Row 1: סוג דיון — full-width, on its own row. round367: shown in
