@@ -309,12 +309,20 @@
   color: var(--primary-text-color, #323338);
 }
 
-/* status — full-width colored fill (monday native) */
-.statusCell {
+/* status — full-width colored fill (monday native).
+   round373 fix — the selectors are DOUBLED (`.statusCell.statusCell`) on purpose.
+   `.taskCell` sets `padding: 0 8px` and lives in ANOTHER stylesheet; both are a
+   single class, so the cascade fell back to source order — and the moment
+   StatusCell.jsx started importing this file the emission order flipped,
+   `.taskCell` landed last, and its 8px side padding came back as a white frame
+   around EVERY status fill in the app. Doubling the class raises specificity to
+   (0,2,0) so the override no longer depends on which stylesheet is bundled first.
+   Do not "simplify" these back to one class. */
+.statusCell.statusCell {
   padding: 0;
 }
 /* Dialog (Refable) clones the trigger as the direct child — stretch it full. */
-.statusCell > * {
+.statusCell.statusCell > * {
   width: 100%;
   height: 100%;
 }
