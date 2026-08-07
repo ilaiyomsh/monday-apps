@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Dialog, DialogContentContainer } from '@vibe/core';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
+import { GRAY_DEFAULT_LABEL_ID } from '@generated/constants/statusConfig';
 import styles from '../TaskTableRow/TaskTableRow.module.css';
 
 /*
@@ -27,12 +28,30 @@ import styles from '../TaskTableRow/TaskTableRow.module.css';
  * A label id of 0 is a REAL label, so `value` is tested for null-ness, never for
  * truthiness — `isSet` is the single place that decision is made.
  *
- * There is deliberately NO "clear" row (round374, owner decision reversing
+ * There is deliberately NO "clear" TEXT row (round374, owner decision reversing
  * round373's addition). monday's own status column cannot be emptied from a cell
  * either: the gray DEFAULT label is what "not set yet" looks like, and the app
- * renders that same gray label for an empty value via `emptyLabel`. Adding a
- * clear action here made the app's picker differ from every monday board the
- * owner already knows.
+ * renders that same gray label for an empty value via `emptyLabel`. A row reading
+ * "נקה" made the app's picker differ from every monday board the owner knows.
+ *
+ * round377 — instead, the picker always offers the gray default AS A LABEL, even
+ * when it carries no text. EVERY status column in monday offers one (owner, and
+ * monday's own picker: the gray swatch is how a cell goes back to unset), so this
+ * picker must too — a column where it is missing is a bug in this app, not a
+ * property of that column.
+ *
+ * The catch is that it is not always in the DATA. `settings.labels` serializes
+ * only the labels someone defined; the gray unset state is implicit and is absent
+ * from the payload whenever nobody wrote text on id 5 — this account's "בדיקה"
+ * (ids 0/1/2/3) and "עדיפות" (7/10/109/110) both come back without it. Reading
+ * the payload as the whole truth is what made this pill conditional in the first
+ * place. So the app SUPPLIES the gray pill, and skips it only when id 5 is
+ * already in `options` with text of its own — there the column's own gray label
+ * IS the pill, at its own display position, and adding a second would show two.
+ *
+ * The app-supplied one writes NULL, never id 5: that label does not exist on the
+ * column, so writing it would be rejected, and an empty value is already what the
+ * cell renders as the gray face. What you pick is what the cell shows.
  */
 
 const NEUTRAL = 'hsl(var(--status-default))';
@@ -58,6 +77,9 @@ export function StatusCell({
   const face = isSet
     ? <span className={styles.statusFill} style={{ background: fill }}>{label}</span>
     : <span className={styles.statusEmpty}>{emptyLabel}</span>;
+
+  // The column's own gray default, if it has one — then the app adds none.
+  const hasOwnGrayDefault = options.some((o) => o.id === GRAY_DEFAULT_LABEL_ID);
 
   if (!onChange) return face;
 
@@ -90,6 +112,18 @@ export function StatusCell({
         <DialogContentContainer>
           <div className={styles.statusMenu} style={{ width: menuWidth + 20 }}>
             {options.length === 0 && <div className={styles.relEmpty}>אין תוויות בעמודה זו</div>}
+            {!hasOwnGrayDefault && (
+              <button
+                type="button"
+                className={styles.statusOption}
+                style={{ background: 'hsl(var(--status-default, 0 0% 77%))' }}
+                aria-label={emptyLabel || 'ללא סטאטוס'}
+                title={emptyLabel || 'ללא סטאטוס'}
+                onClick={() => { onChange(null); setOpen(false); }}
+              >
+                {emptyLabel}
+              </button>
+            )}
             {options.map((opt) => (
               <button
                 key={opt.id}
