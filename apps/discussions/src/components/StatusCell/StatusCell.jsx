@@ -26,6 +26,13 @@ import styles from '../TaskTableRow/TaskTableRow.module.css';
  *
  * A label id of 0 is a REAL label, so `value` is tested for null-ness, never for
  * truthiness — `isSet` is the single place that decision is made.
+ *
+ * There is deliberately NO "clear" row (round374, owner decision reversing
+ * round373's addition). monday's own status column cannot be emptied from a cell
+ * either: the gray DEFAULT label is what "not set yet" looks like, and the app
+ * renders that same gray label for an empty value via `emptyLabel`. Adding a
+ * clear action here made the app's picker differ from every monday board the
+ * owner already knows.
  */
 
 const NEUTRAL = 'hsl(var(--status-default))';
@@ -94,22 +101,6 @@ export function StatusCell({
                 {opt.label}
               </button>
             ))}
-            {/*
-              * The only way to empty a status from a table cell. It is on the
-              * SHARED cell deliberately: round372's custom column cleared by
-              * re-picking the set label — an invisible gesture the built-in
-              * columns did not have — so the two columns behaved differently for
-              * the same click. One explicit row, same everywhere.
-              */}
-            {isSet && (
-              <button
-                type="button"
-                className={styles.statusClear}
-                onClick={() => { onChange(null); setOpen(false); }}
-              >
-                נקה
-              </button>
-            )}
           </div>
         </DialogContentContainer>
       )}

@@ -78,26 +78,24 @@ describe('StatusCell — the picker', () => {
   });
 
   /*
-   * The clear row is the ONLY way to empty a status from a table cell, and it is
-   * on the shared cell so the built-in and custom columns clear identically —
-   * round372's custom column cleared by re-picking the set label, a gesture the
-   * built-in columns never had.
+   * round374 (owner decision) — there is NO clear row. monday's own status column
+   * cannot be emptied from a cell either; the gray DEFAULT label is what "not set"
+   * looks like, and the app renders that same gray label for an empty value. A
+   * clear action made this picker differ from every board the owner already knows.
    */
-  it('offers "נקה" only when a value is set, and clears with null', async () => {
-    const onChange = vi.fn();
-    const { unmount } = render(
-      <StatusCell value={null} {...OPTS} onChange={onChange} emptyLabel="בחר" ariaLabel="עריכה" />
-    );
-    fireEvent.click(screen.getByText('בחר'));
-    await flush();
-    expect(screen.queryByText('נקה')).toBe(null); // nothing to clear
-    unmount();
-
-    render(<StatusCell value={0} {...OPTS} onChange={onChange} ariaLabel="עריכה" />);
+  it('offers NO clear row — the gray default label is the empty state', async () => {
+    render(<StatusCell value={0} {...OPTS} onChange={vi.fn()} ariaLabel="עריכה" />);
     fireEvent.click(screen.getByText('בעבודה'));
     await flush();
-    fireEvent.click(screen.getByText('נקה'));
-    expect(onChange).toHaveBeenCalledWith(null);
+    expect(screen.queryByText('נקה')).toBe(null);
+  });
+
+  it('renders the column\'s own gray default label as the empty face', () => {
+    // round353 — `emptyLabel` is the gray label-5 text read off the monday column,
+    // which is what makes an unset cell read as "not started yet" rather than blank.
+    render(<StatusCell value={null} {...OPTS} emptyLabel="טרם החל" />);
+    const face = screen.getByText('טרם החל');
+    expect(face.className).toContain('statusEmpty');
   });
 
   it('tells the user when the column has no labels at all', async () => {
