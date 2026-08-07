@@ -19,6 +19,9 @@ RAW="$STATE/raw"
 echo "==> [1/6] Preconditions"
 command -v jq >/dev/null 2>&1 || { echo "FATAL: jq is required (the guard hook and this script fail closed without it)"; exit 1; }
 command -v pnpm >/dev/null 2>&1 || { echo "FATAL: pnpm is required (never npm/yarn in this repo)"; exit 1; }
+# Fail fast on a wrong runtime: metrics taken on a different Node major are not
+# comparable to the previous baseline, and nothing downstream would notice.
+eval "$CLEANUP_TOOLCHAIN_CMD" || exit 1
 [ -d "$CLEANUP_APP_DIR" ] || { echo "FATAL: $CLEANUP_APP_DIR not found — this script only serves $CLEANUP_APP_SLUG"; exit 1; }
 if [ -n "$(git status --porcelain)" ]; then
   echo "FATAL: working tree not clean. Commit or stash first — every batch must be a revertable commit."
@@ -62,6 +65,7 @@ gate wiring   "$CLEANUP_WIRING_CMD"
 gate eager    "$CLEANUP_EAGER_CMD"
 gate typecheck "$CLEANUP_TYPECHECK_CMD"
 gate lint     "$CLEANUP_LINT_CMD"
+gate lintcfg  "$CLEANUP_LINTCFG_CMD"
 gate build    "$CLEANUP_BUILD_CMD"
 gate tests    "$CLEANUP_TEST_CMD"
 gate drift    "$CLEANUP_DRIFT_CMD"
@@ -112,13 +116,17 @@ jq -n \
   --arg srv_dir "$CLEANUP_SRV_DIR" \
   --arg state_dir "$STATE" \
   --arg install "$CLEANUP_INSTALL_CMD" \
+  --arg toolchain "$CLEANUP_TOOLCHAIN_CMD" \
   --arg wiring "$CLEANUP_WIRING_CMD" \
   --arg eager "$CLEANUP_EAGER_CMD" \
   --arg typecheck "$CLEANUP_TYPECHECK_CMD" \
   --arg lint "$CLEANUP_LINT_CMD" \
+  --arg lintcfg "$CLEANUP_LINTCFG_CMD" \
   --arg build "$CLEANUP_BUILD_CMD" \
   --arg test "$CLEANUP_TEST_CMD" \
   --arg drift "$CLEANUP_DRIFT_CMD" \
+  --arg custody "$CLEANUP_CUSTODY_CMD" \
+  --arg reconcile "$CLEANUP_RECONCILE_CMD" \
   --arg knip "pnpm dlx $CLEANUP_KNIP_VERSION" \
   --arg knip_spa_args "$CLEANUP_KNIP_SPA_ARGS" \
   --arg knip_srv_args "$CLEANUP_KNIP_SRV_ARGS" \
@@ -133,8 +141,9 @@ jq -n \
   --argjson knip_unused_deps "${KNIP_DEPS:-0}" \
   '{date:$date, toolchain:{node:$node, pnpm:$pnpm}, app:$app, base_sha:$base_sha, branch:$branch,
     scope:{app_dir:$app_dir, spa_dir:$spa_dir, srv_dir:$srv_dir, state_dir:$state_dir},
-    commands:{install:$install, wiring:$wiring, eager:$eager, typecheck:$typecheck,
-              lint:$lint, build:$build, test:$test, drift:$drift},
+    commands:{install:$install, toolchain:$toolchain, wiring:$wiring, eager:$eager,
+              typecheck:$typecheck, lint:$lint, lintcfg:$lintcfg, build:$build,
+              test:$test, drift:$drift, custody:$custody, reconcile:$reconcile},
     scanners:{knip:$knip, knip_spa_args:$knip_spa_args, knip_srv_args:$knip_srv_args, jscpd:$jscpd},
     metrics:{loc:$loc, source_files:$files, bundle_kb:$bundle_kb, clones:$clones,
              duplication_pct:$dup_pct, knip_unused_files:$knip_unused_files,
@@ -148,7 +157,7 @@ cat <<EOF
 BASELINE OK — $CLEANUP_APP_SLUG
   branch      $BRANCH
   base sha    $BASE_SHA
-  gate        wiring, eager, typecheck, lint, build, tests, drift — all green
+  gate        toolchain, wiring, eager, typecheck, lint, lintcfg, build, tests, drift — all green
   metrics     ${LOC} LOC in ${FILES} source files, bundle ${BUNDLE_KB} KB,
               knip: ${KNIP_FILES} unused file(s) / ${KNIP_EXPORTS} unused export(s) / ${KNIP_DEPS} unused dep(s),
               jscpd: ${CLONES} clone(s), ${DUP_PCT}% duplicated

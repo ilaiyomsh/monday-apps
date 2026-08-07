@@ -104,14 +104,17 @@ phase('Gate')
 const gate = await agent(
   `Verify the twyst-your-status cleanup branch end to end, from the repo root. Read the command strings from ${STATE}/baseline.json ("commands") and also return its base_sha and branch.\n\n` +
   `Run, in order, stopping at the first failure:\n` +
-  `  1. install   — pnpm install --frozen-lockfile (a clean install: a dependency batch that broke resolution shows up here and nowhere else)\n` +
-  `  2. wiring    — node scripts/error-wiring-audit.mjs\n` +
-  `  3. eager     — node scripts/lib/eager-graph.mjs\n` +
-  `  4. typecheck — the app's type-check script\n` +
-  `  5. lint      — both workspaces\n` +
-  `  6. build     — both workspaces\n` +
-  `  7. tests     — both workspaces, FULL suites\n` +
-  `  8. drift     — pnpm --filter @mapps/error-kit test\n\n` +
+  `  1. toolchain — bash scripts/cleanup/check-toolchain.sh (Node/pnpm majors match the CI pins — metrics on a different runtime are not comparable to the baseline)\n` +
+  `  2. install   — pnpm install --frozen-lockfile (a clean install: a dependency batch that broke resolution shows up here and nowhere else)\n` +
+  `  3. reconcile — bash scripts/cleanup/reconcile-plan.sh --all-done (every done batch fully accounted: applied/skipped/guard-blocked per finding — a done batch with an unaccounted finding is round 2's A-structure-07 failure and an automatic ISSUES_FOUND)\n` +
+  `  4. wiring    — node scripts/error-wiring-audit.mjs\n` +
+  `  5. eager     — node scripts/lib/eager-graph.mjs\n` +
+  `  6. typecheck — the app's type-check script\n` +
+  `  7. lint      — both workspaces\n` +
+  `  8. lintcfg   — bash scripts/cleanup/lint-config-audit.sh (the lint that just passed must be ABLE to see a dangling identifier)\n` +
+  `  9. build     — both workspaces\n` +
+  ` 10. tests     — both workspaces, FULL suites\n` +
+  ` 11. drift     — pnpm --filter @mapps/error-kit test\n\n` +
   `After the build, measure the SPA bundle the same way the baseline did — run exactly:\n` +
   `  bash -c '. scripts/cleanup/cleanup-env.sh && cleanup_bundle_kb'\n` +
   `(report as bundleKb). Do NOT substitute a plain \`du -sk dist\`: that counts the hidden sourcemaps the deploy strips, which is ~3.7x the served bytes and would drown any real delta.\n\n` +
@@ -154,6 +157,9 @@ const measureChain = async () => {
 const reviewTask = () => agent(
   `Independently review the twyst-your-status cleanup branch. Base SHA: ${gate.baseSha}.\n\n` +
   `Walk every commit in ${gate.baseSha}..HEAD (git log --oneline, then git show per commit) and hunt for what the cleanup team missed: behaviour changes disguised as cleanup, deleted-but-still-referenced code (including string routes and the paths named in scripts/error-wiring-audit.mjs and scripts/lib/eager-graph.mjs), lost WHY-comments, touched or weakened tests, error/observability regressions, platform-contract changes (settings_str keys, storage keys, webhook config, OAuth scopes, routes), and any file outside ${APP}.\n\n` +
+  `Two custody checks are already mechanical — run them and fold any failure into your verdict as a blocking issue, then spend your judgement where a grep cannot go (semantics, contracts, lost knowledge):\n` +
+  `  bash scripts/cleanup/verify-approval.sh   (agent-authored approvals; exit 0 also when statuses have moved on to done)\n` +
+  `  bash scripts/cleanup/reconcile-plan.sh --all-done   (unaccounted findings in done batches)\n\n` +
   `Return per-commit verdicts plus an overall READY_FOR_PR / ISSUES_FOUND, and put your full formatted output in rawOutput so it can be appended verbatim to the report.\n\n${READ_ONLY}`,
   { label: 'adversarial-review', phase: 'Review', agentType: 'cleanup-reviewer', schema: REVIEW_SCHEMA }
 )

@@ -54,17 +54,32 @@ task prompt. You apply exactly those findings and nothing else.
      keep it and record the skip.
    - **duplication / patterns / structure** — follow the finding's `action` literally. If
      the action is ambiguous, take the minimal interpretation.
-3. After all edits, run the app's own checks to catch what your edits broke — these are the
+3. **Account for every finding as you go.** Append exactly one disposition bullet to each
+   finding's block in `CLEANUP_PLAN.md` the moment you finish with it:
+   ```
+   - disposition: applied
+   - disposition: skipped — <the concrete reason>
+   - disposition: guard-blocked — <the guard's message>
+   ```
+   Struck findings (`⛔ STRUCK`) are exempt. Nothing else is: the gate's step 0 runs
+   `bash scripts/cleanup/reconcile-plan.sh --batch <N>` and goes RED on any non-struck
+   finding without a disposition. A finding you neither touched nor recorded is the
+   round-2 A-structure-07 failure — a batch that claimed `done` while an approved finding
+   silently never ran. Never write `applied` for work that did not happen; a truthful
+   `skipped` passes the gate, a false `applied` is the one thing this system cannot catch.
+4. After all edits, run the app's own checks to catch what your edits broke — these are the
    fast half of the gate, and running them yourself means the verification step gets a clean
    signal instead of your typo:
    ```
+   bash scripts/cleanup/reconcile-plan.sh --batch <N>
    node scripts/error-wiring-audit.mjs
    node scripts/lib/eager-graph.mjs
    pnpm --filter "./apps/twyst-your-status" lint && pnpm --filter "./apps/twyst-your-status/server" lint
    ```
-   Fix ONLY errors your own edits introduced (dangling imports, now-unused variables).
-4. Report: findings applied, findings skipped with reasons, files touched, and the result of
-   step 3. **Do NOT commit** — the workflow commits after the full gate passes.
+   Fix ONLY errors your own edits introduced (dangling imports, now-unused variables —
+   both lints now hold `no-undef`/`no-unused-vars`, so a dangling identifier IS a lint error).
+5. Report: findings applied, findings skipped with reasons, files touched, and the result of
+   step 4. **Do NOT commit** — the workflow commits after the full gate passes.
 
 ## Hard rules
 

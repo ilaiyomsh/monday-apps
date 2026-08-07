@@ -10,6 +10,11 @@
       "Bash(node scripts/lib/eager-graph.mjs)",
       "Bash(bash scripts/cleanup/baseline.sh:*)",
       "Bash(bash scripts/cleanup/guard-protected-paths.test.sh)",
+      "Bash(bash scripts/cleanup/guard-approval-word.test.sh)",
+      "Bash(bash scripts/cleanup/check-toolchain.sh)",
+      "Bash(bash scripts/cleanup/lint-config-audit.sh)",
+      "Bash(bash scripts/cleanup/verify-approval.sh:*)",
+      "Bash(bash scripts/cleanup/reconcile-plan.sh:*)",
       "Bash(git status:*)",
       "Bash(git log:*)",
       "Bash(git diff:*)",
@@ -52,6 +57,11 @@
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/skills/test-guard/hooks/testfile-lock.sh\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/cleanup/guard-approval-word.sh\"",
+            "timeout": 10
           }
         ]
       },
@@ -61,6 +71,11 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/skills/test-guard/hooks/testfile-lock.sh\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/cleanup/guard-approval-word.sh\"",
             "timeout": 10
           }
         ]

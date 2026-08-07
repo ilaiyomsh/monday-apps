@@ -215,7 +215,12 @@ package: **`scripts/cleanup/README.md`**.
 
 - Stages: `bash scripts/cleanup/baseline.sh` → audit → 🚪 **human** sets batches to
   `approved` → execute → 🚪 human reads the commits → verify. `approved` is a human-only
-  word; no agent writes it. The three stages are saved Claude Code workflows
+  word — and since 2026-08-07 that is a mechanism, not a rule: `guard-approval-word.sh`
+  blocks any agent from writing it (under Codex: the Bash surface fires; the Edit surface
+  is version-dependent, so treat it as self-enforced), and `verify-approval.sh` aborts
+  execution unless every approved line `git blame`s to a human-committed change (no Claude
+  author, no Claude/agent trailer). The owner approves in their own editor and commits it
+  themselves. The three stages are saved Claude Code workflows
   (`.claude/workflows/cleanup-{audit,execute,verify}.js`) driving the five
   `.claude/agents/cleanup-*.md` subagents; **Codex has neither, so under Codex the stage
   contracts in `scripts/cleanup/prompts/*.md` are self-enforced** — read them before doing
@@ -231,9 +236,14 @@ package: **`scripts/cleanup/README.md`**.
   while `apply_patch` coverage is version-dependent (`.codex/README.md`), so treat the
   Edit-surface rules as self-enforced and never delete a file any way but
   `rm <one explicit path>`.
-- **Gate per batch = the blocking CI set narrowed to the app:** error-wiring audit,
-  eager-import audit, type-check, lint, build, full tests (both workspaces), error-kit
-  drift. Zero behaviour change; one batch = one revertable commit
+- **Gate per batch = the blocking CI set narrowed to the app, plus the cleanup's own
+  mechanical checks:** finding reconciliation (`reconcile-plan.sh` — every non-struck
+  finding carries a truthful `- disposition:` bullet before a batch may flip to `done`),
+  toolchain pin (`check-toolchain.sh`, Node/pnpm majors = CI), error-wiring audit,
+  eager-import audit, type-check, lint, lint-capability audit (`lint-config-audit.sh` —
+  the effective eslint config must hold `no-undef`/`no-unused-vars` so a dangling
+  identifier is a lint error, not a shipped ReferenceError), build, full tests (both
+  workspaces), error-kit drift. Zero behaviour change; one batch = one revertable commit
   (`chore(twyst-your-status): cleanup … [batch-N]`); red gate → one fix attempt → revert.
   Never edit a test to make a gate pass.
 - No stage pushes, merges or deploys. Extending this to another app means a second

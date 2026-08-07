@@ -249,6 +249,7 @@ const plan = await agent(
   `## Summary\n| batch | category | findings | risk | status |\n|---|---|---|---|---|\n\n` +
   `## Batch <N> — <category>: <title>\nrisk: S|M|L | status: pending\n\n` +
   `### <finding-id>\n- files: <path:line, ...>\n- action: <mechanical instruction>\n- evidence: <verification or auditor evidence>\n- source: knip | jscpd | auditor:<area>\n\n` +
+  `Do NOT write "- disposition:" lines — those are appended per finding by the EXECUTE stage (applied / skipped — reason / guard-blocked), and reconcile-plan.sh audits done batches against them. Relocate findings by SYMBOL, never by quoted line numbers: batches shift each other's lines.\n\n` +
   `## Appendix — non-actionable (not for execution)\n| id | verdict/reason | evidence |\n|---|---|---|\n` +
   '```\n\n' +
   `${READ_ONLY}`,

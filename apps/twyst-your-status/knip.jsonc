@@ -18,10 +18,17 @@
   //   src/dev-harness/** — the monday-sdk-js stub, aliased by vite in dev:mock AND vitest
   //   src/test-utils/**  — imported only from test files
   //   src/**/*.test.*    — the suites themselves are entry points, not dead files
+  //   src/hooks/useUiErrorSink.js — error/observability boot layer (.error-guard): verified
+  //     knip false positive on every audit run (2026-08-05 round 1, re-confirmed at every
+  //     re-baseline). Guard-protected, so a finding here is non-actionable by construction;
+  //     listing it as an entry removes the recurring noise without distorting the module
+  //     graph the way `ignore` would. The rest of the boot layer stays visible to knip but
+  //     its exports carry `@public` JSDoc tags for the same reason.
   "entry": [
     "src/dev-harness/**/*.js",
     "src/test-utils/**/*.{js,jsx}",
-    "src/**/*.test.{js,jsx}"
+    "src/**/*.test.{js,jsx}",
+    "src/hooks/useUiErrorSink.js"
   ],
   "project": ["src/**/*.{js,jsx}"],
   // LOAD-BEARING despite knip's own "Remove from ignoreWorkspaces" configuration hint:
