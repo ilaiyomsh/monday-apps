@@ -83,11 +83,56 @@ describe('StatusCell — the picker', () => {
    * looks like, and the app renders that same gray label for an empty value. A
    * clear action made this picker differ from every board the owner already knows.
    */
-  it('offers NO clear row — the gray default label is the empty state', async () => {
+  it('offers NO clear TEXT row — the gray default label is the empty state', async () => {
     render(<StatusCell value={0} {...OPTS} onChange={vi.fn()} ariaLabel="עריכה" />);
     fireEvent.click(screen.getByText('בעבודה'));
     await flush();
     expect(screen.queryByText('נקה')).toBe(null);
+  });
+
+  /*
+   * round377 — EVERY status column in monday offers a gray default (it is how a
+   * cell goes back to unset), so this picker always offers one too. It is not
+   * always in the DATA, though: `settings.labels` omits the implicit gray state
+   * whenever nobody wrote text on id 5, which is why "בדיקה" (0/1/2/3) and
+   * "עדיפות" (7/10/109/110) come back without it. The app supplies the pill, and
+   * picking it writes NULL — id 5 is not on the column, and an empty value is
+   * already what the cell renders as the gray face.
+   */
+  it('offers a gray default pill even when it carries no text, and it clears', async () => {
+    const onChange = vi.fn();
+    render(<StatusCell value={0} {...OPTS} onChange={onChange} ariaLabel="עריכה" />);
+    fireEvent.click(screen.getByText('בעבודה'));
+    await flush();
+    const pill = screen.getByLabelText('ללא סטאטוס');
+    expect(pill.textContent).toBe('');           // textless, on purpose
+    fireEvent.click(pill);
+    expect(onChange).toHaveBeenCalledWith(null); // never id 5
+  });
+
+  it('labels that pill with the column\'s gray text when the column has one', async () => {
+    render(<StatusCell value={0} {...OPTS} onChange={vi.fn()} emptyLabel="טרם החל" ariaLabel="עריכה" />);
+    fireEvent.click(screen.getByText('בעבודה'));
+    await flush();
+    expect(screen.getByLabelText('טרם החל')).toBeTruthy();
+  });
+
+  /*
+   * A column that already owns a gray default (stable id 5) must NOT get a second
+   * one — it is already in `options` at its own display position.
+   */
+  it('adds NO pill when the column already has its own gray default label', async () => {
+    const withGray = {
+      options: [{ id: 5, label: 'טרם נבחר', color: '#c4c4c4' }, { id: 1, label: 'בוצע', color: '#00c875' }],
+      labelById: { 5: 'טרם נבחר', 1: 'בוצע' },
+      colorById: { 5: '#c4c4c4', 1: '#00c875' },
+    };
+    render(<StatusCell value={1} {...withGray} onChange={vi.fn()} ariaLabel="עריכה" />);
+    fireEvent.click(screen.getByText('בוצע'));
+    await flush();
+    // exactly one gray entry — the column's own
+    expect(screen.getAllByText('טרם נבחר')).toHaveLength(1);
+    expect(screen.queryByLabelText('ללא סטאטוס')).toBe(null);
   });
 
   it('renders the column\'s own gray default label as the empty face', () => {

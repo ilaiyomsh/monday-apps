@@ -8,6 +8,7 @@ import {
   addManagedStatusLabel,
 } from '../utils/mondayApi/managedColumns.js';
 import logger from '../utils/logger.js';
+import { GRAY_DEFAULT_LABEL_ID } from '../constants/statusConfig.js';
 
 /*
  * Loads the *actual* status column definition (labels + colors + display order)
@@ -47,7 +48,7 @@ const EMPTY = { options: [], labelById: {}, colorById: {}, orderById: {}, doneId
  * monday never auto-assigns id 5 — so surfaces render `emptyLabel` for empty values,
  * which makes the gray label read as the empty state everywhere in the app.
  */
-const GRAY_DEFAULT_LABEL_ID = 5;
+// round377 — moved to constants/statusConfig.js (see the note there).
 
 // ---- change-notification (so a newly added label propagates without reload) ----
 // The module cache never expired before; `addStatusLabel` now bumps `version`
