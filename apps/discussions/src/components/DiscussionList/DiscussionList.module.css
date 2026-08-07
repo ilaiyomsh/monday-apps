@@ -1101,3 +1101,9 @@
   justify-content: center;
   padding: var(--spacing-small, 12px);
 }
+/* round379 — the background drain's own line, where "טען עוד" used to sit. Quiet
+   on purpose: it is progress, not an action. */
+.autoLoadingNote {
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+}

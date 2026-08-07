@@ -371,22 +371,28 @@ export function DiscussionList({
 }) {
   const isCalendar = viewMode === 'calendar' && !!calendarAnchor;
   const [search, setSearch] = useState('');
-  // Default to the current month for fast initial load — fetching only this month's
-  // discussions instead of all (up to PAGE_SIZE). "כל החודשים" is still selectable.
-  const [monthFilter, setMonthFilter] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  /*
+   * round379 (owner spec) — NO default month filter. The list opens on ALL
+   * discussions: useDiscussions paints the 15 most recent and keeps loading the
+   * rest in the background, so the initial load stays fast without scoping the
+   * side menu to one month. The month selector remains, as an explicit choice.
+   */
+  const [monthFilter, setMonthFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' or a status label id (string)
   // round170 — the two filter cells were consolidated into ONE "סינון" button
   // that opens a small popover holding the type (+ month, in list view) selects.
   const [filterOpen, setFilterOpen] = useState(false);
-  // Active-filter count for the button badge. round177 — the month selector is a
-  // NATIVE default (it opens on the current month), so it never contributes to the
-  // badge (owner: "הסינון של החודש הנוכחי הוא נייטיבי"); only an explicit type
-  // filter counts. MUST be declared AFTER typeFilter — referencing it earlier is a
-  // temporal-dead-zone crash. round171 fix.
-  const activeFilterCount = typeFilter !== 'all' ? 1 : 0;
+  /*
+   * Active-filter count for the button badge. round177 kept the month OUT of the
+   * badge because it was a NATIVE default the user never chose (owner: "הסינון של
+   * החודש הנוכחי הוא נייטיבי"). round379 removed that default — the list now opens
+   * unfiltered — so a month IS a deliberate choice and belongs in the badge, or the
+   * user has no way to see why rows are missing.
+   *
+   * MUST be declared AFTER typeFilter/monthFilter — referencing either earlier is a
+   * temporal-dead-zone crash. round171 fix.
+   */
+  const activeFilterCount = (typeFilter !== 'all' ? 1 : 0) + (monthFilter !== 'all' ? 1 : 0);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   // Right-click context menu (round 33) — {item, x, y} while open. A single
   // instance serves BOTH the list rows and the calendar chips (both live inside
@@ -410,7 +416,7 @@ export function DiscussionList({
     return f;
   }, [debouncedSearch, monthFilter, typeFilter, isCalendar, calendarMode, calendarAnchor]);
 
-  const { items, loading, refetching, loadingMore, cursor, loadMore, softDeleteDiscussion, refetch } = useDiscussions(filters);
+  const { items, loading, refetching, loadingMore, autoLoading, cursor, loadMore, softDeleteDiscussion, refetch } = useDiscussions(filters);
 
   // round136 — a save bumps refreshToken (App.handleSaved): refresh the list
   // IN PLACE (the hook's silent refetch — no unmount, no skeleton, search/
@@ -759,7 +765,19 @@ export function DiscussionList({
                 </div>
               );
             })}
-            {cursor && (
+            {/*
+              * round379 — while the background drain is filling the list there is
+              * nothing to press: a "טען עוד" button that the hook is already
+              * pressing for you reads as broken. Show what is happening instead,
+              * and keep the button for the FILTERED lists, which take one page and
+              * never drain.
+              */}
+            {autoLoading && (
+              <div className={styles.loadMoreRow}>
+                <span className={styles.autoLoadingNote}>טוען את שאר הדיונים…</span>
+              </div>
+            )}
+            {cursor && !autoLoading && (
               <div className={styles.loadMoreRow}>
                 <Button
                   kind={"secondary"}
