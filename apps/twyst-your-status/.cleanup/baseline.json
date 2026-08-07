@@ -1,11 +1,11 @@
 {
-  "date": "2026-08-07T09:10:17+00:00",
+  "date": "2026-08-07T10:52:18+00:00",
   "toolchain": {
     "node": "v20.20.2",
     "pnpm": "10.33.0"
   },
   "app": "twyst-your-status",
-  "base_sha": "6e168f1fc7b9c6b02a0e8d05333493f5993c6c56",
+  "base_sha": "abee94e3e28127b63f7331dc2a159e3cf0e66595",
   "branch": "claude/twyst-status-cleanup-37o0n1",
   "scope": {
     "app_dir": "apps/twyst-your-status",
@@ -15,28 +15,32 @@
   },
   "commands": {
     "install": "pnpm install --frozen-lockfile",
+    "toolchain": "bash scripts/cleanup/check-toolchain.sh",
     "wiring": "node scripts/error-wiring-audit.mjs",
     "eager": "node scripts/lib/eager-graph.mjs",
     "typecheck": "pnpm --filter \"./apps/twyst-your-status\" run type-check",
     "lint": "pnpm --filter \"./apps/twyst-your-status\" lint && pnpm --filter \"./apps/twyst-your-status/server\" lint",
+    "lintcfg": "bash scripts/cleanup/lint-config-audit.sh",
     "build": "pnpm --filter \"./apps/twyst-your-status\" build && pnpm --filter \"./apps/twyst-your-status/server\" build",
     "test": "pnpm --filter \"./apps/twyst-your-status\" test && pnpm --filter \"./apps/twyst-your-status/server\" test",
-    "drift": "pnpm --filter @mapps/error-kit test"
+    "drift": "pnpm --filter @mapps/error-kit test",
+    "custody": "bash scripts/cleanup/verify-approval.sh",
+    "reconcile": "bash scripts/cleanup/reconcile-plan.sh"
   },
   "scanners": {
     "knip": "pnpm dlx knip@5.88.1",
     "knip_spa_args": "--directory apps/twyst-your-status",
     "knip_srv_args": "--directory apps/twyst-your-status/server",
-    "jscpd": "pnpm dlx jscpd@4.2.5 apps/twyst-your-status/src apps/twyst-your-status/server/src --min-tokens 50 --ignore **/*.test.js,**/*.test.jsx,**/dev-harness/**,**/test-utils/**"
+    "jscpd": "pnpm dlx jscpd@4.2.5 apps/twyst-your-status/src apps/twyst-your-status/server/src --min-tokens 50 --max-lines 5000 --ignore **/*.test.js,**/*.test.jsx,**/dev-harness/**,**/test-utils/**"
   },
   "metrics": {
-    "loc": 15718,
+    "loc": 15729,
     "source_files": 110,
     "bundle_kb": "716",
     "clones": "3",
     "duplication_pct": "0.12",
-    "knip_unused_files": 1,
-    "knip_unused_exports": 15,
+    "knip_unused_files": 0,
+    "knip_unused_exports": 7,
     "knip_unused_dependencies": 0
   },
   "tests": "green",
