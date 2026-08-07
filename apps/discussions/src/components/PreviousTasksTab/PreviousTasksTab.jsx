@@ -15,7 +15,10 @@ import { BuilderControl } from '@generated/components/MyTasksView/controls/Build
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
 import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
-import { customEntriesFor, customColumnIcon } from '@generated/utils/customColumns.js';
+import {
+  customEntriesFor, customColumnIcon, customSortDims, customGroupDims, customEngineDims,
+} from '@generated/utils/customColumns.js';
+import { CustomStatusCollector, statusFilterOptions } from '@generated/components/CustomStatusCollector';
 import {
   filterTasks, filterCount, serializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
@@ -66,7 +69,6 @@ const SORT_OPTIONS = [
   { value: 'deadline', label: 'דד ליין', icon: 'date', dirs: SORT_DATE_DIRS, note: 'Tasks with no deadline always sort last' },
   { value: 'name', label: 'שם', icon: 'text', dirs: SORT_TEXT_DIRS },
 ];
-const firstSortDir = (col) => (SORT_OPTIONS.find((o) => o.value === col) || SORT_OPTIONS[0])?.dirs?.[0]?.key;
 // Group-by source discussion — only meaningful in the "by type" view (where
 // tasks span multiple discussions), so it's appended to the options there only.
 const GROUP_OPTION_DISCUSSION = { value: 'discussion', label: 'דיון מקור', icon: 'relation', orders: GROUP_AZ_ORDERS };
@@ -124,8 +126,40 @@ const decRangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon |
 export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUndo, onNotify, onNotifyLoading: _onNotifyLoading, onDismissToast: _onDismissToast, canTask = () => true, canCreateTask = true, canEditDiscussion = true, canDecision = () => true, canReorderColumns, canManageSettings = false }) {
   // Load-time grouping/filter = the shared saved view (empty default otherwise);
   // in-session changes are local until someone with permission hits Save.
+  /*
+   * round375 — `settings` is destructured HERE, above the custom-column memo that
+   * depends on it. The memo was hoisted in round373 (the saved-view initializers
+   * validate against its output), and reading `settings` from a `const` declared
+   * further down threw a TDZ ReferenceError that took out the whole tab.
+   */
+  const { settings } = useSettings();
+  /*
+   * round373 — owner-added custom mappings are resolved FIRST because they now
+   * feed the SORT and GROUP option lists too, and the saved-view seeding below
+   * validates against those lists in a lazy initializer. Resolving them later
+   * would silently drop a saved view that points at a custom column.
+   */
+  // round375 — react to a mapping change instead of capturing once per mount
+  // (see the TasksTab comment: empty deps made the toolbar and the table disagree).
+  const customTaskCols = useMemo(
+    () => customEntriesFor(settings?.columns?.tasks || getColumns('tasks'))
+      .filter(([, c]) => c?.id)
+      .map(([alias, c]) => ({ alias, type: c.type, title: c.title || alias })),
+    [settings?.columns?.tasks]
+  );
+  const customSortOpts = useMemo(
+    () => customSortDims(customTaskCols).map((d) => ({ value: d.key, label: d.title, icon: d.icon, dirs: d.dirs })),
+    [customTaskCols]
+  );
+  const customGroupOpts = useMemo(
+    () => customGroupDims(customTaskCols).map((d) => ({ value: d.key, label: d.title, icon: d.icon, orders: d.orders })),
+    [customTaskCols]
+  );
+  const sortOptions = useMemo(() => [...SORT_OPTIONS, ...customSortOpts], [customSortOpts]);
+  const firstDirOf = (col) => (sortOptions.find((o) => o.value === col) || sortOptions[0])?.dirs?.[0]?.key;
+
   const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('previousTasks', { canManageSettings });
-  const savedGroup = [...GROUP_OPTIONS, GROUP_OPTION_DISCUSSION].some((o) => o.value === savedView?.group?.col)
+  const savedGroup = [...GROUP_OPTIONS, GROUP_OPTION_DISCUSSION, ...customGroupOpts].some((o) => o.value === savedView?.group?.col)
     ? savedView.group : null;
   const [groupBy, setGroupBy] = useState(savedGroup ? savedGroup.col : 'none');
   const [groupOrder, setGroupOrder] = useState(savedGroup?.order || 'labelAsc');
@@ -140,7 +174,6 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // Mode: resolve previous tasks via the linked previous discussion (default) or
   // by the current discussion's TYPE (taskTypeID written on each task). Owner sets
   // this in Settings (settings.preferences.previousTasksMode).
-  const { settings } = useSettings();
   // round340 — through resolvePreference, so an instance with nothing stored gets the
   // SHIPPED default (now 'auto') instead of a fallback hardcoded at this call site.
   const mode = resolvePreference(settings?.preferences, 'previousTasksMode');
@@ -275,12 +308,6 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // hideable. The list mirrors the TaskTable columns actually shown here
   // (priority only when mapped; "דיון מקור"/source only in by-type mode).
   // round366 — custom mappings join the filter as typed dims (see TasksTab).
-  const customTaskCols = useMemo(
-    () => customEntriesFor(getColumns('tasks'))
-      .filter(([, c]) => c?.id)
-      .map(([alias, c]) => ({ alias, type: c.type, title: c.title || alias })),
-    []
-  );
   const customDims = useMemo(() => customFilterDims(customTaskCols), [customTaskCols]);
   const filterColumns = useMemo(() => [
     ...PREV_FILTER_COLUMNS,
@@ -543,8 +570,8 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // with a default STATUS row (empty values ⇒ shows all) unless a saved view exists. ----
   const [sort, setSort] = useState(() => {
     const s = savedView?.sort;
-    if (!s || !s.active || !SORT_OPTIONS.some((o) => o.value === s.col)) return { col: null, dir: null, active: false };
-    return { col: s.col, dir: s.dir || firstSortDir(s.col), active: true };
+    if (!s || !s.active || !sortOptions.some((o) => o.value === s.col)) return { col: null, dir: null, active: false };
+    return { col: s.col, dir: s.dir || firstDirOf(s.col), active: true };
   });
   // Default STATUS row when nothing saved; a saved view's own rows win.
   // State + mutators come from the shared builder state machine (round137).
@@ -555,10 +582,31 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   } = useFilterBuilder({ columns: filterColumns, defaultRows: ['status'], savedView });
   const fc = filterCount(filter, customDims);
   // Sort handlers (session-only until an owner hits Save, like the other builders).
-  const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstSortDir(col), active: true });
+  const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstDirOf(col), active: true });
   const clearSort = () => setSort({ col: null, dir: null, active: false });
 
   // round366 — value options per custom dim, scanned off the loaded tasks.
+  /*
+   * round372 — a custom STATUS column's values are stable label IDs, so its filter
+   * menu needs that column's own label map. One collector per status column (never
+   * per row) reports the maps up; statusFilterOptions turns the scanned ids into
+   * labelled, coloured, display-ordered options.
+   */
+  const customStatusCols = useMemo(
+    () => customTaskCols.filter((c) => c.type === 'status' || c.type === 'color').map((c) => c.alias),
+    [customTaskCols]
+  );
+  const [customStatusMaps, setCustomStatusMaps] = useState({});
+  const reportCustomStatus = useCallback((alias, opts) => {
+    setCustomStatusMaps((m) => (m[alias] === opts ? m : { ...m, [alias]: opts }));
+  }, []);
+
+  // round373 — the one descriptor map the sort and group engines read.
+  const customEngine = useMemo(
+    () => customEngineDims(customTaskCols, customStatusMaps),
+    [customTaskCols, customStatusMaps]
+  );
+
   const customFilterOptions = useMemo(() => {
     const map = {};
     for (const d of customDims) {
@@ -574,10 +622,12 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
           customComparableValues(raw).forEach((v) => { if (!seen.has(v)) seen.set(v, { id: v, label: v, color: null }); });
         }
       });
-      map[d.key] = [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
+      map[d.key] = customStatusCols.includes(d.key)
+        ? statusFilterOptions([...seen.keys()], customStatusMaps[d.key])
+        : [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
     }
     return map;
-  }, [customDims, tasks]);
+  }, [customDims, tasks, customStatusCols, customStatusMaps]);
 
   // Assignee options = the distinct people present across the loaded tasks.
   const personOptions = useMemo(() => {
@@ -603,11 +653,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // inactive sort returns the list unchanged, so default order is untouched.
   const filteredTasks = useMemo(
     () => {
-      let base = sortTasks(filterTasks(tasks, filter, { custom: customDims }), sort, { orderById, labelById });
+      let base = sortTasks(filterTasks(tasks, filter, { custom: customDims }), sort, { orderById, labelById, custom: customEngine });
       if (search.trim()) base = base.filter((tk) => matchesSearch(tk.name, search));
       return quickStatus ? base.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : base;
     },
-    [tasks, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, search, customDims]
+    [tasks, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, search, customDims, customEngine]
   );
 
   // Groups carry { key, label, color, items } — status groups key by the stable
@@ -620,8 +670,8 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // 'people:<sorted ids>' format (was a bare id list here), so saved header
   // colors for person groups in THIS tab reset once.
   const groupedRaw = useMemo(
-    () => groupTabTasks(filteredTasks, { by: groupBy, order: groupOrder, labelById, colorById, orderById }),
-    [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById]
+    () => groupTabTasks(filteredTasks, { by: groupBy, order: groupOrder, labelById, colorById, orderById, custom: customEngine }),
+    [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById, customEngine]
   );
   // Apply the shared per-header color overrides as a final pass.
   const grouped = useMemo(() => ensureGroupColors(groupedRaw, colorsByKey), [groupedRaw, colorsByKey]);
@@ -632,7 +682,9 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     else { const c = {}; grouped.forEach((g) => { c[g.key] = true; }); setCollapsed(c); }
   };
 
-  const groupOptions = byType ? [...GROUP_OPTIONS, GROUP_OPTION_DISCUSSION] : GROUP_OPTIONS;
+  const groupOptions = byType
+    ? [...GROUP_OPTIONS, GROUP_OPTION_DISCUSSION, ...customGroupOpts]
+    : [...GROUP_OPTIONS, ...customGroupOpts];
 
   // Decisions grouping (round280) — status groups key by the stable label id and
   // resolve label/color via useStatusOptions; decider groups key by the sorted
@@ -971,7 +1023,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
             renderBody={renderFilterBody}
           />
           <SortByBuilder
-            options={SORT_OPTIONS}
+            options={sortOptions}
             value={sort}
             mobile={isMobile}
             onChange={onSortChange}
@@ -1122,6 +1174,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         <div className={styles.board}>
         <div className={styles.groupScrollInner}>
         <div className={styles.groupStack}>
+                {/* round372 — one label-options loader per custom STATUS column, so the
+                    filter menu can show label text + colour instead of raw ids. */}
+                {customStatusCols.map((alias) => (
+                  <CustomStatusCollector key={alias} alias={alias} onOptions={reportCustomStatus} />
+                ))}
           {grouped.map((grp) => {
             const groupColor = grp.color;
             const groupSelectedCount = grp.items.reduce((count, task) => count + (selectedIds.has(task.id) ? 1 : 0), 0);

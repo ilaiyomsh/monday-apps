@@ -42,6 +42,15 @@ export const PREVIOUS_TASKS_MODES = {
   AUTO: 'auto',
 };
 /*
+ * round367 (owner spec, approved mockup) — the create card opens on a
+ * two-path toggle: TEMPLATE (בחרו תבנית דיון → the template's roles/externals,
+ * auto name, no "דיון קודם") or ADHOC (clean name, previous-discussion link).
+ */
+export const CREATE_DISCUSSION_MODES = {
+  TEMPLATE: 'template',
+  ADHOC: 'adhoc',
+};
+/*
  * round205 — the owner-selectable APP COMPONENTS (Settings → העדפות, owners
  * only): every major surface a board owner may hide for the whole instance.
  * Visibility is stored under preferences.visibleComponents as an EXPLICIT-false
@@ -112,6 +121,13 @@ export const DEFAULT_PREFERENCES = {
    * `preferences` is merged over these defaults, never replaced by them.
    */
   previousTasksMode: PREVIOUS_TASKS_MODES.AUTO,
+  /*
+   * round367 (owner spec) — which half of the create-card toggle is
+   * pre-selected, and whether TEMPLATE mode auto-names the discussion
+   * ("<תבנית> - <תאריך>") or leaves the name empty for the user to fill.
+   */
+  createDiscussionMode: CREATE_DISCUSSION_MODES.TEMPLATE,
+  templateAutoName: true,
   // round296 — default width split of the ניהול-דיון row: the AGENDA box's share
   // (0..1, clamped [0.25,0.75] by discussionLayout). 0.6 ⇒ agenda 60% / triple
   // box 40% (owner request). Owner-configurable in Settings → העדפות. A per-

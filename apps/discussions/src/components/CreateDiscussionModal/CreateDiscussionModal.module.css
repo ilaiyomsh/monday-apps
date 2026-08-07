@@ -668,3 +668,107 @@
   background: transparent;
   padding: 4px 2px;
 }
+
+/* round367 — the create-path toggle: full-width, two halves (right =
+   מתבנית, left = מזדמן), clean — no captions, no state text. */
+.modeToggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1.5px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--primary-background-color, #fff);
+}
+.modeToggleBtn {
+  padding: 12px 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--secondary-text-color, #676879);
+  transition: background 0.15s, color 0.15s;
+}
+.modeToggleBtn:not(.modeToggleActive):hover {
+  background: var(--primary-selected-color, #e6f1fd);
+  color: var(--primary-color, #0073ea);
+}
+.modeToggleActive {
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+}
+.modeToggleBtn:focus-visible { outline: 2px solid var(--primary-color, #0073ea); outline-offset: -3px; }
+/* keeps the header X pinned left while the title input is hidden */
+.titleSpacer { flex: 1; }
+
+/* ------------------------------------------------------------------ round368
+ * ONE cell standard for the whole create card (owner spec): the משתתפים
+ * חיצוניים box IS the standard — 40px tall, 8px corners, 1px border, 6px/10px
+ * padding, white ground, primary border on focus. Everything the user can click
+ * or type into follows it, INCLUDING the מתבנית/מזדמן toggle at the top, so the
+ * card reads as one grid of identical cells instead of four slightly different
+ * control shapes.
+ *
+ * The shared field components (PersonPicker `bordered`, DatePickerPopover
+ * `variant="field"`) carry their own 40px/4px look app-wide; they are re-shaped
+ * HERE by descendant selectors so the rest of the app is untouched.
+ * ------------------------------------------------------------------ */
+.modal {
+  --cc-cell-h: 40px;
+  --cc-cell-radius: 8px;
+  --cc-cell-border: 1px solid var(--ui-border-color, #c3c6d4);
+}
+
+/* the three custom triggers (סוג/תבנית דיון, שעה, דיון קודם) + the native date */
+.modal .dropdownTrigger,
+.modal .dateInput {
+  height: var(--cc-cell-h);
+  min-height: var(--cc-cell-h);
+  border: var(--cc-cell-border);
+  border-radius: var(--cc-cell-radius);
+  padding-inline: 10px;
+  box-sizing: border-box;
+}
+.modal .dateInput { padding-inline-start: 30px; }
+
+/* the chips trigger grows with its content but keeps the same floor + corners */
+.modal .chipsTrigger {
+  height: auto;
+  min-height: var(--cc-cell-h);
+  border-radius: var(--cc-cell-radius);
+  padding-block: 4px;
+}
+
+/* PersonPicker (מוביל / מרכז / משתתפים) and the deadline-style date field */
+.modal .triggerBordered,
+.modal .fieldTrigger {
+  min-height: var(--cc-cell-h);
+  height: var(--cc-cell-h);
+  border-radius: var(--cc-cell-radius);
+  box-sizing: border-box;
+}
+/* a people cell with chips may need to grow — keep the floor, drop the ceiling */
+.modal .triggerBordered { height: auto; }
+
+/* the title input reads as a cell too (it is the discussion NAME field) */
+.modal .titleInput {
+  height: var(--cc-cell-h);
+  border-radius: var(--cc-cell-radius);
+  padding-inline: 10px;
+  box-sizing: border-box;
+}
+
+/* the create-path toggle: same 40px shell and 8px corners as every cell */
+.modal .modeToggle {
+  height: var(--cc-cell-h);
+  border: var(--cc-cell-border);
+  border-radius: var(--cc-cell-radius);
+  box-sizing: border-box;
+}
+.modal .modeToggleBtn {
+  height: 100%;
+  padding: 0 10px;
+  font-size: 14px;
+  box-sizing: border-box;
+}

@@ -1,4 +1,4 @@
-import React, { memo, useRef, useState } from 'react';
+import React, { memo, useState } from 'react';
 import { Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
 import { CloseSmall, Update, Edit } from '@vibe/icons';
 import { Trash2, Check, X } from 'lucide-react';
@@ -6,14 +6,13 @@ import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { PersonList } from '@generated/components/PersonAvatar';
 import { isValidStatus } from '@generated/constants/statusConfig';
-import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { CustomColumnValue } from '@generated/components/CustomColumnValue';
+import { StatusCell } from '@generated/components/StatusCell';
+import { customColumnKind } from '@generated/utils/customColumns.js';
 import { NotesEditor } from '@generated/components/NotesEditor';
 import grid from '../TaskTable/TaskTable.module.css';
 import styles from './TaskTableRow.module.css';
-
-const NEUTRAL = 'hsl(var(--status-default))';
 
 // Open a discussion's item card (used by the "by type" source-discussion chip).
 // kind:'updates' makes monday render it as the SIDE PANEL (verified live) — the
@@ -46,14 +45,160 @@ function formatCreatedAt(nativeCreatedAt) {
 /*
  * round366 — a custom column's cell: typed EDITOR when onChange is provided
  * (permission-gated upstream in TaskTable), read-only CustomColumnValue
- * otherwise. file/board_relation have no inline editor (asset upload / item
- * linking are not writable from a table cell) and stay read-only by design.
+ * otherwise.
+ * round368 §4 — board_relation ("connected board") joined the editable types
+ * (owner request); `file` is the only one still read-only, since uploading an
+ * asset is not a table-cell interaction.
  */
-function CustomColumnCell({ col, value, onChange, dropdownOpts }) {
+/*
+ * round373 — the cell WRAPPER a custom column gets, by kind. This is half of
+ * "looks like a base column": a status fill has to bleed to all four cell edges,
+ * so its cell carries no padding and lets the trigger stretch (`.statusCell`) —
+ * the padded, centered `.customCell` is what left the white frame the owner
+ * reported around a custom status chip. A date cell needs `position: relative`
+ * for the hover clear-X, exactly like the deadline column.
+ */
+function customCellClass(type) {
+  const kind = customColumnKind(type);
+  if (kind === 'status') return styles.statusCell;
+  if (kind === 'date') return `${styles.customCell} ${styles.deadlineCell}`;
+  if (kind === 'relation') return `${styles.customCell} ${styles.sourceCell}`;
+  return styles.customCell;
+}
+
+function CustomColumnCell({ col, value, onChange, dropdownOpts, relationOpts, statusOpts }) {
   const [ddOpen, setDdOpen] = useState(false);
+  const [relOpen, setRelOpen] = useState(false);
+  const [relSearch, setRelSearch] = useState('');
   const t = col.type;
-  if (!onChange || t === 'file' || t === 'board_relation' || t === 'connect_boards') {
-    return <CustomColumnValue type={t} value={value} />;
+  const isRelation = t === 'board_relation' || t === 'connect_boards';
+  const isStatus = t === 'status' || t === 'color';
+  // file has no inline editor (asset upload is not a table-cell interaction).
+  if (!onChange || t === 'file') {
+    return <CustomColumnValue type={t} value={value} statusOpts={statusOpts} />;
+  }
+  /*
+   * round372 — a custom STATUS column is editable with the same label menu the
+   * built-in status column uses. The written value is the stable label ID (0 is a
+   * real label, so every guard here tests the type, not truthiness), and picking
+   * the already-set label CLEARS it — the only way to empty a status from a table
+   * cell, matching the built-in column's behaviour.
+   */
+  if (isStatus) {
+    return (
+      <StatusCell
+        value={typeof value === 'number' ? value : null}
+        options={statusOpts?.options || []}
+        labelById={statusOpts?.labelById || {}}
+        colorById={statusOpts?.colorById || {}}
+        /*
+         * round375 (owner request) — an empty custom status cell shows the source
+         * column's own GRAY DEFAULT label, with whatever text it carries. Only
+         * when the column has no such text at all does it fall back to the
+         * generic prompt. `grayLabel` is ungated by label position (see
+         * useStatusOptions) — safe here because these are columns the owner just
+         * mapped, not the old-scheme priority columns the gate protects.
+         */
+        emptyLabel={statusOpts?.emptyLabel || statusOpts?.grayLabel || 'בחר סטאטוס'}
+        onChange={onChange}
+        ariaLabel={`עריכת ${col.title || col.alias}`}
+      />
+    );
+  }
+  /*
+   * round368 §4 (owner request) — a CONNECTED BOARD custom column is editable:
+   * pick items of the linked board to link, click a linked one to unlink. Writes
+   * REPLACE the whole set, so onChange always emits the full desired list; an
+   * empty list genuinely clears the column (see monday-client's sanitizer).
+   */
+  if (isRelation) {
+    const linked = Array.isArray(value?.linkedItems) ? value.linkedItems : [];
+    const linkedIds = new Set(linked.map((it) => String(it.id)));
+    const candidates = relationOpts?.items || [];
+    const allowMultiple = relationOpts?.allowMultiple !== false;
+    const q = relSearch.trim();
+    const shown = q ? candidates.filter((it) => it.name.includes(q)) : candidates;
+    const emit = (ids) => onChange({ linkedItems: [...ids].map((id) => ({ id })) });
+    const toggle = (id) => {
+      const next = new Set(linkedIds);
+      if (next.has(id)) next.delete(id);
+      else if (allowMultiple) next.add(id);
+      else { next.clear(); next.add(id); }
+      emit(next);
+      if (!allowMultiple) setRelOpen(false);
+    };
+    return (
+      <Dialog
+        open={relOpen}
+        showTrigger={['click']}
+        hideTrigger={['clickoutside', 'esc']}
+        onDialogDidShow={() => setRelOpen(true)}
+        onDialogDidHide={() => { setRelOpen(false); setRelSearch(''); }}
+        position="bottom"
+        zIndex={10000}
+        content={() => (
+          <DialogContentContainer>
+            <div className={styles.relMenu}>
+              <input
+                className={styles.relSearch}
+                value={relSearch}
+                placeholder="חיפוש פריט…"
+                onChange={(e) => setRelSearch(e.target.value)}
+                aria-label={`חיפוש ב${col.title}`}
+              />
+              {relationOpts?.loading && <div className={styles.relEmpty}>טוען פריטים…</div>}
+              {!relationOpts?.loading && shown.length === 0 && (
+                <div className={styles.relEmpty}>אין פריטים להצגה</div>
+              )}
+              {shown.slice(0, 100).map((it) => (
+                <button
+                  key={it.id}
+                  type="button"
+                  className={`${styles.relOption} ${linkedIds.has(it.id) ? styles.relOptionOn : ''}`}
+                  onClick={() => toggle(it.id)}
+                >
+                  <span className={styles.relCheck} aria-hidden="true">{linkedIds.has(it.id) ? '✓' : ''}</span>
+                  {it.name}
+                </button>
+              ))}
+              {linked.length > 0 && (
+                <button
+                  type="button"
+                  className={`${styles.relOption} ${styles.relClear}`}
+                  onClick={() => { emit(new Set()); setRelOpen(false); }}
+                >
+                  נקה את כל הקישורים
+                </button>
+              )}
+            </div>
+          </DialogContentContainer>
+        )}
+      >
+        <button type="button" className={styles.relTrigger} aria-label={`עריכת ${col.title}`}>
+          {/*
+            * round373 — the trigger renders the SAME connected-board chip the
+            * built-in "דיון מקור" column uses (blue bar, 32px, centered, +N
+            * overflow) instead of a comma-joined string, so a custom relation
+            * column is visually indistinguishable from the base one.
+            */}
+          {linked.length ? (
+            <span className={styles.sourceChips}>
+              <span className={styles.sourceChip} title={linked[0].name || ''}>
+                {linked[0].name || linked[0].id}
+              </span>
+              {linked.length > 1 && (
+                <span
+                  className={styles.sourceMore}
+                  title={linked.slice(1).map((it) => it.name || it.id).join(', ')}
+                >
+                  +{linked.length - 1}
+                </span>
+              )}
+            </span>
+          ) : <span className={styles.muted}>קשר פריט</span>}
+        </button>
+      </Dialog>
+    );
   }
   if (t === 'people' || t === 'person' || t === 'multiple_person') {
     return (
@@ -68,21 +213,27 @@ function CustomColumnCell({ col, value, onChange, dropdownOpts }) {
     );
   }
   if (t === 'date') {
+    // round373 — the SAME markup as the built-in deadline cell: a full-height
+    // centered picker trigger plus the corner clear-X that appears on row hover
+    // (the wrapper contributes `.deadlineCell`, which owns position + hover).
     const d = value instanceof Date ? value : null;
     return (
-      <div className={styles.customDateWrap}>
-        <DatePickerPopover value={d} onChange={(nd) => onChange(nd)} />
+      <>
+        <div className={styles.cellCenter}>
+          <DatePickerPopover value={d} onChange={(nd) => onChange(nd)} />
+        </div>
         {d && (
           <button
             type="button"
-            className={styles.customClearX}
+            className={styles.clearX}
             aria-label={`נקה ${col.title}`}
+            title={`נקה ${col.title}`}
             onClick={(e) => { e.stopPropagation(); onChange(null); }}
           >
             <CloseSmall size={14} />
           </button>
         )}
-      </div>
+      </>
     );
   }
   if (t === 'dropdown') {
@@ -177,6 +328,10 @@ export const TaskTableRow = memo(function TaskTableRow({
   onCustomChange,
   // Board label options per custom DROPDOWN alias (hoisted in TaskTable).
   customDropdownOptions,
+  // round368 — candidate items per custom RELATION alias (hoisted in TaskTable).
+  customRelationOptions,
+  // round372 — label options/maps per custom STATUS alias (hoisted in TaskTable).
+  customStatusOptions,
   rowStyle,
   // When provided (and the row is read-only, i.e. no inline rename), clicking the
   // task name opens its item card via this callback (Previous-tasks tab → Updates).
@@ -188,20 +343,12 @@ export const TaskTableRow = memo(function TaskTableRow({
   dragStyle,
   dragProps,
 }) {
-  const [statusOpen, setStatusOpen] = useState(false);
-  // Label pickers open DOWNWARD and CENTERED on the cell (monday parity, round 94:
-  // @vibe 'bottom'/'top' center the popover under/над the trigger). computeFloatingPosition
-  // still decides the flip; we map its result to the centered variant.
-  const [statusPosition, setStatusPosition] = useState('bottom');
-  // round98: the picker matches the COLUMN label width — measured from the
-  // trigger cell so the open labels are as wide as the cell's fill (not a fixed
-  // 206px). Defaults to 206 until first measured.
-  const [statusMenuWidth, setStatusMenuWidth] = useState(206);
-  const statusTriggerRef = useRef(null);
-  const [priorityOpen, setPriorityOpen] = useState(false);
-  const [priorityPosition, setPriorityPosition] = useState('bottom');
-  const [priorityMenuWidth, setPriorityMenuWidth] = useState(206);
-  const priorityTriggerRef = useRef(null);
+  /*
+   * round373 — the pickers' open state, MEASURED menu width and flip placement
+   * all moved into the shared StatusCell. That is what makes the built-in
+   * status/priority columns and an owner-added custom status column render from
+   * one code path instead of three lookalikes.
+   */
   const [editingName, setEditingName] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [nameDraft, setNameDraft] = useState(task.name || '');
@@ -228,11 +375,9 @@ export const TaskTableRow = memo(function TaskTableRow({
   const statusLabel = labelById[status];
   // Show the fill only for a known label id (handles id 0 correctly).
   const showStatus = isValidStatus(status) && statusLabel != null;
-  const statusFill = showStatus ? (colorById[status] || NEUTRAL) : null;
   const priority = task.priorityID;
   const priorityLabel = priorityOpts.labelById[priority];
   const showPriorityValue = isValidStatus(priority) && priorityLabel != null;
-  const priorityFill = showPriorityValue ? (priorityOpts.colorById[priority] || NEUTRAL) : null;
 
   const startEditName = () => {
     if (!onRenameTask) return;
@@ -249,36 +394,6 @@ export const TaskTableRow = memo(function TaskTableRow({
     onDeleteTask(task.id);
     setConfirmDel(false);
   };
-  const updateStatusPosition = () => {
-    const rect = statusTriggerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const w = Math.round(rect.width);
-    setStatusMenuWidth(w);
-    const next = computeFloatingPosition({
-      anchorRect: rect,
-      preferred: 'bottom-start',
-      popupWidth: w,
-      popupHeight: Math.max(180, statusOptions.length * 40 + 28),
-      offset: 4,
-    });
-    // Centered variant: keep only the vertical (bottom/top); @vibe centers it.
-    if (next?.placement) setStatusPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
-  };
-  const updatePriorityPosition = () => {
-    const rect = priorityTriggerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const w = Math.round(rect.width);
-    setPriorityMenuWidth(w);
-    const next = computeFloatingPosition({
-      anchorRect: rect,
-      preferred: 'bottom-start',
-      popupWidth: w,
-      popupHeight: Math.max(180, (priorityOpts.options?.length || 0) * 40 + 28),
-      offset: 4,
-    });
-    if (next?.placement) setPriorityPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
-  };
-
   const cellByKey = {
     // selection checkbox (selectable tabs only)
     sel: (
@@ -487,102 +602,30 @@ export const TaskTableRow = memo(function TaskTableRow({
     // status — full-width colored fill (monday native)
     status: (
       <div key="status" className={`${grid.taskCell} ${styles.statusCell}`}>
-        {onStatusChange ? (
-          <Dialog
-            open={statusOpen}
-            showTrigger={['click']}
-            hideTrigger={['clickoutside', 'esc', 'onContentClick']}
-            onDialogDidShow={() => { updateStatusPosition(); setStatusOpen(true); }}
-            onDialogDidHide={() => setStatusOpen(false)}
-            position={statusPosition}
-            zIndex={10000}
-            content={() => (
-              <DialogContentContainer>
-                <div className={styles.statusMenu} style={{ width: statusMenuWidth + 20 }}>
-                  {statusOptions.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      className={styles.statusOption}
-                      style={{ background: opt.color || NEUTRAL }}
-                      onClick={() => { onStatusChange(task.id, opt.id); setStatusOpen(false); }}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </DialogContentContainer>
-            )}
-          >
-            <button
-              ref={statusTriggerRef}
-              type="button"
-              className={styles.statusTrigger}
-              onMouseDown={updateStatusPosition}
-            >
-              {showStatus ? (
-                <span className={styles.statusFill} style={{ background: statusFill }}>{statusLabel}</span>
-              ) : (
-                <span className={styles.statusEmpty}>{statusOpts.emptyLabel || 'בחר סטאטוס'}</span>
-              )}
-            </button>
-          </Dialog>
-        ) : showStatus ? (
-          <span className={styles.statusFill} style={{ background: statusFill }}>{statusLabel}</span>
-        ) : (
-          <span className={styles.statusEmpty}>{statusOpts.emptyLabel || ''}</span>
-        )}
+        <StatusCell
+          value={showStatus ? status : null}
+          options={statusOptions}
+          labelById={labelById}
+          colorById={colorById}
+          emptyLabel={statusOpts.emptyLabel || (onStatusChange ? 'בחר סטאטוס' : '')}
+          onChange={onStatusChange ? (id) => onStatusChange(task.id, id) : null}
+          ariaLabel="עריכת סטאטוס"
+        />
       </div>
     ),
     // priority — a second status column; editable like status, shown only when
     // priorityID is mapped. Read-only (no onPriorityChange) renders just the fill.
     priority: showPriority ? (
       <div key="priority" className={`${grid.taskCell} ${styles.statusCell}`}>
-        {onPriorityChange ? (
-            <Dialog
-              open={priorityOpen}
-              showTrigger={['click']}
-              hideTrigger={['clickoutside', 'esc', 'onContentClick']}
-              onDialogDidShow={() => { updatePriorityPosition(); setPriorityOpen(true); }}
-              onDialogDidHide={() => setPriorityOpen(false)}
-              position={priorityPosition}
-              zIndex={10000}
-              content={() => (
-                <DialogContentContainer>
-                  <div className={styles.statusMenu} style={{ width: priorityMenuWidth + 20 }}>
-                    {(priorityOpts.options || []).map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        className={styles.statusOption}
-                        style={{ background: opt.color || NEUTRAL }}
-                        onClick={() => { onPriorityChange(task.id, opt.id); setPriorityOpen(false); }}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </DialogContentContainer>
-              )}
-            >
-              <button
-                ref={priorityTriggerRef}
-                type="button"
-                className={styles.statusTrigger}
-                onMouseDown={updatePriorityPosition}
-              >
-                {showPriorityValue ? (
-                  <span className={styles.statusFill} style={{ background: priorityFill }}>{priorityLabel}</span>
-                ) : (
-                  <span className={styles.statusEmpty}>{priorityOpts.emptyLabel || 'בחר עדיפות'}</span>
-                )}
-              </button>
-            </Dialog>
-          ) : showPriorityValue ? (
-            <span className={styles.statusFill} style={{ background: priorityFill }}>{priorityLabel}</span>
-          ) : (
-            <span className={styles.statusEmpty}>{priorityOpts.emptyLabel || ''}</span>
-          )}
+        <StatusCell
+          value={showPriorityValue ? priority : null}
+          options={priorityOpts.options || []}
+          labelById={priorityOpts.labelById}
+          colorById={priorityOpts.colorById}
+          emptyLabel={priorityOpts.emptyLabel || (onPriorityChange ? 'בחר עדיפות' : '')}
+          onChange={onPriorityChange ? (id) => onPriorityChange(task.id, id) : null}
+          ariaLabel="עריכת עדיפות"
+        />
       </div>
     ) : null,
     // source discussion — connected-board-style chip(s); "by type" view only
@@ -620,12 +663,14 @@ export const TaskTableRow = memo(function TaskTableRow({
   // editable types render a typed editor; file/board_relation stay read-only.
   for (const c of customColumns || []) {
     cellByKey[c.alias] = (
-      <div key={c.alias} className={`${grid.taskCell} ${styles.customCell}`} title={c.title}>
+      <div key={c.alias} className={`${grid.taskCell} ${customCellClass(c.type)}`} title={c.title}>
         <CustomColumnCell
           col={c}
           value={task?.[c.alias]}
           onChange={onCustomChange ? (value) => onCustomChange(task.id, c.alias, value) : null}
           dropdownOpts={customDropdownOptions?.[c.alias]}
+          relationOpts={customRelationOptions?.[c.alias]}
+          statusOpts={customStatusOptions?.[c.alias]}
         />
       </div>
     );

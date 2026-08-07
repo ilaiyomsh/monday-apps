@@ -23,9 +23,10 @@ import styles from './QuickCreateModal.module.css';
  * Props:
  *   open          — bool
  *   initialMode   — 'decision' | 'task' (mode on open; toggle can change it)
- *   scopedPoint   — { id, name } | null; when set the toggle is hidden and the
- *                   scope caption reads "משויך לנקודה: <name>"
- *   discussion    — { name } | null; caption fallback "דיון: <name>"
+ *   scopedPoint   — { id, name } | null; when set the toggle is hidden and NO
+ *                   scope caption renders at all (round369 — the click on that
+ *                   point's own "+" already says which point it is)
+ *   discussion    — { name } | null; caption "דיון: <name>", non-scoped opens only
  *   participants  — passed by the parent for ITS default-applying logic; the
  *                   modal itself doesn't consume it (kept for the contract)
  *   currentUser   — same: parent-side defaults only
@@ -95,8 +96,14 @@ export function QuickCreateModal({
   // for POINT-SCOPED creates too (the point's single + opens ONE box, task
   // default). It hides only when a side is capability-disabled at the callsite.
   const showToggle = allowTask && allowDecision;
+  /*
+   * round369 (owner request) — a POINT-scoped open drops the caption entirely:
+   * the user just clicked that point's own "+", so "משויך לנקודה: …" only
+   * repeats what they did and eats a row. The discussion caption stays for the
+   * non-scoped (FAB) open, where the target isn't implied by the click.
+   */
   const scopeLabel = useMemo(() => {
-    if (scopedPoint?.name) return `משויך לנקודה: ${scopedPoint.name}`;
+    if (scopedPoint) return '';
     if (discussion?.name) return `דיון: ${discussion.name}`;
     return '';
   }, [scopedPoint, discussion]);
@@ -145,7 +152,7 @@ export function QuickCreateModal({
   // (never spilling outside the topics card) instead of clamping to the whole
   // viewport. The pure computeBoundedAnchorStyle does the geometry.
   const bounded = (anchor?.bounds && isDesktop)
-    ? computeBoundedAnchorStyle({ anchor, bounds: anchor.bounds })
+    ? computeBoundedAnchorStyle({ anchor, bounds: anchor.bounds, viewportWidth: window.innerWidth })
     : null;
   const anchorStyle = bounded
     ? { position: 'absolute', top: bounded.top, left: bounded.left, width: bounded.width, maxHeight: bounded.maxHeight, overflowY: 'auto', margin: 0 }
@@ -209,9 +216,10 @@ export function QuickCreateModal({
               </div>
             )}
           </div>
-          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="סגירה">
-            ×
-          </button>
+          {/* round370 (owner request) — no × here. The footer's "ביטול" is the
+              close affordance, and dropping the × lets the toggle span the card's
+              FULL width instead of stopping short of a button nobody needed.
+              Esc and an overlay click still close, as before. */}
         </div>
 
         <div className={styles.body}>

@@ -13,12 +13,16 @@ import { useRowOrder } from '@generated/hooks/useRowOrder.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
+import { useRelationItems } from '@generated/hooks/useRelationItems.js';
+import { CustomStatusCollector } from '@generated/components/CustomStatusCollector';
+import { collectedEquals } from './collectedEquals.js';
 import { getColumns } from '@api/board-config-store.js';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
 import { TASKS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { useColumnRenameMenu } from '@generated/components/ColumnRenameMenu';
 import { customEntriesFor } from '@generated/utils/customColumns.js';
+import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import styles from './TaskTable.module.css';
 
 /*
@@ -29,6 +33,17 @@ import styles from './TaskTable.module.css';
 function DropdownOptionsCollector({ alias, onOptions }) {
   const opts = useDropdownOptions('tasks', alias);
   useEffect(() => { onOptions(alias, opts); }, [alias, opts, onOptions]);
+  return null;
+}
+
+/*
+ * round368 §4 — the same one-loader-per-COLUMN shape for a custom RELATION
+ * ("connected board") column: it reports the linked board's candidate items so
+ * the cell can add/remove links. Per column, never per row.
+ */
+function RelationItemsCollector({ alias, onItems }) {
+  const rel = useRelationItems('tasks', alias);
+  useEffect(() => { onItems(alias, rel); }, [alias, rel, onItems]);
   return null;
 }
 
@@ -135,13 +150,19 @@ export function TaskTable({
    * IS the column key, so order/width/rename prefs persist per custom column
    * through the same 'tasks' stores every other key uses.
    */
+  /*
+   * round375 — deps were EMPTY, capturing the mapping once per mount. Combined
+   * with TasksTab's own stale memo that produced the reported split brain: a
+   * newly mapped column visible in the table but absent from the toolbar, because
+   * these per-group tables remount on a group change while the tab does not.
+   * Both sides now key off the live settings object.
+   */
+  const { settings } = useSettings();
   const customCols = useMemo(
-    () => customEntriesFor(getColumns('tasks'))
+    () => customEntriesFor(settings?.columns?.tasks || getColumns('tasks'))
       .filter(([, col]) => col?.id)
       .map(([alias, col]) => ({ alias, type: col.type, title: col.title || alias })),
-    // getColumns reads the module-level published settings — same freshness
-    // contract as showPartners above (re-render on settings save remounts).
-    []
+    [settings?.columns?.tasks]
   );
   const baseKeys = [
     ...(selectable ? ['sel'] : []),
@@ -178,12 +199,29 @@ export function TaskTable({
    * inline editor. Hooks can't run in a variable-length loop, so each dropdown
    * column mounts ONE collector component (per COLUMN, not per row — the
    * round136 perf rule) that reports its options up into this map.
+   *
+   * round370 — both setters bail on collectedEquals, not on `===`. A collected
+   * hook that rebuilds its view object each render would otherwise make the
+   * report-up effect fire forever (state → render → new object → state …), which
+   * is precisely how a custom relation column froze the whole tab.
    */
   const [customDropdownOptions, setCustomDropdownOptions] = useState({});
   const reportDropdownOptions = useCallback((alias, opts) => {
-    setCustomDropdownOptions((m) => (m[alias] === opts ? m : { ...m, [alias]: opts }));
+    setCustomDropdownOptions((m) => (collectedEquals(m[alias], opts) ? m : { ...m, [alias]: opts }));
   }, []);
   const customDropdownCols = customCols.filter((c) => c.type === 'dropdown');
+  // round368 — candidate items per custom relation column (same collector shape).
+  const [customRelationOptions, setCustomRelationOptions] = useState({});
+  const reportRelationItems = useCallback((alias, rel) => {
+    setCustomRelationOptions((m) => (collectedEquals(m[alias], rel) ? m : { ...m, [alias]: rel }));
+  }, []);
+  const customRelationCols = customCols.filter((c) => c.type === 'board_relation' || c.type === 'connect_boards');
+  // round372 — label options per custom STATUS column (same collector shape).
+  const [customStatusOptions, setCustomStatusOptions] = useState({});
+  const reportStatusOptions = useCallback((alias, opts) => {
+    setCustomStatusOptions((m) => (collectedEquals(m[alias], opts) ? m : { ...m, [alias]: opts }));
+  }, []);
+  const customStatusCols = customCols.filter((c) => c.type === 'status' || c.type === 'color');
 
   // Width defs follow the live VISIBLE order; 'sel' is a fixed (non-resizable)
   // leading track, everything else resizes within the constants' clamps.
@@ -272,6 +310,12 @@ export function TaskTable({
       {onCustomChange && customDropdownCols.map((c) => (
         <DropdownOptionsCollector key={c.alias} alias={c.alias} onOptions={reportDropdownOptions} />
       ))}
+      {onCustomChange && customRelationCols.map((c) => (
+        <RelationItemsCollector key={c.alias} alias={c.alias} onItems={reportRelationItems} />
+      ))}
+      {customStatusCols.map((c) => (
+        <CustomStatusCollector key={c.alias} alias={c.alias} onOptions={reportStatusOptions} />
+      ))}
       <div className={tableClass} dir="ltr" style={color ? { '--group-color': color } : undefined}>
         {/* header */}
         <div className={`${styles.taskRow} ${styles.taskHead}`} style={rowStyle}>
@@ -298,6 +342,8 @@ export function TaskTable({
               onDeadlineChange={onDeadlineChange && canTask('editTaskDeadline', task) ? onDeadlineChange : undefined}
               onCustomChange={onCustomChange && canTask('editTaskCustomColumns', task) ? onCustomChange : undefined}
               customDropdownOptions={customDropdownOptions}
+              customRelationOptions={customRelationOptions}
+              customStatusOptions={customStatusOptions}
               onRenameTask={onRenameTask && canTask('editTaskName', task) ? onRenameTask : undefined}
               onDeleteTask={onDeleteTask}
               onRetryCreate={onRetryCreate}

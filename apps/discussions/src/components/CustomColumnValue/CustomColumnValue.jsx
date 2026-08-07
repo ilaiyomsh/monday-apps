@@ -3,6 +3,11 @@ import { PersonList } from '@generated/components/PersonAvatar';
 import { fmtTimeLabel } from '@generated/utils/dateTime.js';
 import { monday } from '@api/monday-client.js';
 import logger from '@generated/utils/logger.js';
+import { StatusCell } from '@generated/components/StatusCell';
+// round373 — the connected-board chip is imported from the row stylesheet that
+// defines it, the same way MyTasksRow/MyDecisionsRow already share `.statusMenu`.
+// Redefining it here is exactly how the custom column drifted from the base one.
+import row from '../TaskTableRow/TaskTableRow.module.css';
 import styles from './CustomColumnValue.module.css';
 
 /*
@@ -13,8 +18,15 @@ import styles from './CustomColumnValue.module.css';
  *   people   → [{ id, name }]            date  → Date|null (hasTime flag)
  *   dropdown → label text|null           text/long_text → string|null
  *   file     → string of URLs|null       board_relation → { linkedItems, ids, text }
+ *   status   → stable label ID (number)  ← round372
  * Anything empty renders the muted em-dash, so a mapped-but-blank cell reads
  * as intentionally empty rather than broken.
+ *
+ * round372 — a STATUS value is the label's stable ID, not its text, so this
+ * renderer cannot resolve it alone: the caller passes `statusOpts`
+ * ({ labelById, colorById }) from useStatusOptions for that column's alias. With
+ * no map available the cell shows the em-dash rather than the raw id — a bare
+ * "2" in a cell is worse than an honest blank.
  */
 
 const Empty = () => <span className={styles.muted}>—</span>;
@@ -50,8 +62,26 @@ function fileLinks(text) {
   });
 }
 
-export function CustomColumnValue({ type, value }) {
+export function CustomColumnValue({ type, value, statusOpts }) {
   switch (type) {
+    // round372 — 'color' is monday's legacy name for the same column type.
+    case 'status':
+    case 'color': {
+      /*
+       * round373 — the READ-ONLY status face comes from the same StatusCell the
+       * editable one uses (no onChange ⇒ it renders the fill/empty span alone),
+       * so a viewer and an editor see a pixel-identical cell. A label id of 0 is
+       * REAL, so the value is passed through on type, never on truthiness.
+       */
+      return (
+        <StatusCell
+          value={typeof value === 'number' ? value : null}
+          labelById={statusOpts?.labelById || {}}
+          colorById={statusOpts?.colorById || {}}
+          emptyLabel={statusOpts?.emptyLabel || ''}
+        />
+      );
+    }
     case 'people':
     case 'person':
     case 'multiple_person': {
@@ -73,22 +103,25 @@ export function CustomColumnValue({ type, value }) {
     case 'connect_boards': {
       const linked = value?.linkedItems || [];
       if (!linked.length) return <Empty />;
-      const shown = linked.slice(0, 3);
+      // round373 — the built-in "דיון מקור" chip (blue bar + "+N" overflow), so a
+      // custom connected-board column reads as the same kind of thing.
       return (
-        <span className={styles.chips}>
-          {shown.map((it) => (
-            <button
-              key={it.id}
-              type="button"
-              className={styles.linkChip}
-              title={it.name}
-              onClick={() => openItemCard(it.id)}
+        <span className={row.sourceChips}>
+          <button
+            type="button"
+            className={row.sourceChip}
+            title={linked[0].name || ''}
+            onClick={() => openItemCard(linked[0].id)}
+          >
+            {linked[0].name || linked[0].id}
+          </button>
+          {linked.length > 1 && (
+            <span
+              className={row.sourceMore}
+              title={linked.slice(1).map((it) => it.name || it.id).join(', ')}
             >
-              {it.name}
-            </button>
-          ))}
-          {linked.length > shown.length && (
-            <span className={styles.more}>+{linked.length - shown.length}</span>
+              +{linked.length - 1}
+            </span>
           )}
         </span>
       );

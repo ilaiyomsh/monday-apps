@@ -18,12 +18,16 @@ import {
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
   customFilterDims, customComparableValues,
 } from '@generated/components/MyTasksView/controls/controls.js';
-import { customEntriesFor, customColumnIcon } from '@generated/utils/customColumns.js';
+import {
+  customEntriesFor, customColumnIcon, customSortDims, customGroupDims, customEngineDims,
+} from '@generated/utils/customColumns.js';
+import { CustomStatusCollector, statusFilterOptions } from '@generated/components/CustomStatusCollector';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { useStableHandler } from '@generated/hooks/useStableHandler.js';
 import { useBatchTargets } from '@generated/hooks/useBatchTargets.js';
@@ -66,7 +70,6 @@ const SORT_OPTIONS = [
   { value: 'deadline', label: 'דד ליין', icon: 'date', dirs: SORT_DATE_DIRS, note: 'Tasks with no deadline always sort last' },
   { value: 'name', label: 'שם', icon: 'text', dirs: SORT_TEXT_DIRS },
 ];
-const firstSortDir = (col) => (SORT_OPTIONS.find((o) => o.value === col) || SORT_OPTIONS[0])?.dirs?.[0]?.key;
 // `data` is the shared useTasks() result, prefetched in DiscussionCard.
 // Phase 4: editing is gated by the TASK-TIER caps, resolved PER-TASK via
 // `canTask(cap, task)` (passed from DiscussionCard, bound to the discussion).
@@ -91,10 +94,51 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     retryCreate,
     dismissRow,
   } = data;
+  /*
+   * round366 — owner-added custom mappings join the filter as typed dims and
+   * the hide picker as rows. Derived synchronously off the published settings
+   * (useFilterBuilder seeds state in a lazy initializer).
+   *
+   * round373 — they now also join SORT and GROUP, so this has to be resolved
+   * BEFORE the saved-view seeding below: a saved view pointing at a custom
+   * column is only restorable if that column is already in the option list when
+   * the lazy initializers run.
+   */
+  /*
+   * round375 BUG — this memo used to have EMPTY deps, so the custom columns were
+   * captured once per MOUNT. That is what made a newly mapped column show up in
+   * the table but stay missing from the Sort/Group/Filter toolbar: the per-group
+   * TaskTable instances remount whenever the group set changes and re-read the
+   * config store, while TasksTab itself does not — so the table saw the new
+   * column and the toolbar kept a stale, shorter list. Depending on the live
+   * settings object (its identity changes on updateSettings) makes both sides
+   * agree, and a mapping change take effect without a reload.
+   */
+  const { settings } = useSettings();
+  const taskColumnsConfig = settings?.columns?.tasks;
+  const customTaskCols = useMemo(
+    () => customEntriesFor(taskColumnsConfig || getColumns('tasks'))
+      .filter(([, c]) => c?.id)
+      .map(([alias, c]) => ({ alias, type: c.type, title: c.title || alias })),
+    [taskColumnsConfig]
+  );
+  // round373 — the builder option lists = the fixed columns + every drivable
+  // custom column, so a custom row in the Sort/Group panel is indistinguishable
+  // from a base one (same label/icon/direction shapes).
+  const sortOptions = useMemo(() => [
+    ...SORT_OPTIONS,
+    ...customSortDims(customTaskCols).map((d) => ({ value: d.key, label: d.title, icon: d.icon, dirs: d.dirs })),
+  ], [customTaskCols]);
+  const groupOptions = useMemo(() => [
+    ...GROUP_OPTIONS,
+    ...customGroupDims(customTaskCols).map((d) => ({ value: d.key, label: d.title, icon: d.icon, orders: d.orders })),
+  ], [customTaskCols]);
+  const firstDirOf = (col) => (sortOptions.find((o) => o.value === col) || sortOptions[0])?.dirs?.[0]?.key;
+
   // Load-time grouping/filter = the shared saved view (empty default otherwise);
   // in-session changes are local until someone with permission hits Save.
   const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('tasksTab', { canManageSettings });
-  const savedGroup = GROUP_OPTIONS.some((o) => o.value === savedView?.group?.col) ? savedView.group : null;
+  const savedGroup = groupOptions.some((o) => o.value === savedView?.group?.col) ? savedView.group : null;
   const [groupBy, setGroupBy] = useState(savedGroup ? savedGroup.col : 'none');
   const [groupOrder, setGroupOrder] = useState(savedGroup?.order || 'labelAsc');
   const [collapsed, setCollapsed] = useState({});
@@ -102,8 +146,8 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   // as My Tasks). Load-time = the shared saved sort; empty/inactive by default.
   const [sort, setSort] = useState(() => {
     const s = savedView?.sort;
-    if (!s || !s.active || !SORT_OPTIONS.some((o) => o.value === s.col)) return { col: null, dir: null, active: false };
-    return { col: s.col, dir: s.dir || firstSortDir(s.col), active: true };
+    if (!s || !s.active || !sortOptions.some((o) => o.value === s.col)) return { col: null, dir: null, active: false };
+    return { col: s.col, dir: s.dir || firstDirOf(s.col), active: true };
   });
 
   // ---- Filter (client-side, over the loaded tasks; same engine as My Tasks /
@@ -111,17 +155,6 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   // STATUS row (empty values ⇒ shows all) when no saved view exists; a saved
   // view's own rows win (incl. an explicitly empty set). State + mutators come
   // from the shared builder state machine (round137).
-  /*
-   * round366 — owner-added custom mappings join the filter as typed dims and
-   * the hide picker as rows. Derived synchronously off the published settings
-   * (useFilterBuilder seeds state in a lazy initializer).
-   */
-  const customTaskCols = useMemo(
-    () => customEntriesFor(getColumns('tasks'))
-      .filter(([, c]) => c?.id)
-      .map(([alias, c]) => ({ alias, type: c.type, title: c.title || alias })),
-    []
-  );
   const customDims = useMemo(() => customFilterDims(customTaskCols), [customTaskCols]);
   const filterColumns = useMemo(() => [
     ...TASKS_FILTER_COLUMNS,
@@ -144,7 +177,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
 
   const fc = filterCount(filter, customDims);
   // Sort handlers (session-only until an owner hits Save, like the other builders).
-  const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstSortDir(col), active: true });
+  const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstDirOf(col), active: true });
   const clearSort = () => setSort({ col: null, dir: null, active: false });
   // Show the read-only priority column only when the owner mapped priorityID.
   const taskCols = getColumns('tasks') || {};
@@ -205,6 +238,32 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
 
   // round366 — value options per custom dim, scanned off the loaded tasks
   // (people by id+name; dropdown/relation by comparable value text).
+  /*
+   * round372 — a custom STATUS column's values are stable label IDs, so its filter
+   * menu needs that column's own label map. One collector per status column (never
+   * per row) reports the maps up; statusFilterOptions turns the scanned ids into
+   * labelled, coloured, display-ordered options.
+   */
+  const customStatusCols = useMemo(
+    () => customTaskCols.filter((c) => c.type === 'status' || c.type === 'color').map((c) => c.alias),
+    [customTaskCols]
+  );
+  const [customStatusMaps, setCustomStatusMaps] = useState({});
+  const reportCustomStatus = useCallback((alias, opts) => {
+    setCustomStatusMaps((m) => (m[alias] === opts ? m : { ...m, [alias]: opts }));
+  }, []);
+
+  /*
+   * round373 — the one descriptor map both engines read. Only status columns
+   * need the loaded label maps; the rest are self-describing, so this is stable
+   * as soon as settings publish and simply gains colour/order once the labels
+   * arrive.
+   */
+  const customEngine = useMemo(
+    () => customEngineDims(customTaskCols, customStatusMaps),
+    [customTaskCols, customStatusMaps]
+  );
+
   const customFilterOptions = useMemo(() => {
     const map = {};
     for (const d of customDims) {
@@ -220,10 +279,12 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
           customComparableValues(raw).forEach((v) => { if (!seen.has(v)) seen.set(v, { id: v, label: v, color: null }); });
         }
       });
-      map[d.key] = [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
+      map[d.key] = customStatusCols.includes(d.key)
+        ? statusFilterOptions([...seen.keys()], customStatusMaps[d.key])
+        : [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
     }
     return map;
-  }, [customDims, items]);
+  }, [customDims, items, customStatusCols, customStatusMaps]);
 
   // Client pipeline: filter -> sort (both instant, over the loaded page). An
   // inactive sort returns the list unchanged, so default order is untouched.
@@ -246,11 +307,11 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   }, [search]);
   const filteredTasks = useMemo(
     () => {
-      let base = sortTasks(filterTasks(items, filter, { custom: customDims }), sort, { orderById, labelById });
+      let base = sortTasks(filterTasks(items, filter, { custom: customDims }), sort, { orderById, labelById, custom: customEngine });
       if (debouncedSearch) base = base.filter((tk) => matchesSearch(tk.name, debouncedSearch));
       return quickStatus ? base.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : base;
     },
-    [items, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, debouncedSearch, customDims]
+    [items, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, debouncedSearch, customDims, customEngine]
   );
 
   // Right-click a group header → shared color palette (round 77).
@@ -259,8 +320,8 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   // PreviousTasksTab via grouping.js (groupTabTasks); the tab keeps only the
   // memo + the user color-override pass below.
   const groupedRaw = useMemo(
-    () => groupTabTasks(filteredTasks, { by: groupBy, order: groupOrder, labelById, colorById, orderById }),
-    [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById]
+    () => groupTabTasks(filteredTasks, { by: groupBy, order: groupOrder, labelById, colorById, orderById, custom: customEngine }),
+    [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById, customEngine]
   );
   // Apply the shared per-header color overrides as a final pass.
   const grouped = useMemo(() => ensureGroupColors(groupedRaw, colorsByKey), [groupedRaw, colorsByKey]);
@@ -528,7 +589,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
             renderBody={renderFilterBody}
           />
           <SortByBuilder
-            options={SORT_OPTIONS}
+            options={sortOptions}
             value={sort}
             mobile={isMobile}
             onChange={onSortChange}
@@ -539,7 +600,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
             } : null}
           />
           <GroupByBuilder
-            options={GROUP_OPTIONS}
+            options={groupOptions}
             value={{ col: groupBy, order: groupOrder }}
             noneValue="none"
             mobile={isMobile}
@@ -580,6 +641,11 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
       <div className={styles.board}>
       <div className={styles.groupScrollInner}>
       <div className={styles.groupStack}>
+          {/* round372 — one label-options loader per custom STATUS column, so the
+              filter menu can show label text + colour instead of raw ids. */}
+          {customStatusCols.map((alias) => (
+            <CustomStatusCollector key={alias} alias={alias} onOptions={reportCustomStatus} />
+          ))}
         {grouped.length === 0 ? (
           <TaskTable tasks={[]}
             onInlineCreate={canCreateTask && onInlineCreateTask ? (name, opts) => onInlineCreateTask(name, opts) : undefined}

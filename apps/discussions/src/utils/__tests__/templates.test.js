@@ -86,6 +86,7 @@ describe('sanitizeTypeTemplate', () => {
       coordinator: [{ id: 12, kind: 'person', name: 'מרכז' }],
       participants: [{ id: 11, kind: 'person', name: 'א' }],
       deciderIsLead: false, // item 18 — defaults off unless explicitly true
+      externalParticipants: [], // round367 — free-text externals default empty
       exportTemplate: null, // round254 — no per-type export template ⇒ null (system default)
     });
   });

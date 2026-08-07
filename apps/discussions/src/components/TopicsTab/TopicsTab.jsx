@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { splitPastedLines } from '@generated/utils/splitPastedLines.js';
 import { Skeleton, Button, Dialog, DialogContentContainer, Text, Checkbox } from '@vibe/core';
 import { CloseSmall, DropdownChevronDown, Edit } from '@vibe/icons';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
@@ -519,6 +520,15 @@ function SortableTopicSection({
                   aria-label="הוסף נקודה"
                   placeholder="נקודה חדשה…"
                   onChange={(e) => setNewPointText(e.target.value)}
+                  /* round367 — pasting a multi-line block creates one point per line. */
+                  onPaste={(e) => {
+                    const lines = splitPastedLines(e.clipboardData?.getData('text'));
+                    if (lines.length <= 1) return;
+                    e.preventDefault();
+                    for (const line of lines) addPoint(topic.id, line);
+                    setNewPointText('');
+                    requestAnimationFrame(() => addPointInputRef.current?.focus());
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && newPointText.trim()) { e.preventDefault(); handleAddPoint(); }
                     if (e.key === 'Escape') { setNewPointText(''); setShowAddPointInput(false); e.currentTarget.blur(); }

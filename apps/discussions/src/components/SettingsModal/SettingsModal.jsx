@@ -21,7 +21,7 @@ function Diskette({ size = 16 }) {
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, COLUMN_SCHEMA, DEFAULT_PREFERENCES, resolvePreference, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField, POINT_TEXT_SHARE_RANGE } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, COLUMN_SCHEMA, DEFAULT_PREFERENCES, resolvePreference, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField, POINT_TEXT_SHARE_RANGE, CREATE_DISCUSSION_MODES } from '../../utils/mondayApi/boards.config.js';
 // round364 — owner-added custom column mappings (extra columns per type group
 // on the discussions/tasks boards). Pure logic lives in utils/customColumns.js.
 import { isCustomAlias, canAddCustomColumn, nextCustomAlias, makeCustomColumn, customEntriesFor } from '../../utils/customColumns.js';
@@ -310,6 +310,12 @@ function seedPermissions(stored) {
   }
   return base;
 }
+
+// round367 — the create card's default toggle half + the auto-name choice.
+const CREATE_DISCUSSION_MODE_OPTIONS = [
+  { value: CREATE_DISCUSSION_MODES.TEMPLATE, text: 'דיון מתבנית' },
+  { value: CREATE_DISCUSSION_MODES.ADHOC, text: 'דיון מזדמן' },
+];
 
 const PREVIOUS_TASKS_MODE_OPTIONS = [
   { value: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION, text: 'לפי דיון קודם' },
@@ -1594,6 +1600,37 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                           onChange={(e) => setPreferences((p) => ({ ...p, defaultDeciderLead: e.target.checked }))}
                         />
                         <Text type={"text2"}>בכל הדיונים, ללא תלות בסוג</Text>
+                      </label>
+                    </div>
+                  </div>
+                  {/* round367 — which half of the create-card toggle opens selected. */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>ברירת מחדל ליצירת דיון</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <ButtonGroup
+                        options={CREATE_DISCUSSION_MODE_OPTIONS}
+                        value={resolvePreference(preferences, 'createDiscussionMode')}
+                        onSelect={(value) => setPreferences((p) => ({ ...p, createDiscussionMode: value || DEFAULT_PREFERENCES.createDiscussionMode }))}
+                        size="small"
+                        kind="secondary"
+                      />
+                    </div>
+                  </div>
+                  {/* round367 — TEMPLATE mode only: auto name ("תבנית - תאריך") or empty. */}
+                  <div className={styles.prefRow} style={resolvePreference(preferences, 'createDiscussionMode') === CREATE_DISCUSSION_MODES.ADHOC ? { opacity: 0.45, pointerEvents: 'none' } : undefined}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>שם הדיון בדיון מתבנית</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={resolvePreference(preferences, 'templateAutoName') === true}
+                          onChange={(e) => setPreferences((p) => ({ ...p, templateAutoName: e.target.checked }))}
+                        />
+                        <Text type={"text2"}>שם אוטומטי — שם התבנית ותאריך הדיון</Text>
                       </label>
                     </div>
                   </div>

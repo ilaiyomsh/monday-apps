@@ -15,6 +15,8 @@
  *     priorityID: labelId|null, discussionLinkID, ... }
  */
 
+import { customColumnKind, customFilterControl, customSortKey } from '@generated/utils/customColumns.js';
+
 // Shared 4 ordering options for the two status-type columns (status + priority),
 // reused by BOTH sort directions and group orders. The two "Label order" entries
 // are distinguished by their up/down icon (monday's asc/desc idiom).
@@ -126,6 +128,35 @@ export function sortTasks(list, sort, maps = {}) {
   const arr = [...list];
   const { col, dir } = sort;
 
+  /*
+   * round373 — a CUSTOM column sorts through the shared descriptor layer. The
+   * branch is first because a custom alias can never collide with a base key,
+   * and `maps.custom[alias]` ({ kind, orderById?, labelById? }) is what makes it
+   * a sort dimension at all — an alias with no entry falls through to the base
+   * dispatch and is left unsorted, exactly as before.
+   *
+   * Empty cells stay LAST in BOTH directions (the `dir` multiplier is applied to
+   * the ranked comparison only), matching the base deadline/status sorts.
+   */
+  const dim = maps.custom?.[col];
+  if (dim) {
+    const d = (dir === 'labelDesc' || dir === 'azDesc' || dir === 'dateDesc') ? -1 : 1;
+    const keyOf = (t) => customSortKey(dim.kind, t?.[col], dim);
+    const byText = dir === 'azAsc' || dir === 'azDesc' || dim.kind !== 'status';
+    arr.sort((a, b) => {
+      const ka = keyOf(a);
+      const kb = keyOf(b);
+      if (byText && dim.kind !== 'date') return cmpTextNoValueLast(ka.text, kb.text, d);
+      const ra = ka.rank == null ? Infinity : ka.rank;
+      const rb = kb.rank == null ? Infinity : kb.rank;
+      if (ra === Infinity && rb === Infinity) return 0;
+      if (ra === Infinity) return 1; // no value always last
+      if (rb === Infinity) return -1;
+      return (ra - rb) * d;
+    });
+    return arr;
+  }
+
   if (col === 'deadline') {
     const d = dir === 'deadlineDesc' ? -1 : 1;
     arr.sort((a, b) => {
@@ -213,13 +244,21 @@ function matchPersonCol(c, people) {
  * not filterable (their value is an asset URL string).
  */
 export function customFilterDims(customCols) {
+  /*
+   * round372 — a custom STATUS column filters as a value set, exactly like a
+   * dropdown. What differs is the value's SHAPE: parseValue gives a status its
+   * stable label ID (a number, and 0 is a real label), not the label text, so the
+   * option list must resolve ids → text via the column's status labels. The
+   * comparison itself needs no special case — customComparableValues stringifies
+   * the id and the Set holds id strings.
+   *
+   * round373 — the type→control decision moved to the shared descriptor layer
+   * (customColumnKind → customFilterControl), so filter, sort, group and render
+   * all classify a column the same way. This function keeps its round366 output
+   * shape byte-for-byte; only the source of the classification changed.
+   */
   return (customCols || []).map((c) => {
-    const t = c.type;
-    const control = (t === 'people' || t === 'person' || t === 'multiple_person') ? 'person'
-      : t === 'date' ? 'date'
-        : (t === 'dropdown' || t === 'board_relation' || t === 'connect_boards') ? 'values'
-          : (t === 'text' || t === 'long_text') ? 'text'
-            : null;
+    const control = customFilterControl(customColumnKind(c.type));
     return control ? { key: c.alias, control, title: c.title || c.alias } : null;
   }).filter(Boolean);
 }

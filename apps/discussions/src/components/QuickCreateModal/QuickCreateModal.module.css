@@ -97,21 +97,8 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
-.closeButton {
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  color: var(--secondary-text-color, #676879);
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-  border-radius: var(--border-radius-small, 6px);
-}
-
-.closeButton:hover {
-  background: var(--primary-background-hover-color, #f5f6f8);
-}
+/* round370 — the × was removed from the card (ביטול is the close affordance), so
+   its .closeButton rules went with it rather than lingering as dead CSS. */
 
 .body {
   /* round266 — tighter paddings so the from-"+" card is scaled to the agenda box. */
@@ -309,4 +296,42 @@
     width: 100%;
     border-radius: 12px 12px 0 0;
   }
+}
+
+/* ------------------------------------------------------------------ round368
+ * §3 (owner spec; scale 1.5x → 1.8x in round369 → 1.2x in round370) — the
+ * anchored (agenda-point) opens carry an INLINE width from
+ * computeBoundedAnchorStyle, which pins their right edge; the non-anchored (FAB)
+ * open is pinned to the inline-start = RIGHT edge by the overlay's flex, so
+ * widening the CSS width there also grows leftward. 320 × 1.2 = 384.
+ * ------------------------------------------------------------------ */
+.modal {
+  width: min(384px, calc(100vw - 32px));
+}
+
+/* The משימה/החלטה toggle matches the אחראי + דד ליין cells: one 40px-tall
+   control, same corner radius and type size as those two fields, so the three
+   read as one family. round370 — with the × gone it spans the card's FULL width. */
+.topRow {
+  gap: 0;
+}
+.topRowStart {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+}
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  height: 40px;
+  padding: 2px;
+  border-radius: var(--border-radius-small, 4px);
+  box-sizing: border-box;
+}
+.segBtn {
+  height: 100%;
+  padding: 0 10px;
+  font-size: 14px;
+  border-radius: var(--border-radius-small, 4px);
 }
