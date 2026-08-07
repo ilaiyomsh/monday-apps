@@ -38,7 +38,7 @@ import logger from '../utils/logger.js';
 const cache = new Map(); // key `${boardId}:${colId}` -> resolved result
 const inflight = new Map();
 
-const EMPTY = { options: [], labelById: {}, colorById: {}, orderById: {}, doneId: null, emptyLabel: null };
+const EMPTY = { options: [], labelById: {}, colorById: {}, orderById: {}, doneId: null, emptyLabel: null, grayLabel: null };
 
 /*
  * round353 §3 — the GRAY DEFAULT label's stable id. monday pre-creates every status
@@ -137,7 +137,21 @@ async function load(boardId, colId) {
   // priority cell there would read "נמוכה", making unset indistinguishable from Low.
   const emptyLabel =
     options[0]?.id === GRAY_DEFAULT_LABEL_ID ? (labelById[GRAY_DEFAULT_LABEL_ID] ?? null) : null;
-  return { options, labelById, colorById, orderById, doneId, emptyLabel };
+  /*
+   * round375 (owner request) — the gray default label's text WITHOUT the
+   * position gate, for surfaces that want "the gray default label with whatever
+   * text it has, if it has any".
+   *
+   * It is a SEPARATE field, not a relaxation of emptyLabel, precisely because of
+   * the round354 incident the gate exists for: boards provisioned with the OLD
+   * priority scheme carry a real label ("נמוכה") on id 5 in the LAST position, and
+   * rendering that for an empty cell makes unset indistinguishable from Low. Only
+   * callers that know their column is not one of those — the owner-added custom
+   * status columns — may use this. Blank-text labels are already filtered out of
+   * labelById, so this is null unless the label really carries text.
+   */
+  const grayLabel = labelById[GRAY_DEFAULT_LABEL_ID] ?? null;
+  return { options, labelById, colorById, orderById, doneId, emptyLabel, grayLabel };
 }
 
 export function useStatusOptions(boardKey = 'tasks', alias = 'statusID') {
