@@ -42,6 +42,7 @@
     "cross-env": "^7.0.3",
     "eslint": "^8.57.1",
     "eslint-plugin-promise": "^6.6.0",
+    "eslint-plugin-react": "7.37.5",
     "jsdom": "^25.0.0",
     "kill-port": "^2.0.1",
     "postcss": "^8.4.49",
@@ -68,7 +69,8 @@
       "es2022": true
     },
     "plugins": [
-      "promise"
+      "promise",
+      "react"
     ],
     "rules": {
       "no-console": "error",
@@ -85,7 +87,20 @@
           "message": "This catch block swallows the error silently. Do exactly one of: (1) call logger.error/logger.apiError(...) to record it, (2) re-throw it with `throw` so a boundary or an upstream catch handles it, or (3) call showErrorWithDetails(error, { functionName }) to record AND display it to the user. The only allowed silent path is an intentional AbortController cancel: `if (e.name === 'AbortError') return;`."
         }
       ],
-      "promise/catch-or-return": "error"
+      "promise/catch-or-return": "error",
+      "no-undef": "error",
+      "no-unused-vars": [
+        "error",
+        {
+          "args": "after-used",
+          "argsIgnorePattern": "^_",
+          "varsIgnorePattern": "^_",
+          "caughtErrorsIgnorePattern": "^_",
+          "ignoreRestSiblings": true
+        }
+      ],
+      "react/jsx-uses-vars": "error",
+      "react/jsx-no-undef": "error"
     },
     "overrides": [
       {
@@ -113,7 +128,8 @@
         "rules": {
           "no-console": "off",
           "no-restricted-syntax": "off",
-          "promise/catch-or-return": "off"
+          "promise/catch-or-return": "off",
+          "no-unused-vars": "off"
         }
       },
       {
@@ -126,6 +142,17 @@
           "no-restricted-syntax": "off"
         }
       }
-    ]
+    ],
+    "settings": {
+      "react": {
+        "version": "detect"
+      }
+    },
+    "globals": {
+      "process": "readonly",
+      "__APP_VERSION__": "readonly",
+      "__BUILD_SHA__": "readonly",
+      "__IS_RELEASE__": "readonly"
+    }
   }
 }

@@ -22,7 +22,6 @@
  * remote sink; it just must not also toast.
  */
 
-import React from 'react';
 import { ErrorBoundary, useErrorBoundary } from 'react-error-boundary';
 import logger from '../../utils/logger';
 import { dismissBootLoader } from '../../utils/bootLoader';
