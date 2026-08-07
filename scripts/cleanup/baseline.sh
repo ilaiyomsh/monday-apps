@@ -75,9 +75,20 @@ echo "==> [5/6] Metrics snapshot -> $RAW/*-baseline.*"
 # output untrustworthy is invalid JSON or an empty file, which is checked right after.
 pnpm dlx "$CLEANUP_KNIP_VERSION" $CLEANUP_KNIP_SPA_ARGS --reporter json \
   >"$RAW/knip-spa-baseline.json" 2>"$RAW/knip-spa-baseline.err" || true
-pnpm dlx "$CLEANUP_KNIP_VERSION" $CLEANUP_KNIP_SRV_ARGS --reporter json \
-  >"$RAW/knip-srv-baseline.json" 2>"$RAW/knip-srv-baseline.err" || true
-for f in "$RAW/knip-spa-baseline.json" "$RAW/knip-srv-baseline.json"; do
+KNIP_REPORTS=("$RAW/knip-spa-baseline.json")
+# The server knip run exists only for apps that HAVE a server workspace. Guarded on the
+# args being non-empty ON PURPOSE: found live 2026-08-07 on the first discussions
+# baseline — with empty args this ran `pnpm dlx knip` with no --directory from the repo
+# root, scanned the WHOLE monorepo, and reported 183 "unused files" (every other app's)
+# as this app's baseline. Numbers from the wrong scope poison every later comparison.
+if [ -n "${CLEANUP_KNIP_SRV_ARGS:-}" ]; then
+  pnpm dlx "$CLEANUP_KNIP_VERSION" $CLEANUP_KNIP_SRV_ARGS --reporter json \
+    >"$RAW/knip-srv-baseline.json" 2>"$RAW/knip-srv-baseline.err" || true
+  KNIP_REPORTS+=("$RAW/knip-srv-baseline.json")
+else
+  rm -f "$RAW/knip-srv-baseline.json" "$RAW/knip-srv-baseline.err"
+fi
+for f in "${KNIP_REPORTS[@]}"; do
   jq -e . "$f" >/dev/null 2>&1 || {
     echo "FATAL: $f is not valid JSON — the scan is broken, and every finding downstream would be guesswork."
     echo "       stderr: $(head -3 "${f%.json}.err")"
@@ -94,10 +105,15 @@ JSCPD_REPORT="$RAW/jscpd-baseline/jscpd-report.json"
 CLONES=$( [ -f "$JSCPD_REPORT" ] && jq -r '.statistics.total.clones // "unknown"' "$JSCPD_REPORT" || echo unknown )
 DUP_PCT=$( [ -f "$JSCPD_REPORT" ] && jq -r '.statistics.total.percentage // "unknown"' "$JSCPD_REPORT" || echo unknown )
 # knip's JSON reporter shape: {files:[path...], issues:[{file, exports:[{name,line}...],
-# dependencies:[...], devDependencies:[...], duplicates:[...], ...}]}. Summed across the two
-# workspace reports — the same numbers the verify stage compares against.
+# dependencies:[...], devDependencies:[...], duplicates:[...], ...}]}. Summed across the
+# workspace reports that EXIST for this app — the same numbers the verify stage compares
+# against.
 knip_sum() { # $1 = jq filter
-  echo $(( $(jq "$1" "$RAW/knip-spa-baseline.json") + $(jq "$1" "$RAW/knip-srv-baseline.json") ))
+  local total=0 f
+  for f in "${KNIP_REPORTS[@]}"; do
+    total=$((total + $(jq "$1" "$f")))
+  done
+  echo "$total"
 }
 KNIP_FILES=$(knip_sum '(.files // []) | length')
 KNIP_EXPORTS=$(knip_sum '[(.issues // [])[] | (.exports // []) | length] | add // 0')
@@ -149,7 +165,8 @@ jq -n \
              duplication_pct:$dup_pct, knip_unused_files:$knip_unused_files,
              knip_unused_exports:$knip_unused_exports, knip_unused_dependencies:$knip_unused_deps},
     tests:"green",
-    raw:{knip_spa:"knip-spa-baseline.json", knip_srv:"knip-srv-baseline.json",
+    raw:{knip_spa:"knip-spa-baseline.json",
+         knip_srv:(if $knip_srv_args == "" then null else "knip-srv-baseline.json" end),
          jscpd:"jscpd-baseline/jscpd-report.json"}}' > "$STATE/baseline.json"
 
 cat <<EOF
@@ -163,6 +180,6 @@ BASELINE OK — $CLEANUP_APP_SLUG
               jscpd: ${CLONES} clone(s), ${DUP_PCT}% duplicated
   state       $STATE/baseline.json
 
-Next: /cleanup-audit  (first run: pilot ONE subdirectory, e.g. args
-      {"target":"apps/twyst-your-status/src/components/OnClickDialog"})
+Next: /cleanup-audit${CLEANUP_APP:+ {\"app\":\"$CLEANUP_APP\"\}}  (first run: pilot ONE
+      subdirectory via an additional "target" arg inside $CLEANUP_APP_DIR/src)
 EOF

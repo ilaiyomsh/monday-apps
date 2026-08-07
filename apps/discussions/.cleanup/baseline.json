@@ -1,0 +1,52 @@
+{
+  "date": "2026-08-07T11:43:27+00:00",
+  "toolchain": {
+    "node": "v20.20.2",
+    "pnpm": "10.33.0"
+  },
+  "app": "discussions",
+  "base_sha": "96702c0c165cf953d8782434a1466c099cb72274",
+  "branch": "claude/twyst-status-cleanup-37o0n1",
+  "scope": {
+    "app_dir": "apps/discussions",
+    "spa_dir": "apps/discussions",
+    "srv_dir": "",
+    "state_dir": "apps/discussions/.cleanup"
+  },
+  "commands": {
+    "install": "pnpm install --frozen-lockfile",
+    "toolchain": "bash scripts/cleanup/check-toolchain.sh",
+    "wiring": "node scripts/error-wiring-audit.mjs",
+    "eager": "node scripts/lib/eager-graph.mjs",
+    "typecheck": "pnpm --filter \"./apps/discussions\" run type-check",
+    "lint": "pnpm --filter \"./apps/discussions\" lint",
+    "lintcfg": "CLEANUP_APP=discussions bash scripts/cleanup/lint-config-audit.sh",
+    "build": "pnpm --filter \"./apps/discussions\" build",
+    "test": "pnpm --filter \"./apps/discussions\" run test:run",
+    "drift": "pnpm --filter @mapps/error-kit test",
+    "custody": "bash scripts/cleanup/verify-approval.sh apps/discussions/.cleanup/CLEANUP_PLAN.md",
+    "reconcile": "bash scripts/cleanup/reconcile-plan.sh"
+  },
+  "scanners": {
+    "knip": "pnpm dlx knip@5.88.1",
+    "knip_spa_args": "--directory apps/discussions",
+    "knip_srv_args": "",
+    "jscpd": "pnpm dlx jscpd@4.2.5 apps/discussions/src --min-tokens 50 --max-lines 5000 --ignore **/*.test.js,**/*.test.jsx,**/__tests__/**"
+  },
+  "metrics": {
+    "loc": 76663,
+    "source_files": 351,
+    "bundle_kb": "3848",
+    "clones": "290",
+    "duplication_pct": "5.68",
+    "knip_unused_files": 183,
+    "knip_unused_exports": 624,
+    "knip_unused_dependencies": 20
+  },
+  "tests": "green",
+  "raw": {
+    "knip_spa": "knip-spa-baseline.json",
+    "knip_srv": "knip-srv-baseline.json",
+    "jscpd": "jscpd-baseline/jscpd-report.json"
+  }
+}
