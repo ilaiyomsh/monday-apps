@@ -1,10 +1,10 @@
-# Stage 1 — audit (twyst-your-status)
+# Stage 1 — audit (any registered cleanup app)
 
-**The normal way to run this is the saved workflow: `/cleanup-audit`**, optionally with a
-target inside the app:
+**The normal way to run this is the saved workflow: `/cleanup-audit`**, optionally with an
+app (default `twyst-your-status`) and a target inside it:
 
 ```
-/cleanup-audit {"target":"apps/twyst-your-status/src/components/OnClickDialog"}
+/cleanup-audit {"app":"discussions","target":"apps/discussions/src/components/MyTasksView"}
 ```
 
 The script is `.claude/workflows/cleanup-audit.js`. This file is the stage *contract* —
@@ -15,18 +15,21 @@ the stage by hand (e.g. dynamic workflows unavailable).
 
 ## Contract
 
-Precondition: `bash scripts/cleanup/baseline.sh` exited 0, so
-`apps/twyst-your-status/.cleanup/baseline.json` exists and every gate was green.
+Precondition: `CLEANUP_APP=$APP bash scripts/cleanup/baseline.sh` exited 0, so that app's
+`.cleanup/baseline.json` exists and every gate was green.
 
-Scope: `apps/twyst-your-status` only — the SPA (`src/`) and the guard server
-(`server/src/`). The workflow refuses a target outside the app before spawning anything.
+Scope: the ONE selected app only — its SPA (`src/`) plus `server/src/` when it has a
+server workspace (client-only apps do not). The workflow refuses a target outside the app,
+and an unregistered app, before spawning anything.
 
-Strictly **read-only for source**. The only writes anywhere are under
-`apps/twyst-your-status/.cleanup/`.
+Strictly **read-only for source**. The only writes anywhere are under that app's
+`.cleanup/` directory.
 
-**Phase A — Scan (1 agent, `cleanup-scanner`).** knip twice (once per workspace, each with
-its own `knip.jsonc`), jscpd over both source trees with tests excluded, eslint per
-workspace through its own config and major, plus the TODO and commented-code inventories.
+**Phase A — Scan (1 agent, `cleanup-scanner`).** knip once per workspace the app HAS (each
+with its own `knip.jsonc`; a client-only app gets ONE run — a bare `knip` with no
+`--directory` would scan the whole monorepo and report every other app's dead code as this
+one's), jscpd over the app's source trees with tests excluded, eslint per workspace through
+its own config and major, plus the TODO and commented-code inventories.
 No `tsc` — both workspaces are plain JS. If knip's output is not trustworthy (invalid JSON,
 zero files scanned), the workflow ABORTS: nothing downstream can be trusted.
 

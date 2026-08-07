@@ -62,7 +62,13 @@ case "$TOOL" in
     # onto the plan) is caught fail-closed by verify-approval.sh at execute time.
     printf '%s' "$CMD" | grep -qi 'CLEANUP_PLAN' || exit 0
     printf '%s' "$CMD" | grep -qi 'approved' || exit 0
-    if printf '%s' "$CMD" | grep -qE '(>>?[^|;&]*CLEANUP_PLAN|\bsed\b[^|;&]*[[:space:]](-[a-zA-Z]*i[a-zA-Z]*|--in-place)[^|;&]*CLEANUP_PLAN|\bperl\b[^|;&]*[[:space:]]-[a-zA-Z]*i[^|;&]*CLEANUP_PLAN|\btee\b[^|;&]*CLEANUP_PLAN)'; then
+    # Angle-bracket placeholders (<app>, <slug>, <plan path>) are prose, not redirects —
+    # their closing '>' is not a write operator. Strip them before the write-shape test;
+    # a genuine redirect survives the strip (`> apps/<app>/…/CLEANUP_PLAN.md` still leaves
+    # its own '>' and stays blocked — fixture-pinned both ways). Without this, writing
+    # documentation ABOUT the workflow trips the guard, which happened twice on 2026-08-07.
+    PROBE=$(printf '%s' "$CMD" | sed 's/<[A-Za-z0-9 _.\/-]*>//g')
+    if printf '%s' "$PROBE" | grep -qE '(>>?[^|;&]*CLEANUP_PLAN|\bsed\b[^|;&]*[[:space:]](-[a-zA-Z]*i[a-zA-Z]*|--in-place)[^|;&]*CLEANUP_PLAN|\bperl\b[^|;&]*[[:space:]]-[a-zA-Z]*i[^|;&]*CLEANUP_PLAN|\btee\b[^|;&]*CLEANUP_PLAN)'; then
       block "this shell command writes it (or round-trips it) into the plan."
     fi
     exit 0

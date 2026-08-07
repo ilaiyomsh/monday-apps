@@ -1,6 +1,7 @@
-# Stage 3 — verify (twyst-your-status)
+# Stage 3 — verify (any registered cleanup app)
 
-**The normal way to run this is the saved workflow: `/cleanup-verify`** (no args).
+**The normal way to run this is the saved workflow: `/cleanup-verify`** (optional
+`{"app":"discussions"}`; default `twyst-your-status`).
 The script is `.claude/workflows/cleanup-verify.js`. This file is the stage *contract*.
 
 ---

@@ -77,6 +77,14 @@ check allow "$(bashcmd "git commit -F - <<MSG
 docs: the human sets approved in $PLAN; counts moved 82 > 108
 MSG")"                                                                                 "commit message PROSE mentioning plan+word+>"
 check allow "$(bashcmd "echo ok > /tmp/x.log && grep approved $PLAN")"                 "write op in a different segment than the plan"
+# Angle-bracket PLACEHOLDERS are prose, not redirects. Found live 2026-08-07 (twice):
+# documentation that says "the human sets approved in apps/<app>/.cleanup/CLEANUP_PLAN.md"
+# was blocked because the '>' closing <app> sat in the same segment as the plan filename.
+# A real write still needs a real path, and stripping the placeholder leaves any genuine
+# redirect intact — the two cases below pin both halves of that.
+check allow "$(bashcmd "python3 edit.py  # sets approved in apps/<app>/.cleanup/CLEANUP_PLAN.md")" "<app> placeholder beside plan+word is prose"
+check allow "$(bashcmd "git commit -m 'docs: approved lives in apps/<slug>/.cleanup/CLEANUP_PLAN.md'")" "placeholder inside a commit message"
+check block "$(bashcmd "echo 'status: approved' > apps/<app>/.cleanup/CLEANUP_PLAN.md")"  "a REAL redirect keeps being blocked even with a placeholder in the path"
 check block "$(bashcmd "sed -i 's/status: pending/status: approved/' $PLAN")"          "sed -i writes the word"
 check block "$(bashcmd "echo 'risk: L | status: approved' >> $PLAN")"                  "echo-append writes the word"
 check block "$(bashcmd "printf 'status: approved' | tee -a $PLAN")"                    "tee writes the word"

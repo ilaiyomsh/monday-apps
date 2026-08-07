@@ -1,6 +1,6 @@
 ---
 name: cleanup-reviewer
-description: Independent adversarial reviewer of the whole twyst-your-status cleanup branch diff. Fresh context, strictly read-only. Use during the cleanup verify stage.
+description: Independent adversarial reviewer of the whole cleanup branch diff for the ONE app named in its task prompt. Fresh context, strictly read-only. Use during the cleanup verify stage.
 tools: Read, Grep, Glob, Bash
 model: inherit
 ---
@@ -24,24 +24,27 @@ Review `git diff <base>..HEAD` commit by commit (`git log --oneline <base>..HEAD
 4. **Weakened tests** — any test file touched at all is a finding here (cleanup must not
    edit tests). Also: deleted assertions, `skip`/`only`, snapshot churn.
 5. **Error/observability regressions** — a `catch` that no longer logs, rethrows or
-   displays; a removed `logger.*` call; a change under
+   displays; a removed `logger.*` call; a change to ANY file in the app's protected boot
+   layer. That list is per app and authoritative in
+   `scripts/cleanup/env/<app>.sh` (`CLEANUP_PROTECTED_FILES` / `CLEANUP_PROTECTED_DIRS`) —
+   read it rather than assuming; it typically covers
    `src/utils/{logger,globalErrorHandler,axiomLoggerAdapter}.js`,
-   `src/hooks/useUiErrorSink.js`, `src/components/ErrorBoundary/**` or
-   `server/src/helpers/{logger,process-guards,axiomServerSink}.js` (all guard-protected —
-   a diff there means the guard was bypassed).
+   `src/hooks/useUiErrorSink.js`, `src/components/ErrorBoundary/**` and, for a server app,
+   `server/src/helpers/{logger,process-guards,axiomServerSink}.js`. All of them are
+   guard-protected — a diff there means the guard was bypassed.
 6. **Platform-contract changes** — anything that alters what monday or a persisted value
    sees: column-settings JSON keys (`settings_str` payloads written by the settings
    surface), storage keys, webhook event/config shapes, OAuth scopes, URL routes, feature
    `relations` in the manifest. Persisted data outlives a refactor: a renamed settings key
    silently orphans every board already configured.
-7. **Out-of-scope edits** — any file outside `apps/twyst-your-status/` in the diff. This
-   cleanup is scoped to that one app; anything else is a blocker regardless of merit.
+7. **Out-of-scope edits** — any file outside the app under review in the diff. A cleanup
+   run is scoped to ONE app; anything else is a blocker regardless of merit.
 8. **Custody and accounting** — run both mechanical checks first and treat any failure as
    a blocking issue, then spend your judgement where a grep cannot go:
-   `bash scripts/cleanup/verify-approval.sh` (an approval line committed by an agent —
-   Claude author or Claude trailer — is round 2's chain-of-custody failure) and
-   `bash scripts/cleanup/reconcile-plan.sh --all-done` (a done batch with a non-struck,
-   disposition-less finding is round 2's silent-skip failure). The scripts check the
+   `bash scripts/cleanup/verify-approval.sh <plan path>` (an approval line committed by an
+   agent — Claude author or Claude trailer — is round 2's chain-of-custody failure) and
+   `bash scripts/cleanup/reconcile-plan.sh --all-done <plan path>` (a done batch with a
+   non-struck, disposition-less finding is round 2's silent-skip failure). The scripts check the
    record; you check whether the record is TRUE — spot-check `- disposition: applied`
    lines against the actual diff, since a false "applied" is the one lie the scripts
    cannot see.
