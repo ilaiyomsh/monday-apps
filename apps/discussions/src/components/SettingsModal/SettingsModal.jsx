@@ -1622,6 +1622,36 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       />
                     </div>
                   </div>
+                  {/*
+                    * round382 — the project path's switch. round380 added the preference
+                    * and the gate but no control, so the only way to turn it on was to
+                    * edit storage by hand; this is that omission fixed.
+                    *
+                    * The row states BOTH conditions, because the preference alone does
+                    * nothing: isProjectModeReady also needs projectLinkID mapped, and an
+                    * owner who ticks this and sees no third button would otherwise have
+                    * no way to know why. The hint reads live off the mapping.
+                    */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>דיון על פרויקט</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={resolvePreference(preferences, 'projectDiscussions') === true}
+                          onChange={(e) => setPreferences((p) => ({ ...p, projectDiscussions: e.target.checked }))}
+                        />
+                        <Text type={"text2"}>אפשרו יצירת דיון על פרויקט (דרך שלישית בכרטיס היצירה)</Text>
+                      </label>
+                      {resolvePreference(preferences, 'projectDiscussions') === true && !columns?.discussions?.projectLinkID?.id && (
+                        <Text type={"text2"} style={{ display: 'block', marginTop: 6, color: 'var(--negative-color, #d83a52)' }}>
+                          כדי שהדרך הזו תופיע, מפו גם את עמודת "פרויקט" בלשונית המיפוי
+                        </Text>
+                      )}
+                    </div>
+                  </div>
                   {/* round367 — TEMPLATE mode only: auto name ("תבנית - תאריך") or empty. */}
                   <div className={styles.prefRow} style={resolvePreference(preferences, 'createDiscussionMode') === CREATE_DISCUSSION_MODES.ADHOC ? { opacity: 0.45, pointerEvents: 'none' } : undefined}>
                     <div className={styles.prefLabel}>
