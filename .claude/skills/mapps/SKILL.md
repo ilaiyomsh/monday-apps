@@ -22,6 +22,8 @@ repo root of the current clone — `git rev-parse --show-toplevel`):
 | `references/cli.md` | Verified flag cheat sheet + full CLI reference |
 | `references/app-lifecycle.md` | End-to-end NEW-app playbook — register app + features via CLI/API, build wiring, manifest anatomy/edit, scopes & the re-auth trap |
 | `references/verify-live.md` | How "done" is actually verified on the live board |
+| `references/cloud-tunnel.md` | Running a local dev server + tunnel from a CLOUD session — why `tunnel:create` fails there, the working recipe, and the same-origin backend trap |
+| `scripts/cloud-tunnel.mjs` | The tunnel wrapper that recipe depends on (`TUNNEL_APP_ID`, `TUNNEL_PORT`) |
 
 ## Preflight (session start + before every ship)
 
@@ -236,6 +238,8 @@ subcommands and version id for others. Check the table in
   separate "force" path — ship.sh always uses `--force` and always rebuilds.
 - **`tunnel`** → detect PORT + APP_ID, `mapps tunnel:create -p <PORT> -a <APP_ID>`.
   Restart: `lsof -ti:<PORT> | xargs kill -9 2>/dev/null` then create again.
+  **In a cloud session that command cannot connect** — use
+  `scripts/cloud-tunnel.mjs` and follow `references/cloud-tunnel.md`.
 - **`logs` / `logs:http` / `status`** → these take the app **version** id
   (`-i/--appVersionId`), not the app id. Get it from
   `mapps app-version:list -i <APP_ID>` or a package.json script. History mode:
