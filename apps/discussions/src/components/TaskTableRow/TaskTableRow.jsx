@@ -91,7 +91,15 @@ function CustomColumnCell({ col, value, onChange, dropdownOpts, relationOpts, st
         options={statusOpts?.options || []}
         labelById={statusOpts?.labelById || {}}
         colorById={statusOpts?.colorById || {}}
-        emptyLabel={statusOpts?.emptyLabel || 'בחר סטאטוס'}
+        /*
+         * round375 (owner request) — an empty custom status cell shows the source
+         * column's own GRAY DEFAULT label, with whatever text it carries. Only
+         * when the column has no such text at all does it fall back to the
+         * generic prompt. `grayLabel` is ungated by label position (see
+         * useStatusOptions) — safe here because these are columns the owner just
+         * mapped, not the old-scheme priority columns the gate protects.
+         */
+        emptyLabel={statusOpts?.emptyLabel || statusOpts?.grayLabel || 'בחר סטאטוס'}
         onChange={onChange}
         ariaLabel={`עריכת ${col.title || col.alias}`}
       />

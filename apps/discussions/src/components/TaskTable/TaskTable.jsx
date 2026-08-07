@@ -22,6 +22,7 @@ import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/Sorta
 import { TASKS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { useColumnRenameMenu } from '@generated/components/ColumnRenameMenu';
 import { customEntriesFor } from '@generated/utils/customColumns.js';
+import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import styles from './TaskTable.module.css';
 
 /*
@@ -149,13 +150,19 @@ export function TaskTable({
    * IS the column key, so order/width/rename prefs persist per custom column
    * through the same 'tasks' stores every other key uses.
    */
+  /*
+   * round375 — deps were EMPTY, capturing the mapping once per mount. Combined
+   * with TasksTab's own stale memo that produced the reported split brain: a
+   * newly mapped column visible in the table but absent from the toolbar, because
+   * these per-group tables remount on a group change while the tab does not.
+   * Both sides now key off the live settings object.
+   */
+  const { settings } = useSettings();
   const customCols = useMemo(
-    () => customEntriesFor(getColumns('tasks'))
+    () => customEntriesFor(settings?.columns?.tasks || getColumns('tasks'))
       .filter(([, col]) => col?.id)
       .map(([alias, col]) => ({ alias, type: col.type, title: col.title || alias })),
-    // getColumns reads the module-level published settings — same freshness
-    // contract as showPartners above (re-render on settings save remounts).
-    []
+    [settings?.columns?.tasks]
   );
   const baseKeys = [
     ...(selectable ? ['sel'] : []),
