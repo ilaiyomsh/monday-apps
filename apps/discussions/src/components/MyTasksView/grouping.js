@@ -1,5 +1,6 @@
 import { sortGroupsByOrder } from '../GroupByBuilder/groupOrders.js';
 import { isValidStatus } from '../../constants/statusConfig.js';
+import { customGroupBuckets } from '../../utils/customColumns.js';
 
 /*
  * Pure grouping helpers for the "My Tasks" view. Kept separate from the React
@@ -365,8 +366,23 @@ export function buildPersonGroup(task) {
  * Every labeled group leaves with a color (ensureGroupColors), and the callers
  * still apply their user overrides as a second ensureGroupColors pass.
  */
-export function groupTabTasks(tasks, { by = 'none', order = 'azAsc', labelById = {}, colorById = {}, orderById = {} } = {}) {
+export function groupTabTasks(tasks, { by = 'none', order = 'azAsc', labelById = {}, colorById = {}, orderById = {}, custom = {} } = {}) {
   const list = Array.isArray(tasks) ? tasks : [];
+
+  /*
+   * round373 — grouping by a CUSTOM column. `custom[alias]` carries the column's
+   * descriptor ({ kind, statusOpts? }); an alias with no entry falls through to
+   * the ungrouped bucket rather than throwing, which is what a stale saved view
+   * pointing at a since-removed custom column produces.
+   *
+   * Checked FIRST because a custom alias can never collide with a base key, and
+   * ensureGroupColors still runs on the result so a colorless kind (dropdown,
+   * people, text, date) gets the same varied palette every other group gets.
+   */
+  const dim = custom?.[by];
+  if (dim) {
+    return ensureGroupColors(customGroupBuckets(list, by, dim.kind, { ...dim, order }));
+  }
 
   if (by === 'status') {
     const groups = new Map();
