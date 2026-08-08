@@ -84,6 +84,10 @@ import { SetupWizard } from '../SetupWizard';
 import logger from '../../utils/logger.js';
 import { getVersionLabel } from '../../utils/versionLabel.js';
 import styles from './SettingsModal.module.css';
+import {
+  CREATE_MODE_ORDER, CREATE_MODE_LABEL, resolveEnabledModes, resolveDefaultMode,
+  canDisableMode, nextEnabledModes,
+} from '@generated/components/CreateDiscussionModal/createModeRules.js';
 
 // Seed the editable export-template draft from stored settings, back-filling any
 // keys added to the schema after the instance was last saved (so new sections/
@@ -312,11 +316,9 @@ function seedPermissions(stored) {
 }
 
 // round367 — the create card's default toggle half + the auto-name choice.
-const CREATE_DISCUSSION_MODE_OPTIONS = [
-  { value: CREATE_DISCUSSION_MODES.TEMPLATE, text: 'דיון מתבנית' },
-  { value: CREATE_DISCUSSION_MODES.ADHOC, text: 'דיון מזדמן' },
-];
-
+// round383 — CREATE_DISCUSSION_MODE_OPTIONS was the ButtonGroup's option list for
+// the standalone "ברירת מחדל ליצירת דיון" row. That row is gone; the default is now a
+// radio inside the סוגי דיון section, labelled from CREATE_MODE_LABEL.
 const PREVIOUS_TASKS_MODE_OPTIONS = [
   { value: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION, text: 'לפי דיון קודם' },
   { value: PREVIOUS_TASKS_MODES.DISCUSSION_TYPE, text: 'לפי סוג דיון' },
@@ -1607,50 +1609,69 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       </label>
                     </div>
                   </div>
-                  {/* round367 — which half of the create-card toggle opens selected. */}
-                  <div className={styles.prefRow}>
-                    <div className={styles.prefLabel}>
-                      <Text type={"text2"}>ברירת מחדל ליצירת דיון</Text>
-                    </div>
-                    <div className={styles.prefControl}>
-                      <ButtonGroup
-                        options={CREATE_DISCUSSION_MODE_OPTIONS}
-                        value={resolvePreference(preferences, 'createDiscussionMode')}
-                        onSelect={(value) => setPreferences((p) => ({ ...p, createDiscussionMode: value || DEFAULT_PREFERENCES.createDiscussionMode }))}
-                        size="small"
-                        kind="secondary"
-                      />
-                    </div>
-                  </div>
                   {/*
-                    * round382 — the project path's switch. round380 added the preference
-                    * and the gate but no control, so the only way to turn it on was to
-                    * edit storage by hand; this is that omission fixed.
+                    * round383 (owner spec, mockup v3) — ONE section for the creation
+                    * paths, replacing round382's lone project checkbox AND the separate
+                    * "ברירת מחדל ליצירת דיון" row. Two controls for one setting is a
+                    * reliable way to produce a contradiction, so the default moved in here
+                    * as a radio — still stored under `createDiscussionMode`, so an owner's
+                    * existing choice carries over with no migration.
                     *
-                    * The row states BOTH conditions, because the preference alone does
-                    * nothing: isProjectModeReady also needs projectLinkID mapped, and an
-                    * owner who ticks this and sees no third button would otherwise have
-                    * no way to know why. The hint reads live off the mapping.
+                    * Both rules come from createModeRules, so this screen and the create
+                    * card cannot disagree: at least one path stays enabled (the last
+                    * checkbox locks — a card with no path is unreachable), and the default
+                    * is always one of the enabled ones.
                     */}
-                  <div className={styles.prefRow}>
-                    <div className={styles.prefLabel}>
-                      <Text type={"text2"}>דיון על פרויקט</Text>
+                  <div className={styles.prefRow} style={{ display: 'block' }}>
+                    <div className={styles.prefLabel} style={{ marginBottom: 8 }}>
+                      <Text type={"text2"}>סוגי דיון</Text>
                     </div>
-                    <div className={styles.prefControl}>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={resolvePreference(preferences, 'projectDiscussions') === true}
-                          onChange={(e) => setPreferences((p) => ({ ...p, projectDiscussions: e.target.checked }))}
-                        />
-                        <Text type={"text2"}>אפשרו יצירת דיון על פרויקט (דרך שלישית בכרטיס היצירה)</Text>
-                      </label>
-                      {resolvePreference(preferences, 'projectDiscussions') === true && !columns?.discussions?.projectLinkID?.id && (
-                        <Text type={"text2"} style={{ display: 'block', marginTop: 6, color: 'var(--negative-color, #d83a52)' }}>
-                          כדי שהדרך הזו תופיע, מפו גם את עמודת "פרויקט" בלשונית המיפוי
-                        </Text>
-                      )}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 68px 78px', alignItems: 'end', gap: 8, paddingBottom: 6, borderBottom: '1px solid var(--ui-border-color, #eceef2)' }}>
+                      <span />
+                      <Text type={"text2"} style={{ textAlign: 'center', fontSize: 11 }}>זמין</Text>
+                      <Text type={"text2"} style={{ textAlign: 'center', fontSize: 11 }}>ברירת מחדל</Text>
                     </div>
+                    {CREATE_MODE_ORDER.map((mode) => {
+                      const enabledModes = resolveEnabledModes(preferences);
+                      const on = enabledModes.includes(mode);
+                      const isDefault = resolveDefaultMode(preferences, enabledModes) === mode;
+                      return (
+                        <div
+                          key={mode}
+                          style={{ display: 'grid', gridTemplateColumns: '1fr 68px 78px', alignItems: 'center', gap: 8, padding: '10px 0', borderTop: '1px solid var(--ui-border-color, #f2f3f6)', opacity: on ? 1 : 0.45 }}
+                        >
+                          <Text type={"text2"}>{CREATE_MODE_LABEL[mode]}</Text>
+                          <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              aria-label={`${CREATE_MODE_LABEL[mode]} — זמין`}
+                              disabled={on && !canDisableMode(enabledModes, mode)}
+                              onChange={(e) => setPreferences((p) => ({
+                                ...p,
+                                enabledCreateModes: nextEnabledModes(resolveEnabledModes(p), mode, e.target.checked),
+                              }))}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            <input
+                              type="radio"
+                              name="createDiscussionModeDefault"
+                              checked={isDefault}
+                              aria-label={`${CREATE_MODE_LABEL[mode]} — ברירת מחדל`}
+                              disabled={!on}
+                              onChange={() => setPreferences((p) => ({ ...p, createDiscussionMode: mode }))}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {resolveEnabledModes(preferences).includes(CREATE_DISCUSSION_MODES.PROJECT)
+                      && !columns?.discussions?.projectLinkID?.id && (
+                      <Text type={"text2"} style={{ display: 'block', marginTop: 10, color: 'var(--negative-color, #d83a52)' }}>
+                        כדי ש"דיון על פרויקט" יופיע בכרטיס, מפו גם את עמודת "פרויקט" בלשונית המיפוי
+                      </Text>
+                    )}
                   </div>
                   {/* round367 — TEMPLATE mode only: auto name ("תבנית - תאריך") or empty. */}
                   <div className={styles.prefRow} style={resolvePreference(preferences, 'createDiscussionMode') === CREATE_DISCUSSION_MODES.ADHOC ? { opacity: 0.45, pointerEvents: 'none' } : undefined}>

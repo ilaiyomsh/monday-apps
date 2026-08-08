@@ -20,7 +20,8 @@ import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES, CREATE_DISCUSSION_MODES, resolvePreference, isProjectModeReady } from '@generated/utils/mondayApi/boards.config.js';
 import { useRelationItems } from '@generated/hooks/useRelationItems.js';
 import {
-  availableCreateModes, canAutoName, isFormRevealed, projectLinkValue, CREATE_MODE_LABEL,
+  availableCreateModes, canAutoName, isFormRevealed, projectLinkValue, resolveDefaultMode,
+  CREATE_MODE_LABEL,
 } from './createModeRules.js';
 import { buildAutoName, formatNameDate, syncTrailingDate } from '@generated/utils/autoDiscussionName.js';
 import { createTopicsFromTemplate, linkTemplateTopics, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
@@ -249,6 +250,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
     settings?.columns?.discussions || getColumns('discussions')
   );
   const projectMode = !isEdit && projectReady && createMode === CREATE_DISCUSSION_MODES.PROJECT;
+  /*
+   * round383 — the paths this instance offers: the owner's enabled set, minus the
+   * project path when its column is unmapped. Computed once and used for BOTH the
+   * toggle and the "is there anything to choose" test — with a single path the
+   * toggle is not rendered at all, since a one-option tablist is decoration.
+   */
+  const createModes = availableCreateModes(settings?.preferences, projectReady);
   const projectChosen = !!projectId;
   // Candidates for the picker — the same cached, paged, group-aware reader the
   // custom connected-board cells use, so a big projects board pages identically.
@@ -269,8 +277,16 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
     mode: createMode,
     subjectChosen: projectMode ? projectChosen : typeChosen,
   });
+  /*
+   * round383 (owner spec) — the PROJECT path hides "דיון קודם" too. The predecessor
+   * of a project discussion is resolved from the project itself (the previous
+   * discussion linked to the same project), so asking the user to pick one by hand
+   * offers a manual answer to a question the app already answers — exactly why the
+   * template path has hidden this cell since round367.
+   */
   const hidePreviousDiscussion =
     templateMode
+    || projectMode
     || previousTasksMode === PREVIOUS_TASKS_MODES.DISCUSSION_TYPE
     || (previousTasksMode === PREVIOUS_TASKS_MODES.AUTO && typeChosen);
 
@@ -382,12 +398,19 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
         // same participants + topics, a clean date, the source itself set as the
         // "previous discussion", and a "דיון המשך - {name}" title.
         setName(src ? `דיון המשך - ${src.name || ''}` : '');
-      // round367 — the toggle's initial half: a duplicate of a TYPED discussion
-      // lands on template mode; otherwise the owner's preference decides.
+      /*
+       * round367 — the toggle's initial half: a duplicate of a TYPED discussion
+       * lands on template mode; otherwise the owner's preference decides.
+       *
+       * round383 — that preference now goes through resolveDefaultMode, which
+       * constrains it to the ENABLED set. Without it, disabling the path that was
+       * the default would open the card on a mode with no button on the toggle,
+       * and the user could not switch away from it.
+       */
       lastAutoDateRef.current = '';
       setCreateMode(src
         ? (src.discussionTypeID ? CREATE_DISCUSSION_MODES.TEMPLATE : CREATE_DISCUSSION_MODES.ADHOC)
-        : resolvePreference(settings?.preferences, 'createDiscussionMode'));
+        : resolveDefaultMode(settings?.preferences, createModes));
         // round148 — a new-discussion card opens stamped with the MOMENT it
         // was opened (today + the current time), immediately editable. An
         // explicit calendar-slot prefill (the user clicked a specific hour)
@@ -1324,13 +1347,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
             {/* round367 — the two-path toggle (approved mockup): full-width,
                 right = מתבנית (default per preference), left = מזדמן. Always
                 switchable; not shown when editing an existing discussion. */}
-            {!isEdit && (
+            {!isEdit && createModes.length > 1 && (
               /* round381 — the toggle is now BUILT from availableCreateModes, so the
                  project path appears between מתבנית and מזדמן exactly when the app can
                  carry it, and an instance with the feature off renders the same two
                  buttons round367 shipped. */
               <div className={styles.modeToggle} role="tablist" aria-label="אופן יצירת הדיון">
-                {availableCreateModes(projectReady).map((mode) => (
+                {createModes.map((mode) => (
                   <button
                     key={mode}
                     type="button"

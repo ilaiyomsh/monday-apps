@@ -19,10 +19,29 @@ const SRC = readFileSync(
 
 describe('the toggle is built from the rule, not hardcoded', () => {
   it('renders one button per available mode', () => {
-    // Hardcoding three buttons is what would show "דיון על פרויקט" to an instance
-    // that has the feature off or the column unmapped.
-    expect(SRC).toContain('availableCreateModes(projectReady).map((mode) => (');
+    /*
+     * Hardcoding the buttons is what would show "דיון על פרויקט" to an instance that
+     * has it disabled or the column unmapped.
+     *
+     * round383 amended this: the list is computed ONCE into `createModes` because two
+     * things now read it — the buttons, and the test for whether a toggle is worth
+     * rendering at all. Calling availableCreateModes twice would let those two drift.
+     */
+    expect(SRC).toContain('const createModes = availableCreateModes(settings?.preferences, projectReady);');
+    expect(SRC).toContain('{createModes.map((mode) => (');
     expect(SRC).toContain('{CREATE_MODE_LABEL[mode]}');
+  });
+
+  it('does not render a toggle when there is only one path to choose', () => {
+    // round383 — a one-option tablist is decoration, and it implies a choice the
+    // owner deliberately removed.
+    expect(SRC).toContain('{!isEdit && createModes.length > 1 && (');
+  });
+
+  it('opens on a default that is INSIDE the enabled set', () => {
+    // Disabling the path that was the default would otherwise open the card on a mode
+    // with no button on the toggle — unreachable and unswitchable.
+    expect(SRC).toContain('resolveDefaultMode(settings?.preferences, createModes)');
   });
 
   it('gates the path on the SHARED readiness rule, not on the preference alone', () => {
@@ -77,6 +96,21 @@ describe('switching away from the project path drops the project', () => {
     expect(body).toContain('if (nextMode !== CREATE_DISCUSSION_MODES.PROJECT && projectId) {');
     expect(body).toContain('setProjectId(null)');
     expect(body).toContain("setProjectName('')");
+  });
+});
+
+describe('the project path hides "דיון קודם"', () => {
+  /*
+   * round383 (owner spec) — the predecessor of a project discussion is resolved from
+   * the project itself, so asking the user to pick one by hand offers a manual answer
+   * to a question the app already answers. Exactly why the TEMPLATE path has hidden
+   * this cell since round367 — the project path joins the same rule.
+   */
+  it('adds projectMode to the hide rule', () => {
+    const rule = SRC.slice(SRC.indexOf('const hidePreviousDiscussion ='));
+    const body = rule.slice(0, rule.indexOf(';') + 1);
+    expect(body).toContain('templateMode');
+    expect(body).toContain('|| projectMode');
   });
 });
 

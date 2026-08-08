@@ -24,13 +24,33 @@ describe('the preference exists in the model and starts OFF', () => {
 });
 
 describe('the preferences tab actually offers it', () => {
-  it('renders a checkbox bound to projectDiscussions', () => {
-    expect(SRC).toContain("resolvePreference(preferences, 'projectDiscussions') === true");
-    expect(SRC).toContain('projectDiscussions: e.target.checked');
+  /*
+   * round383 replaced the lone `projectDiscussions` checkbox with a "סוגי דיון"
+   * section: a row per path carrying an ENABLED checkbox and a DEFAULT radio. The
+   * thing this file exists to prevent — a preference with no control — is unchanged,
+   * so the assertions moved to the new control rather than being deleted.
+   */
+  it('renders a row per creation path, driven by the shared order', () => {
+    expect(SRC).toContain('CREATE_MODE_ORDER.map((mode) => {');
+    expect(SRC).toContain('{CREATE_MODE_LABEL[mode]}');
   });
 
-  it('labels the row so an owner can find it', () => {
-    expect(SRC).toContain('דיון על פרויקט');
+  it('writes the enabled SET, through the rule that keeps one path on', () => {
+    expect(SRC).toContain('enabledCreateModes: nextEnabledModes(resolveEnabledModes(p), mode, e.target.checked)');
+    expect(SRC).toContain('disabled={on && !canDisableMode(enabledModes, mode)}');
+  });
+
+  it('offers the default as a radio, disabled for a path that is off', () => {
+    expect(SRC).toContain('createDiscussionMode: mode');
+    expect(SRC).toContain('disabled={!on}');
+  });
+
+  it('drops the separate default row, so one setting has ONE control', () => {
+    // The option list AND its ButtonGroup must both be gone. Matching the Hebrew
+    // label alone would fail on the comment that RECORDS the removal, which is
+    // exactly the kind of assertion that gets weakened later to shut it up.
+    expect(SRC).not.toContain('CREATE_DISCUSSION_MODE_OPTIONS = [');
+    expect(SRC).not.toContain('options={CREATE_DISCUSSION_MODE_OPTIONS}');
   });
 
   /*
@@ -38,7 +58,7 @@ describe('the preferences tab actually offers it', () => {
    * mapped. Without this hint an owner ticks the box, sees no third button in the
    * create card, and has no way to learn why.
    */
-  it('warns when the preference is on but the column is not mapped', () => {
+  it('warns when the path is enabled but the column is not mapped', () => {
     expect(SRC).toContain("!columns?.discussions?.projectLinkID?.id");
     expect(SRC).toContain('מפו גם את עמודת "פרויקט" בלשונית המיפוי');
   });

@@ -701,7 +701,13 @@
    מתבנית, left = מזדמן), clean — no captions, no state text. */
 .modeToggle {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* round383 — columns are DERIVED from the number of buttons. The old
+     `1fr 1fr` was literally two columns, so the third path dropped to a second
+     row at half width (owner: "ממש נראה לא טוב"). With auto columns the toggle
+     holds two or three equally, and the card's width is untouched: 468px inner
+     ÷ 3 ≈ 156px per button against a ~100px longest label. */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   border: 1.5px solid var(--ui-border-color, #d0d4e4);
   border-radius: 10px;
   overflow: hidden;

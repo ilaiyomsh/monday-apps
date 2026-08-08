@@ -149,6 +149,17 @@ export const DEFAULT_PREFERENCES = {
    * ("<תבנית> - <תאריך>") or leaves the name empty for the user to fill.
    */
   createDiscussionMode: CREATE_DISCUSSION_MODES.TEMPLATE,
+  /*
+   * round383 — which creation paths the toggle offers. Replaces round382's single
+   * `projectDiscussions` boolean with a SET, because the owner can now enable or
+   * disable each of the three; `createDiscussionMode` above stays the DEFAULT and is
+   * constrained to this set (resolveDefaultMode).
+   *
+   * The legacy boolean is deliberately left in place below and still READ as a
+   * fallback (resolveEnabledModes), so an instance that already switched the project
+   * path on keeps it with no migration pass over stored settings.
+   */
+  enabledCreateModes: [CREATE_DISCUSSION_MODES.TEMPLATE, CREATE_DISCUSSION_MODES.ADHOC],
   templateAutoName: true,
   /*
    * round380 — "דיון על פרויקט": OFF by default, on the owner's instruction. Off is

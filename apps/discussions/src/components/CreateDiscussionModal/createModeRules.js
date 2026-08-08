@@ -12,14 +12,86 @@ import { CREATE_DISCUSSION_MODES } from '@generated/utils/mondayApi/boards.confi
  */
 
 /*
- * Which paths the toggle offers. TEMPLATE and ADHOC always; PROJECT only when the
- * app can actually carry it (preference on AND projectLinkID mapped — see
- * isProjectModeReady). Returned in DISPLAY order, RTL-leading first.
+ * DISPLAY order, RTL-leading first. Every list this module returns is sorted by
+ * it, so the toggle, the settings section and "the first enabled mode" all agree
+ * on what "first" means.
  */
-export function availableCreateModes(projectReady) {
-  return projectReady
-    ? [CREATE_DISCUSSION_MODES.TEMPLATE, CREATE_DISCUSSION_MODES.PROJECT, CREATE_DISCUSSION_MODES.ADHOC]
-    : [CREATE_DISCUSSION_MODES.TEMPLATE, CREATE_DISCUSSION_MODES.ADHOC];
+export const CREATE_MODE_ORDER = [
+  CREATE_DISCUSSION_MODES.TEMPLATE,
+  CREATE_DISCUSSION_MODES.PROJECT,
+  CREATE_DISCUSSION_MODES.ADHOC,
+];
+
+// Shipped default (round383, owner spec): template + adhoc on, project off.
+export const DEFAULT_ENABLED_MODES = [CREATE_DISCUSSION_MODES.TEMPLATE, CREATE_DISCUSSION_MODES.ADHOC];
+
+/*
+ * Which modes the OWNER has enabled, in display order.
+ *
+ * round383 replaced the single `projectDiscussions` boolean with a set, so the
+ * legacy key is read as a fallback: an owner who had already switched the project
+ * path on (round382) keeps it, without a migration pass over stored settings.
+ *
+ * Never returns an empty list. An instance whose stored set somehow empties would
+ * otherwise render a create card with no path at all — the settings UI blocks that,
+ * but a hand-edited store is not the settings UI.
+ */
+export function resolveEnabledModes(preferences) {
+  const stored = preferences?.enabledCreateModes;
+  let list;
+  if (Array.isArray(stored)) {
+    list = CREATE_MODE_ORDER.filter((m) => stored.includes(m));
+  } else {
+    // legacy shape: template + adhoc always, project iff the old boolean was on
+    list = DEFAULT_ENABLED_MODES.slice();
+    if (preferences?.projectDiscussions === true) list = CREATE_MODE_ORDER.slice();
+  }
+  return list.length ? list : DEFAULT_ENABLED_MODES.slice();
+}
+
+/*
+ * Which paths the TOGGLE offers: the enabled set, minus PROJECT when the app
+ * cannot carry it (the column is not mapped — see isProjectModeReady).
+ *
+ * The two conditions are separate on purpose. "Enabled" is the owner's intent and
+ * survives an unmapped column; "ready" is whether it can work right now. Collapsing
+ * them would silently un-tick the owner's checkbox the moment a mapping broke.
+ */
+export function availableCreateModes(preferences, projectReady) {
+  return resolveEnabledModes(preferences)
+    .filter((m) => m !== CREATE_DISCUSSION_MODES.PROJECT || projectReady);
+}
+
+/*
+ * May this mode be switched OFF? Only if it is not the last one standing — a create
+ * card with no path is unreachable, so the settings UI locks the final checkbox
+ * rather than letting the owner produce that state and discover it later.
+ */
+export function canDisableMode(enabled, mode) {
+  const list = Array.isArray(enabled) ? enabled : [];
+  return list.includes(mode) && list.length > 1;
+}
+
+// Toggling a mode on/off, in display order. Refuses to remove the last one.
+export function nextEnabledModes(enabled, mode, on) {
+  const list = Array.isArray(enabled) ? enabled : [];
+  if (on) return CREATE_MODE_ORDER.filter((m) => m === mode || list.includes(m));
+  if (!canDisableMode(list, mode)) return list;
+  return list.filter((m) => m !== mode);
+}
+
+/*
+ * The mode the card OPENS on. It must be one the owner actually enabled, so a
+ * default pointing at a disabled path falls back to the first enabled one.
+ *
+ * The stored preference is deliberately NOT rewritten when that happens: re-enabling
+ * the mode restores the owner's choice by itself, which is why disabling a path is a
+ * reversible act rather than one that quietly loses a setting.
+ */
+export function resolveDefaultMode(preferences, enabled) {
+  const list = (Array.isArray(enabled) && enabled.length) ? enabled : resolveEnabledModes(preferences);
+  const stored = preferences?.createDiscussionMode;
+  return list.includes(stored) ? stored : list[0];
 }
 
 export const CREATE_MODE_LABEL = {
