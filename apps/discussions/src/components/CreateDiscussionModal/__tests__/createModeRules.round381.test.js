@@ -18,21 +18,29 @@ import {
 
 const { TEMPLATE, PROJECT, ADHOC } = CREATE_DISCUSSION_MODES;
 
+/*
+ * round383 amended this block: availableCreateModes now takes (preferences,
+ * projectReady) because the owner can enable/disable EVERY mode, not just the
+ * project one. The behaviour asserted here is unchanged — "the project path shows
+ * only when the app can carry it" — it just needs the preferences that say so.
+ */
 describe('availableCreateModes', () => {
+  const allOn = { enabledCreateModes: [TEMPLATE, PROJECT, ADHOC] };
+
   it('offers the project path only when the app can carry it', () => {
-    expect(availableCreateModes(false)).toEqual([TEMPLATE, ADHOC]);
-    expect(availableCreateModes(true)).toEqual([TEMPLATE, PROJECT, ADHOC]);
+    expect(availableCreateModes(allOn, false)).toEqual([TEMPLATE, ADHOC]);
+    expect(availableCreateModes(allOn, true)).toEqual([TEMPLATE, PROJECT, ADHOC]);
   });
 
   it('keeps מזדמן last, so the existing two-path order is unchanged', () => {
     // round367's toggle was מתבנית then מזדמן; the project path is inserted
     // BETWEEN them, so a user with the feature off sees exactly what they saw.
-    expect(availableCreateModes(true).at(-1)).toBe(ADHOC);
-    expect(availableCreateModes(true)[0]).toBe(TEMPLATE);
+    expect(availableCreateModes(allOn, true).at(-1)).toBe(ADHOC);
+    expect(availableCreateModes(allOn, true)[0]).toBe(TEMPLATE);
   });
 
   it('names every mode it can offer', () => {
-    for (const m of availableCreateModes(true)) {
+    for (const m of availableCreateModes(allOn, true)) {
       expect(CREATE_MODE_LABEL[m]).toBeTruthy();
     }
     expect(CREATE_MODE_LABEL[PROJECT]).toBe('דיון על פרויקט');
